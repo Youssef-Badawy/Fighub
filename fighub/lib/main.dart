@@ -47,13 +47,11 @@ class HomePage extends StatelessWidget {
           ),
         ],
       ),
-
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Search
             TextField(
               decoration: InputDecoration(
                 hintText: 'Search action figures...',
@@ -66,9 +64,7 @@ class HomePage extends StatelessWidget {
                 ),
               ),
             ),
-
             const SizedBox(height: 24),
-
             const Text(
               'Categories',
               style: TextStyle(
@@ -76,9 +72,7 @@ class HomePage extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 12),
-
             SizedBox(
               height: 45,
               child: ListView(
@@ -92,9 +86,7 @@ class HomePage extends StatelessWidget {
                 ],
               ),
             ),
-
             const SizedBox(height: 28),
-
             const Text(
               'Featured Figures',
               style: TextStyle(
@@ -102,9 +94,7 @@ class HomePage extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 14),
-
             GridView.count(
               crossAxisCount: 2,
               crossAxisSpacing: 12,
@@ -114,21 +104,25 @@ class HomePage extends StatelessWidget {
               childAspectRatio: 0.72,
               children: [
                 _productCard(
+                  context,
                   'Batman',
                   '1,500 EGP',
                   'DC',
                 ),
                 _productCard(
+                  context,
                   'Jon Snow',
                   '2,000 EGP',
                   'Game of Thrones',
                 ),
                 _productCard(
+                  context,
                   'Spider-Man',
                   '1,200 EGP',
                   'Marvel',
                 ),
                 _productCard(
+                  context,
                   'Arya Stark',
                   '1,800 EGP',
                   'Game of Thrones',
@@ -138,7 +132,6 @@ class HomePage extends StatelessWidget {
           ],
         ),
       ),
-
       bottomNavigationBar: NavigationBar(
         selectedIndex: 0,
         destinations: const [
@@ -178,55 +171,186 @@ class HomePage extends StatelessWidget {
   }
 
   static Widget _productCard(
+    BuildContext context,
     String name,
     String price,
     String category,
   ) {
     return Card(
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              color: const Color(0xFF252525),
-              child: const Icon(
-                Icons.image_outlined,
-                size: 70,
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ProductDetailsPage(
+                name: name,
+                price: price,
+                category: category,
               ),
             ),
-          ),
-
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                  ),
+          );
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                color: const Color(0xFF252525),
+                child: const Icon(
+                  Icons.image_outlined,
+                  size: 70,
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  category,
-                  style: TextStyle(
-                    color: Colors.grey.shade400,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  price,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
+              ),
             ),
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    category,
+                    style: TextStyle(
+                      color: Colors.grey.shade400,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    price,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ProductDetailsPage extends StatelessWidget {
+  final String name;
+  final String price;
+  final String category;
+
+  const ProductDetailsPage({
+    super.key,
+    required this.name,
+    required this.price,
+    required this.category,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(name),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 300,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: const Color(0xFF252525),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: const Icon(
+                Icons.image_outlined,
+                size: 100,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              name,
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              category,
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey.shade400,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              price,
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Product Details',
+              style: TextStyle(
+                fontSize: 21,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _detailRow(Icons.inventory_2_outlined, 'Condition', 'Used - Good'),
+            _detailRow(Icons.person_outline, 'Seller', 'FigHub Seller'),
+            _detailRow(Icons.payments_outlined, 'Payment', 'Cash on delivery'),
+            _detailRow(Icons.local_shipping_outlined, 'Shipping', 'Paid on delivery'),
+            const SizedBox(height: 28),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: FilledButton.icon(
+                onPressed: () {},
+                icon: const Icon(Icons.chat_bubble_outline),
+                label: const Text(
+                  'Chat with Seller',
+                  style: TextStyle(fontSize: 17),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static Widget _detailRow(
+    IconData icon,
+    String title,
+    String value,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        children: [
+          Icon(icon, size: 22),
+          const SizedBox(width: 12),
+          Text(
+            '$title: ',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Expanded(
+            child: Text(value),
           ),
         ],
       ),
