@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-class ProductDetailsPage extends StatelessWidget {
+class ProductDetailsPage extends StatefulWidget {
   final String name;
   final String price;
   final String category;
@@ -15,7 +15,49 @@ class ProductDetailsPage extends StatelessWidget {
   });
 
   @override
+  State<ProductDetailsPage> createState() => _ProductDetailsPageState();
+}
+
+class _ProductDetailsPageState extends State<ProductDetailsPage> {
+  String _productStatus = 'Available';
+
+  Color _statusColor() {
+    switch (_productStatus) {
+      case 'Reserved':
+        return Colors.orange;
+      case 'Shipping':
+        return Colors.blue;
+      default:
+        return Colors.green;
+    }
+  }
+
+  IconData _statusIcon() {
+    switch (_productStatus) {
+      case 'Reserved':
+        return Icons.bookmark_rounded;
+      case 'Shipping':
+        return Icons.local_shipping_rounded;
+      default:
+        return Icons.check_circle_rounded;
+    }
+  }
+
+  String _statusDescription() {
+    switch (_productStatus) {
+      case 'Reserved':
+        return 'This product has been reserved by a buyer.';
+      case 'Shipping':
+        return 'This product is currently being shipped.';
+      default:
+        return 'This product is available for reservation.';
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final statusColor = _statusColor();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -35,7 +77,6 @@ class ProductDetailsPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Product image
             Container(
               width: double.infinity,
               height: 330,
@@ -52,26 +93,24 @@ class ProductDetailsPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Category and condition
                   Row(
                     children: [
                       _InfoChip(
                         icon: Icons.category_outlined,
-                        text: category,
+                        text: widget.category,
                       ),
                       const SizedBox(width: 8),
                       _InfoChip(
                         icon: Icons.inventory_2_outlined,
-                        text: condition,
+                        text: widget.condition,
                       ),
                     ],
                   ),
 
                   const SizedBox(height: 16),
 
-                  // Name
                   Text(
-                    name,
+                    widget.name,
                     style: const TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
@@ -80,9 +119,8 @@ class ProductDetailsPage extends StatelessWidget {
 
                   const SizedBox(height: 8),
 
-                  // Price
                   Text(
-                    price,
+                    widget.price,
                     style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -91,7 +129,6 @@ class ProductDetailsPage extends StatelessWidget {
 
                   const SizedBox(height: 24),
 
-                  // Seller
                   const Text(
                     'Seller',
                     style: TextStyle(
@@ -149,7 +186,6 @@ class ProductDetailsPage extends StatelessWidget {
 
                   const SizedBox(height: 24),
 
-                  // Status
                   const Text(
                     'Product Status',
                     style: TextStyle(
@@ -164,21 +200,40 @@ class ProductDetailsPage extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(15),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1A1A1D),
+                      color: statusColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: statusColor.withValues(alpha: 0.35),
+                      ),
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
                         Icon(
-                          Icons.check_circle_outline_rounded,
-                          color: Colors.green,
+                          _statusIcon(),
+                          color: statusColor,
                         ),
-                        SizedBox(width: 10),
-                        Text(
-                          'Available',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _productStatus,
+                                style: TextStyle(
+                                  color: statusColor,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                _statusDescription(),
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -187,7 +242,66 @@ class ProductDetailsPage extends StatelessWidget {
 
                   const SizedBox(height: 24),
 
-                  // Description
+                  const Text(
+                    'Seller Status Control',
+                    style: TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1A1D),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      children: [
+                        _StatusButton(
+                          title: 'Available',
+                          icon: Icons.check_circle_outline_rounded,
+                          color: Colors.green,
+                          selected: _productStatus == 'Available',
+                          onTap: () {
+                            setState(() {
+                              _productStatus = 'Available';
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        _StatusButton(
+                          title: 'Reserved',
+                          icon: Icons.bookmark_border_rounded,
+                          color: Colors.orange,
+                          selected: _productStatus == 'Reserved',
+                          onTap: () {
+                            setState(() {
+                              _productStatus = 'Reserved';
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        _StatusButton(
+                          title: 'Shipping',
+                          icon: Icons.local_shipping_outlined,
+                          color: Colors.blue,
+                          selected: _productStatus == 'Shipping',
+                          onTap: () {
+                            setState(() {
+                              _productStatus = 'Shipping';
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
                   const Text(
                     'Description',
                     style: TextStyle(
@@ -211,7 +325,6 @@ class ProductDetailsPage extends StatelessWidget {
 
                   const SizedBox(height: 24),
 
-                  // Payment and shipping
                   Container(
                     padding: const EdgeInsets.all(15),
                     decoration: BoxDecoration(
@@ -249,20 +362,25 @@ class ProductDetailsPage extends StatelessWidget {
 
                   const SizedBox(height: 28),
 
-                  // Reserve button
                   SizedBox(
                     width: double.infinity,
                     height: 54,
                     child: FilledButton.icon(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Reservation request sent to the seller!',
-                            ),
-                          ),
-                        );
-                      },
+                      onPressed: _productStatus == 'Available'
+                          ? () {
+                              setState(() {
+                                _productStatus = 'Reserved';
+                              });
+
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Reservation request sent to the seller!',
+                                  ),
+                                ),
+                              );
+                            }
+                          : null,
                       icon: const Icon(Icons.bookmark_border_rounded),
                       label: const Text(
                         'Reserve Product',
@@ -276,7 +394,6 @@ class ProductDetailsPage extends StatelessWidget {
 
                   const SizedBox(height: 12),
 
-                  // Chat button
                   SizedBox(
                     width: double.infinity,
                     height: 54,
@@ -300,6 +417,58 @@ class ProductDetailsPage extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusButton extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _StatusButton({
+    required this.title,
+    required this.icon,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(
+          icon,
+          color: selected ? color : Colors.grey,
+        ),
+        label: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            title,
+            style: TextStyle(
+              color: selected ? color : Colors.white,
+              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 13,
+          ),
+          side: BorderSide(
+            color: selected ? color : Colors.grey.shade800,
+          ),
+          backgroundColor: selected
+              ? color.withValues(alpha: 0.08)
+              : Colors.transparent,
         ),
       ),
     );
