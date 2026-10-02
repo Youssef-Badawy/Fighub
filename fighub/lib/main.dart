@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'product_details_page.dart';
+import 'add_product_page.dart';
 
 void main() {
   runApp(const FigHubApp());
@@ -52,13 +54,11 @@ class HomePage extends StatelessWidget {
           ),
         ],
       ),
-
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Search
             TextField(
               decoration: InputDecoration(
                 hintText: 'Search figures, characters...',
@@ -78,7 +78,6 @@ class HomePage extends StatelessWidget {
 
             const SizedBox(height: 26),
 
-            // Categories
             const Text(
               'Categories',
               style: TextStyle(
@@ -125,7 +124,6 @@ class HomePage extends StatelessWidget {
 
             const SizedBox(height: 28),
 
-            // Featured
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -158,31 +156,85 @@ class HomePage extends StatelessWidget {
                   price: '1,500 EGP',
                   category: 'DC',
                   condition: 'Used - Good',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ProductDetailsPage(
+                          name: 'Batman',
+                          price: '1,500 EGP',
+                          category: 'DC',
+                          condition: 'Used - Good',
+                        ),
+                      ),
+                    );
+                  },
                 ),
+
                 _ProductCard(
                   name: 'Jon Snow',
                   price: '2,000 EGP',
                   category: 'Game of Thrones',
                   condition: 'Rare',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ProductDetailsPage(
+                          name: 'Jon Snow',
+                          price: '2,000 EGP',
+                          category: 'Game of Thrones',
+                          condition: 'Rare',
+                        ),
+                      ),
+                    );
+                  },
                 ),
+
                 _ProductCard(
                   name: 'Spider-Man',
                   price: '1,200 EGP',
                   category: 'Marvel',
                   condition: 'New',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ProductDetailsPage(
+                          name: 'Spider-Man',
+                          price: '1,200 EGP',
+                          category: 'Marvel',
+                          condition: 'New',
+                        ),
+                      ),
+                    );
+                  },
                 ),
+
                 _ProductCard(
                   name: 'Arya Stark',
                   price: '1,800 EGP',
                   category: 'Game of Thrones',
                   condition: 'Used - Excellent',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ProductDetailsPage(
+                          name: 'Arya Stark',
+                          price: '1,800 EGP',
+                          category: 'Game of Thrones',
+                          condition: 'Used - Excellent',
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
 
             const SizedBox(height: 28),
 
-            // Quick sell banner
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(18),
@@ -231,7 +283,14 @@ class HomePage extends StatelessWidget {
                     ),
                   ),
                   FilledButton(
-                    onPressed: () {},
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AddProductPage(),
+                        ),
+                      );
+                    },
                     child: const Text('Sell'),
                   ),
                 ],
@@ -243,6 +302,16 @@ class HomePage extends StatelessWidget {
 
       bottomNavigationBar: NavigationBar(
         selectedIndex: 0,
+        onDestinationSelected: (index) {
+          if (index == 2) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const AddProductPage(),
+              ),
+            );
+          }
+        },
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
@@ -290,8 +359,9 @@ class _CategoryChip extends StatelessWidget {
         icon: Icon(icon, size: 17),
         label: Text(title),
         style: FilledButton.styleFrom(
-          backgroundColor:
-              selected ? const Color(0xFFE53935) : const Color(0xFF1A1A1D),
+          backgroundColor: selected
+              ? const Color(0xFFE53935)
+              : const Color(0xFF1A1A1D),
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 14),
         ),
@@ -305,12 +375,14 @@ class _ProductCard extends StatelessWidget {
   final String price;
   final String category;
   final String condition;
+  final VoidCallback onTap;
 
   const _ProductCard({
     required this.name,
     required this.price,
     required this.category,
     required this.condition,
+    required this.onTap,
   });
 
   @override
@@ -320,7 +392,7 @@ class _ProductCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       color: const Color(0xFF18181B),
       child: InkWell(
-        onTap: () {},
+        onTap: onTap,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
