@@ -20,6 +20,7 @@ class ProductDetailsPage extends StatefulWidget {
 
 class _ProductDetailsPageState extends State<ProductDetailsPage> {
   String _productStatus = 'Available';
+  bool _reservationSent = false;
 
   Color _statusColor() {
     switch (_productStatus) {
@@ -52,6 +53,25 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
       default:
         return 'This product is available for reservation.';
     }
+  }
+
+  void _reserveProduct() {
+    if (_productStatus != 'Available' || _reservationSent) {
+      return;
+    }
+
+    setState(() {
+      _reservationSent = true;
+      _productStatus = 'Reserved';
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Reservation request sent to the seller!',
+        ),
+      ),
+    );
   }
 
   @override
@@ -87,7 +107,6 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                 color: Colors.grey,
               ),
             ),
-
             Padding(
               padding: const EdgeInsets.all(18),
               child: Column(
@@ -106,9 +125,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 16),
-
                   Text(
                     widget.name,
                     style: const TextStyle(
@@ -116,9 +133,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-
                   const SizedBox(height: 8),
-
                   Text(
                     widget.price,
                     style: const TextStyle(
@@ -126,9 +141,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-
                   const SizedBox(height: 24),
-
                   const Text(
                     'Seller',
                     style: TextStyle(
@@ -136,9 +149,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-
                   const SizedBox(height: 10),
-
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
@@ -183,9 +194,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 24),
-
                   const Text(
                     'Product Status',
                     style: TextStyle(
@@ -193,9 +202,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-
                   const SizedBox(height: 10),
-
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(15),
@@ -239,9 +246,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 24),
-
                   const Text(
                     'Seller Status Control',
                     style: TextStyle(
@@ -249,9 +254,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-
                   const SizedBox(height: 10),
-
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(14),
@@ -269,6 +272,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                           onTap: () {
                             setState(() {
                               _productStatus = 'Available';
+                              _reservationSent = false;
                             });
                           },
                         ),
@@ -299,9 +303,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 24),
-
                   const Text(
                     'Description',
                     style: TextStyle(
@@ -309,9 +311,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-
                   const SizedBox(height: 10),
-
                   const Text(
                     'This collectible figure is listed on FigHub. '
                     'Contact the seller for more information about the '
@@ -322,9 +322,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                       height: 1.5,
                     ),
                   ),
-
                   const SizedBox(height: 24),
-
                   Container(
                     padding: const EdgeInsets.all(15),
                     decoration: BoxDecoration(
@@ -359,41 +357,35 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 28),
-
                   SizedBox(
                     width: double.infinity,
                     height: 54,
                     child: FilledButton.icon(
-                      onPressed: _productStatus == 'Available'
-                          ? () {
-                              setState(() {
-                                _productStatus = 'Reserved';
-                              });
-
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Reservation request sent to the seller!',
-                                  ),
-                                ),
-                              );
-                            }
-                          : null,
-                      icon: const Icon(Icons.bookmark_border_rounded),
-                      label: const Text(
-                        'Reserve Product',
-                        style: TextStyle(
+                      onPressed:
+                          _productStatus == 'Available' &&
+                                  !_reservationSent
+                              ? _reserveProduct
+                              : null,
+                      icon: const Icon(
+                        Icons.bookmark_border_rounded,
+                      ),
+                      label: Text(
+                        _reservationSent
+                            ? 'Reservation Sent'
+                            : _productStatus == 'Reserved'
+                                ? 'Product Reserved'
+                                : _productStatus == 'Shipping'
+                                    ? 'Product Is Shipping'
+                                    : 'Reserve Product',
+                        style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 12),
-
                   SizedBox(
                     width: double.infinity,
                     height: 54,
@@ -411,7 +403,6 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 20),
                 ],
               ),
