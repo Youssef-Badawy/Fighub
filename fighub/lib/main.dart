@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'product_details_page.dart';
 import 'add_product_page.dart';
+import 'seller_dashboard_page.dart';
 
 void main() {
   runApp(const FigHubApp());
@@ -49,9 +50,16 @@ class HomePage extends StatelessWidget {
             icon: const Icon(Icons.notifications_none_rounded),
           ),
           IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.person_outline_rounded),
-          ),
+  onPressed: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const SellerDashboardPage(),
+      ),
+    );
+  },
+  icon: const Icon(Icons.person_outline_rounded),
+),
         ],
       ),
       body: SingleChildScrollView(
