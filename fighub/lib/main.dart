@@ -15,7 +15,11 @@ class FigHubApp extends StatelessWidget {
       theme: ThemeData(
         brightness: Brightness.dark,
         useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFF0F0F0F),
+        scaffoldBackgroundColor: const Color(0xFF0D0D0F),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFFE53935),
+          brightness: Brightness.dark,
+        ),
       ),
       home: const HomePage(),
     );
@@ -29,42 +33,52 @@ class HomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: const Color(0xFF0D0D0F),
         title: const Text(
           'FigHub',
           style: TextStyle(
+            fontSize: 25,
             fontWeight: FontWeight.bold,
-            fontSize: 24,
           ),
         ),
         actions: [
           IconButton(
             onPressed: () {},
-            icon: const Icon(Icons.shopping_cart_outlined),
+            icon: const Icon(Icons.notifications_none_rounded),
           ),
           IconButton(
             onPressed: () {},
-            icon: const Icon(Icons.person_outline),
+            icon: const Icon(Icons.person_outline_rounded),
           ),
         ],
       ),
+
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Search
             TextField(
               decoration: InputDecoration(
-                hintText: 'Search action figures...',
-                prefixIcon: const Icon(Icons.search),
+                hintText: 'Search figures, characters...',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: IconButton(
+                  onPressed: () {},
+                  icon: const Icon(Icons.tune_rounded),
+                ),
                 filled: true,
-                fillColor: const Color(0xFF1C1C1C),
+                fillColor: const Color(0xFF1A1A1D),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(16),
                   borderSide: BorderSide.none,
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+
+            const SizedBox(height: 26),
+
+            // Categories
             const Text(
               'Categories',
               style: TextStyle(
@@ -72,164 +86,153 @@ class HomePage extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 12),
+
+            const SizedBox(height: 14),
+
             SizedBox(
-              height: 45,
+              height: 44,
               child: ListView(
                 scrollDirection: Axis.horizontal,
-                children: [
-                  _category('Marvel'),
-                  _category('DC'),
-                  _category('Game of Thrones'),
-                  _category('Anime'),
-                  _category('Star Wars'),
+                children: const [
+                  _CategoryChip(
+                    title: 'All',
+                    icon: Icons.grid_view_rounded,
+                    selected: true,
+                  ),
+                  _CategoryChip(
+                    title: 'Marvel',
+                    icon: Icons.auto_awesome,
+                  ),
+                  _CategoryChip(
+                    title: 'DC',
+                    icon: Icons.shield_outlined,
+                  ),
+                  _CategoryChip(
+                    title: 'Anime',
+                    icon: Icons.animation_outlined,
+                  ),
+                  _CategoryChip(
+                    title: 'GOT',
+                    icon: Icons.castle_outlined,
+                  ),
+                  _CategoryChip(
+                    title: 'Star Wars',
+                    icon: Icons.star_border_rounded,
+                  ),
                 ],
               ),
             ),
+
             const SizedBox(height: 28),
-            const Text(
-              'Featured Figures',
-              style: TextStyle(
-                fontSize: 21,
-                fontWeight: FontWeight.bold,
-              ),
+
+            // Featured
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Featured Figures',
+                  style: TextStyle(
+                    fontSize: 21,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {},
+                  child: const Text('See all'),
+                ),
+              ],
             ),
-            const SizedBox(height: 14),
+
+            const SizedBox(height: 10),
+
             GridView.count(
               crossAxisCount: 2,
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: 0.72,
+              childAspectRatio: 0.68,
               children: [
-                _productCard(
-                  context,
-                  'Batman',
-                  '1,500 EGP',
-                  'DC',
+                _ProductCard(
+                  name: 'Batman',
+                  price: '1,500 EGP',
+                  category: 'DC',
+                  condition: 'Used - Good',
                 ),
-                _productCard(
-                  context,
-                  'Jon Snow',
-                  '2,000 EGP',
-                  'Game of Thrones',
+                _ProductCard(
+                  name: 'Jon Snow',
+                  price: '2,000 EGP',
+                  category: 'Game of Thrones',
+                  condition: 'Rare',
                 ),
-                _productCard(
-                  context,
-                  'Spider-Man',
-                  '1,200 EGP',
-                  'Marvel',
+                _ProductCard(
+                  name: 'Spider-Man',
+                  price: '1,200 EGP',
+                  category: 'Marvel',
+                  condition: 'New',
                 ),
-                _productCard(
-                  context,
-                  'Arya Stark',
-                  '1,800 EGP',
-                  'Game of Thrones',
+                _ProductCard(
+                  name: 'Arya Stark',
+                  price: '1,800 EGP',
+                  category: 'Game of Thrones',
+                  condition: 'Used - Excellent',
                 ),
               ],
             ),
-          ],
-        ),
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: 0,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.favorite_border),
-            selectedIcon: Icon(Icons.favorite),
-            label: 'Favorites',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.add_box_outlined),
-            selectedIcon: Icon(Icons.add_box),
-            label: 'Sell',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline),
-            selectedIcon: Icon(Icons.chat_bubble),
-            label: 'Chat',
-          ),
-        ],
-      ),
-    );
-  }
 
-  static Widget _category(String name) {
-    return Container(
-      margin: const EdgeInsets.only(right: 10),
-      child: FilledButton.tonal(
-        onPressed: () {},
-        child: Text(name),
-      ),
-    );
-  }
+            const SizedBox(height: 28),
 
-  static Widget _productCard(
-    BuildContext context,
-    String name,
-    String price,
-    String category,
-  ) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ProductDetailsPage(
-                name: name,
-                price: price,
-                category: category,
-              ),
-            ),
-          );
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                color: const Color(0xFF252525),
-                child: const Icon(
-                  Icons.image_outlined,
-                  size: 70,
+            // Quick sell banner
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                gradient: const LinearGradient(
+                  colors: [
+                    Color(0xFF25252A),
+                    Color(0xFF17171A),
+                  ],
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  Text(
-                    name,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE53935),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.sell_outlined,
+                      size: 28,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    category,
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
+                  const SizedBox(width: 14),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Have figures to sell?',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'List your collectibles on FigHub.',
+                          style: TextStyle(
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    price,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  FilledButton(
+                    onPressed: () {},
+                    child: const Text('Sell'),
                   ),
                 ],
               ),
@@ -237,122 +240,163 @@ class HomePage extends StatelessWidget {
           ],
         ),
       ),
+
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: 0,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.favorite_border_rounded),
+            selectedIcon: Icon(Icons.favorite_rounded),
+            label: 'Favorites',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.add_box_outlined),
+            selectedIcon: Icon(Icons.add_box_rounded),
+            label: 'Sell',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.chat_bubble_outline_rounded),
+            selectedIcon: Icon(Icons.chat_bubble_rounded),
+            label: 'Chat',
+          ),
+        ],
+      ),
     );
   }
 }
 
-class ProductDetailsPage extends StatelessWidget {
-  final String name;
-  final String price;
-  final String category;
+class _CategoryChip extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final bool selected;
 
-  const ProductDetailsPage({
-    super.key,
-    required this.name,
-    required this.price,
-    required this.category,
+  const _CategoryChip({
+    required this.title,
+    required this.icon,
+    this.selected = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(name),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              height: 300,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: const Color(0xFF252525),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: const Icon(
-                Icons.image_outlined,
-                size: 100,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              name,
-              style: const TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              category,
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey.shade400,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              price,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Product Details',
-              style: TextStyle(
-                fontSize: 21,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            _detailRow(Icons.inventory_2_outlined, 'Condition', 'Used - Good'),
-            _detailRow(Icons.person_outline, 'Seller', 'FigHub Seller'),
-            _detailRow(Icons.payments_outlined, 'Payment', 'Cash on delivery'),
-            _detailRow(Icons.local_shipping_outlined, 'Shipping', 'Paid on delivery'),
-            const SizedBox(height: 28),
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: FilledButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.chat_bubble_outline),
-                label: const Text(
-                  'Chat with Seller',
-                  style: TextStyle(fontSize: 17),
-                ),
-              ),
-            ),
-          ],
+    return Container(
+      margin: const EdgeInsets.only(right: 9),
+      child: FilledButton.icon(
+        onPressed: () {},
+        icon: Icon(icon, size: 17),
+        label: Text(title),
+        style: FilledButton.styleFrom(
+          backgroundColor:
+              selected ? const Color(0xFFE53935) : const Color(0xFF1A1A1D),
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
         ),
       ),
     );
   }
+}
 
-  static Widget _detailRow(
-    IconData icon,
-    String title,
-    String value,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Row(
-        children: [
-          Icon(icon, size: 22),
-          const SizedBox(width: 12),
-          Text(
-            '$title: ',
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
+class _ProductCard extends StatelessWidget {
+  final String name;
+  final String price;
+  final String category;
+  final String condition;
+
+  const _ProductCard({
+    required this.name,
+    required this.price,
+    required this.category,
+    required this.condition,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      color: const Color(0xFF18181B),
+      child: InkWell(
+        onTap: () {},
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                color: const Color(0xFF252529),
+                child: const Icon(
+                  Icons.image_outlined,
+                  size: 65,
+                  color: Colors.grey,
+                ),
+              ),
             ),
-          ),
-          Expanded(
-            child: Text(value),
-          ),
-        ],
+
+            Padding(
+              padding: const EdgeInsets.fromLTRB(11, 10, 11, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  const SizedBox(height: 4),
+
+                  Text(
+                    category,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.grey.shade400,
+                      fontSize: 13,
+                    ),
+                  ),
+
+                  const SizedBox(height: 7),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          price,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const Icon(
+                        Icons.favorite_border_rounded,
+                        size: 20,
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 5),
+
+                  Text(
+                    condition,
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
