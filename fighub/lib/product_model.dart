@@ -9,7 +9,13 @@ class Product {
   final String condition;
   final String description;
   final String paymentMethod;
+
+  // Kept for backward compatibility with existing products and UI.
   final String? imagePath;
+
+  // New field for multiple product images.
+  final List<String> imagePaths;
+
   String status;
 
   Product({
@@ -22,10 +28,22 @@ class Product {
     required this.description,
     required this.paymentMethod,
     this.imagePath,
+    List<String>? imagePaths,
     this.status = 'Available',
-  });
+  }) : imagePaths = List.unmodifiable(
+          imagePaths ??
+              (imagePath != null && imagePath.isNotEmpty
+                  ? [imagePath]
+                  : <String>[]),
+        );
 
   Map<String, dynamic> toFirestore() {
+    final images = imagePaths.isNotEmpty
+        ? imagePaths
+        : (imagePath != null && imagePath!.isNotEmpty
+            ? [imagePath!]
+            : <String>[]);
+
     return {
       'sellerId': sellerId,
       'name': name,
@@ -34,7 +52,13 @@ class Product {
       'condition': condition,
       'description': description,
       'paymentMethod': paymentMethod,
-      'imagePath': imagePath,
+
+      // Keep the old field so existing code/data remains compatible.
+      'imagePath': images.isNotEmpty ? images.first : imagePath,
+
+      // New multiple-images field.
+      'imagePaths': images,
+
       'status': status,
       'createdAt': FieldValue.serverTimestamp(),
     };
@@ -44,6 +68,26 @@ class Product {
     DocumentSnapshot<Map<String, dynamic>> document,
   ) {
     final data = document.data() ?? {};
+
+    final rawImagePaths = data['imagePaths'];
+
+    List<String> parsedImagePaths = [];
+
+    if (rawImagePaths is List) {
+      parsedImagePaths = rawImagePaths
+          .whereType<String>()
+          .where((path) => path.isNotEmpty)
+          .toList();
+    }
+
+    final oldImagePath = data['imagePath'] as String?;
+
+    // Support old products that only have imagePath.
+    if (parsedImagePaths.isEmpty &&
+        oldImagePath != null &&
+        oldImagePath.isNotEmpty) {
+      parsedImagePaths = [oldImagePath];
+    }
 
     return Product(
       id: document.id,
@@ -55,7 +99,11 @@ class Product {
       description: data['description'] as String? ?? '',
       paymentMethod:
           data['paymentMethod'] as String? ?? 'Cash on Delivery',
-      imagePath: data['imagePath'] as String?,
+      imagePath: oldImagePath ??
+          (parsedImagePaths.isNotEmpty
+              ? parsedImagePaths.first
+              : null),
+      imagePaths: parsedImagePaths,
       status: data['status'] as String? ?? 'Available',
     );
   }

@@ -8,6 +8,8 @@ import 'chat_page.dart';
 import 'chat_service.dart';
 import 'product_model.dart';
 import 'product_service.dart';
+import 'seller_profile_page.dart';
+import 'seller_profile_service.dart';
 
 class ProductDetailsPage extends StatefulWidget {
   final Product product;
@@ -28,15 +30,73 @@ class _ProductDetailsPageState
     extends State<ProductDetailsPage> {
   final ProductService _productService = ProductService();
   final ChatService _chatService = ChatService();
+  final SellerProfileService _sellerProfileService =
+      SellerProfileService();
 
   late String _productStatus;
   bool _isUpdatingStatus = false;
   bool _isOpeningChat = false;
+  bool _isLoadingSeller = true;
+
+  SellerProfile? _sellerProfile;
+
+  int _currentImageIndex = 0;
 
   @override
   void initState() {
     super.initState();
     _productStatus = widget.product.status;
+    _loadSellerProfile();
+  }
+
+  Future<void> _loadSellerProfile() async {
+    if (widget.product.sellerId.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _isLoadingSeller = false;
+        });
+      }
+      return;
+    }
+
+    try {
+      final profile =
+          await _sellerProfileService.getSellerProfile(
+        widget.product.sellerId,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _sellerProfile = profile;
+        _isLoadingSeller = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isLoadingSeller = false;
+      });
+    }
+  }
+
+  Future<void> _openSellerProfile() async {
+    if (widget.product.sellerId.isEmpty) {
+      return;
+    }
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SellerProfilePage(
+          sellerId: widget.product.sellerId,
+        ),
+      ),
+    );
   }
 
   Future<void> _setStatus(String status) async {
@@ -62,6 +122,7 @@ class _ProductDetailsPageState
         description: widget.product.description,
         paymentMethod: widget.product.paymentMethod,
         imagePath: widget.product.imagePath,
+        imagePaths: widget.product.imagePaths,
         status: status,
       );
 
@@ -344,16 +405,146 @@ class _ProductDetailsPageState
     }
   }
 
-  Widget _buildProductImage(
-    BuildContext context,
-    String noImage,
-  ) {
-    final imagePath = widget.product.imagePath;
-
-    if (imagePath == null || imagePath.isEmpty) {
-      return _buildImagePlaceholder(noImage);
+  List<String> _getImages() {
+    if (widget.product.imagePaths.isNotEmpty) {
+      return widget.product.imagePaths;
     }
 
+    if (widget.product.imagePath != null &&
+        widget.product.imagePath!.isNotEmpty) {
+      return [widget.product.imagePath!];
+    }
+
+    return [];
+  }
+
+  Widget _buildSellerCard(
+    BuildContext context,
+    AppLocalizations localization,
+  ) {
+    final sellerName =
+        _sellerProfile?.name.isNotEmpty == true
+            ? _sellerProfile!.name
+            : localization.isArabic
+                ? 'البائع'
+                : 'Seller';
+
+    final sellerPhoto =
+        _sellerProfile?.photoUrl ?? '';
+
+    final viewProfileText = localization.isArabic
+        ? 'عرض صفحة البائع'
+        : 'View Seller Profile';
+
+    Widget sellerImage;
+
+    if (_isLoadingSeller) {
+      sellerImage = CircleAvatar(
+        radius: 28,
+        child: const SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+          ),
+        ),
+      );
+    } else if (sellerPhoto.isNotEmpty &&
+        (sellerPhoto.startsWith('http://') ||
+            sellerPhoto.startsWith('https://'))) {
+      sellerImage = CircleAvatar(
+        radius: 28,
+        backgroundImage: NetworkImage(sellerPhoto),
+        onBackgroundImageError: (_, _) {},
+      );
+    } else if (sellerPhoto.isNotEmpty) {
+      sellerImage = CircleAvatar(
+        radius: 28,
+        backgroundImage: FileImage(
+          File(sellerPhoto),
+        ),
+      );
+    } else {
+      sellerImage = const CircleAvatar(
+        radius: 28,
+        child: Icon(
+          Icons.person,
+          size: 30,
+        ),
+      );
+    }
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: _isLoadingSeller
+            ? null
+            : _openSellerProfile,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              sellerImage,
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      localization.isArabic
+                          ? 'البائع'
+                          : 'Seller',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      sellerName,
+                      maxLines: 1,
+                      overflow:
+                          TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      viewProfileText,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_ios,
+                size: 17,
+                color: Theme.of(context)
+                    .colorScheme
+                    .primary,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageItem(
+    String imagePath,
+    String noImage,
+  ) {
     final isNetworkImage =
         imagePath.startsWith('http://') ||
         imagePath.startsWith('https://');
@@ -362,7 +553,7 @@ class _ProductDetailsPageState
       return Image.network(
         imagePath,
         width: double.infinity,
-        height: 280,
+        height: 300,
         fit: BoxFit.cover,
         errorBuilder: (
           context,
@@ -382,7 +573,7 @@ class _ProductDetailsPageState
 
           return Container(
             width: double.infinity,
-            height: 280,
+            height: 300,
             color: Colors.grey.shade200,
             child: const Center(
               child: CircularProgressIndicator(),
@@ -401,7 +592,7 @@ class _ProductDetailsPageState
     return Image.file(
       localFile,
       width: double.infinity,
-      height: 280,
+      height: 300,
       fit: BoxFit.cover,
       errorBuilder: (
         context,
@@ -416,7 +607,7 @@ class _ProductDetailsPageState
   Widget _buildImagePlaceholder(String noImage) {
     return Container(
       width: double.infinity,
-      height: 280,
+      height: 300,
       color: Colors.grey.shade200,
       child: Column(
         mainAxisAlignment:
@@ -431,6 +622,162 @@ class _ProductDetailsPageState
           Text(noImage),
         ],
       ),
+    );
+  }
+
+  Widget _buildImageGallery(String noImage) {
+    final images = _getImages();
+
+    if (images.isEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: _buildImagePlaceholder(noImage),
+      );
+    }
+
+    return Column(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: SizedBox(
+            height: 300,
+            width: double.infinity,
+            child: PageView.builder(
+              itemCount: images.length,
+              onPageChanged: (index) {
+                setState(() {
+                  _currentImageIndex = index;
+                });
+              },
+              itemBuilder: (context, index) {
+                return _buildImageItem(
+                  images[index],
+                  noImage,
+                );
+              },
+            ),
+          ),
+        ),
+        if (images.length > 1) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 72,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: images.length,
+              separatorBuilder: (_, _) =>
+                  const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final imagePath = images[index];
+
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _currentImageIndex = index;
+                    });
+                  },
+                  child: AnimatedContainer(
+                    duration:
+                        const Duration(milliseconds: 200),
+                    width: 72,
+                    height: 72,
+                    padding: EdgeInsets.all(
+                      _currentImageIndex == index
+                          ? 3
+                          : 0,
+                    ),
+                    decoration: BoxDecoration(
+                      borderRadius:
+                          BorderRadius.circular(10),
+                      border: Border.all(
+                        color:
+                            _currentImageIndex == index
+                                ? Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                : Colors.transparent,
+                        width: 2,
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius:
+                          BorderRadius.circular(8),
+                      child: _buildThumbnail(
+                        imagePath,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${_currentImageIndex + 1} / ${images.length}',
+            style: TextStyle(
+              color: Colors.grey.shade600,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildThumbnail(String imagePath) {
+    final isNetworkImage =
+        imagePath.startsWith('http://') ||
+        imagePath.startsWith('https://');
+
+    if (isNetworkImage) {
+      return Image.network(
+        imagePath,
+        fit: BoxFit.cover,
+        errorBuilder: (
+          context,
+          error,
+          stackTrace,
+        ) {
+          return Container(
+            color: Colors.grey.shade200,
+            child: const Icon(
+              Icons.broken_image_outlined,
+              color: Colors.grey,
+            ),
+          );
+        },
+      );
+    }
+
+    final localFile = File(imagePath);
+
+    if (!localFile.existsSync()) {
+      return Container(
+        color: Colors.grey.shade200,
+        child: const Icon(
+          Icons.image_outlined,
+          color: Colors.grey,
+        ),
+      );
+    }
+
+    return Image.file(
+      localFile,
+      fit: BoxFit.cover,
+      errorBuilder: (
+        context,
+        error,
+        stackTrace,
+      ) {
+        return Container(
+          color: Colors.grey.shade200,
+          child: const Icon(
+            Icons.broken_image_outlined,
+            color: Colors.grey,
+          ),
+        );
+      },
     );
   }
 
@@ -479,13 +826,7 @@ class _ProductDetailsPageState
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: _buildProductImage(
-              context,
-              noImage,
-            ),
-          ),
+          _buildImageGallery(noImage),
           const SizedBox(height: 18),
           Text(
             widget.product.name,
@@ -504,6 +845,11 @@ class _ProductDetailsPageState
                   .colorScheme
                   .primary,
             ),
+          ),
+          const SizedBox(height: 18),
+          _buildSellerCard(
+            context,
+            localization,
           ),
           const SizedBox(height: 18),
           Card(

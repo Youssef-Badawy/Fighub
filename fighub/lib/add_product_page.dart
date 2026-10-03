@@ -39,7 +39,7 @@ class _AddProductPageState extends State<AddProductPage> {
   String _condition = 'New';
   String _paymentMethod = 'Cash on Delivery';
 
-  XFile? _imageFile;
+  final List<XFile> _imageFiles = [];
   bool _isPublishing = false;
 
   @override
@@ -50,19 +50,20 @@ class _AddProductPageState extends State<AddProductPage> {
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
+  Future<void> _pickImages() async {
     try {
-      final image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
+      final images = await _imagePicker.pickMultiImage(
         imageQuality: 85,
       );
 
-      if (image == null) {
+      if (images.isEmpty) {
         return;
       }
 
       setState(() {
-        _imageFile = image;
+        _imageFiles
+          ..clear()
+          ..addAll(images);
       });
     } catch (error) {
       if (!mounted) {
@@ -76,12 +77,22 @@ class _AddProductPageState extends State<AddProductPage> {
           duration: const Duration(seconds: 8),
           content: Text(
             localization.isArabic
-                ? 'حدث خطأ أثناء اختيار الصورة:\n$error'
-                : 'Error selecting image:\n$error',
+                ? 'حدث خطأ أثناء اختيار الصور:\n$error'
+                : 'Error selecting images:\n$error',
           ),
         ),
       );
     }
+  }
+
+  void _removeImage(int index) {
+    if (_isPublishing) {
+      return;
+    }
+
+    setState(() {
+      _imageFiles.removeAt(index);
+    });
   }
 
   Future<void> _publishProduct() async {
@@ -109,12 +120,13 @@ class _AddProductPageState extends State<AddProductPage> {
     });
 
     try {
-      String? imageUrl;
+      final List<String> imageUrls = [];
 
-      if (_imageFile != null) {
-        imageUrl = await _cloudinaryService.uploadImage(
-          _imageFile!,
-        );
+      for (final imageFile in _imageFiles) {
+        final imageUrl =
+            await _cloudinaryService.uploadImage(imageFile);
+
+        imageUrls.add(imageUrl);
       }
 
       final product = Product(
@@ -124,7 +136,9 @@ class _AddProductPageState extends State<AddProductPage> {
         condition: _condition,
         description: _descriptionController.text.trim(),
         paymentMethod: _paymentMethod,
-        imagePath: imageUrl,
+        imagePath:
+            imageUrls.isNotEmpty ? imageUrls.first : null,
+        imagePaths: imageUrls,
         sellerId: user.uid,
       );
 
@@ -261,11 +275,19 @@ class _AddProductPageState extends State<AddProductPage> {
     final paymentLabel =
         isArabic ? 'طريقة الدفع' : 'Payment method';
 
-    final addImageText =
-        isArabic ? 'إضافة صورة' : 'Add Image';
+    final addImagesText =
+        isArabic ? 'إضافة صور' : 'Add Images';
 
-    final changeImageText =
-        isArabic ? 'تغيير الصورة' : 'Change Image';
+    final changeImagesText =
+        isArabic ? 'تغيير الصور' : 'Change Images';
+
+    final noImagesText = isArabic
+        ? 'لم يتم اختيار صور'
+        : 'No images selected';
+
+    final selectedImagesText = isArabic
+        ? 'صور مختارة'
+        : 'selected images';
 
     final publishText =
         isArabic ? 'نشر المنتج' : 'Publish Product';
@@ -282,89 +304,176 @@ class _AddProductPageState extends State<AddProductPage> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            GestureDetector(
-              onTap: _isPublishing ? null : _pickImage,
-              child: Container(
-                height: 220,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Colors.grey.shade400,
-                  ),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Colors.grey.shade300,
                 ),
-                child: _imageFile == null
-                    ? Column(
+              ),
+              child: _imageFiles.isEmpty
+                  ? SizedBox(
+                      height: 180,
+                      child: Column(
                         mainAxisAlignment:
                             MainAxisAlignment.center,
                         children: [
                           const Icon(
-                            Icons.add_a_photo_outlined,
+                            Icons.add_photo_alternate_outlined,
                             size: 55,
                             color: Colors.grey,
                           ),
                           const SizedBox(height: 10),
                           Text(
-                            addImageText,
+                            noImagesText,
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
                             ),
                           ),
                         ],
-                      )
-                    : ClipRRect(
-                        borderRadius:
-                            BorderRadius.circular(16),
-                        child: FutureBuilder<List<int>>(
-                          future: _imageFile!.readAsBytes(),
-                          builder: (
-                            context,
-                            snapshot,
-                          ) {
-                            if (snapshot.connectionState !=
-                                ConnectionState.done) {
-                              return const Center(
-                                child:
-                                    CircularProgressIndicator(),
-                              );
-                            }
-
-                            if (snapshot.hasError ||
-                                snapshot.data == null) {
-                              return Center(
-                                child: Text(
-                                  isArabic
-                                      ? 'تعذر عرض الصورة'
-                                      : 'Unable to display image',
-                                ),
-                              );
-                            }
-
-                            return Image.memory(
-                              Uint8List.fromList(
-                                snapshot.data!,
-                              ),
-                              width: double.infinity,
-                              height: 220,
-                              fit: BoxFit.cover,
-                            );
-                          },
-                        ),
                       ),
-              ),
+                    )
+                  : GridView.builder(
+                      shrinkWrap: true,
+                      physics:
+                          const NeverScrollableScrollPhysics(),
+                      itemCount: _imageFiles.length,
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 8,
+                        childAspectRatio: 1,
+                      ),
+                      itemBuilder: (context, index) {
+                        final imageFile = _imageFiles[index];
+
+                        return Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            ClipRRect(
+                              borderRadius:
+                                  BorderRadius.circular(12),
+                              child:
+                                  FutureBuilder<List<int>>(
+                                future:
+                                    imageFile.readAsBytes(),
+                                builder: (
+                                  context,
+                                  snapshot,
+                                ) {
+                                  if (snapshot.connectionState !=
+                                      ConnectionState.done) {
+                                    return Container(
+                                      color:
+                                          Colors.grey.shade200,
+                                      child: const Center(
+                                        child:
+                                            CircularProgressIndicator(),
+                                      ),
+                                    );
+                                  }
+
+                                  if (snapshot.hasError ||
+                                      snapshot.data == null) {
+                                    return Container(
+                                      color:
+                                          Colors.grey.shade200,
+                                      child: const Icon(
+                                        Icons
+                                            .broken_image_outlined,
+                                        size: 35,
+                                        color: Colors.grey,
+                                      ),
+                                    );
+                                  }
+
+                                  return Image.memory(
+                                    Uint8List.fromList(
+                                      snapshot.data!,
+                                    ),
+                                    fit: BoxFit.cover,
+                                  );
+                                },
+                              ),
+                            ),
+                            if (index == 0)
+                              Positioned(
+                                left: 6,
+                                bottom: 6,
+                                child: Container(
+                                  padding:
+                                      const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black
+                                        .withValues(alpha: 0.65),
+                                    borderRadius:
+                                        BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    isArabic
+                                        ? 'الرئيسية'
+                                        : 'Main',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight:
+                                          FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            Positioned(
+                              right: 4,
+                              top: 4,
+                              child: Material(
+                                color: Colors.black54,
+                                shape:
+                                    const CircleBorder(),
+                                child: InkWell(
+                                  customBorder:
+                                      const CircleBorder(),
+                                  onTap: _isPublishing
+                                      ? null
+                                      : () =>
+                                          _removeImage(index),
+                                  child: const Padding(
+                                    padding:
+                                        EdgeInsets.all(5),
+                                    child: Icon(
+                                      Icons.close,
+                                      size: 18,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
             ),
             const SizedBox(height: 10),
             Center(
               child: TextButton.icon(
                 onPressed:
-                    _isPublishing ? null : _pickImage,
-                icon: const Icon(Icons.image_outlined),
+                    _isPublishing ? null : _pickImages,
+                icon: const Icon(
+                  Icons.photo_library_outlined,
+                ),
                 label: Text(
-                  _imageFile == null
-                      ? addImageText
-                      : changeImageText,
+                  _imageFiles.isEmpty
+                      ? addImagesText
+                      : '$changeImagesText '
+                          '(${_imageFiles.length} $selectedImagesText)',
                 ),
               ),
             ),

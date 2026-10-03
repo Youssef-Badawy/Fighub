@@ -19,7 +19,10 @@ import 'product_details_page.dart';
 import 'product_model.dart';
 import 'product_service.dart';
 import 'profile_page.dart';
+import 'search_service.dart';
 import 'seller_dashboard_page.dart';
+import 'seller_profile_page.dart';
+import 'seller_profile_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -158,6 +161,8 @@ class _FigHubHomeState extends State<FigHubHome> {
   final FavoriteService _favoriteService = FavoriteService();
   final NotificationService _notificationService =
       NotificationService();
+  final SellerProfileService _sellerProfileService =
+      SellerProfileService();
 
   StreamSubscription<List<Product>>? _productsSubscription;
   StreamSubscription<List<String>>? _favoritesSubscription;
@@ -165,6 +170,9 @@ class _FigHubHomeState extends State<FigHubHome> {
       _notificationsSubscription;
 
   final List<String> _favoriteIds = [];
+
+  final Map<String, SellerProfile> _sellerProfiles = {};
+  final Set<String> _loadingSellerIds = {};
 
   int _unreadNotificationsCount = 0;
 
@@ -199,6 +207,8 @@ class _FigHubHomeState extends State<FigHubHome> {
 
         _refreshFavoritesList();
       });
+
+      _loadSellerProfiles(products);
     });
 
     _favoritesSubscription = _favoriteService
@@ -234,6 +244,45 @@ class _FigHubHomeState extends State<FigHubHome> {
         _unreadNotificationsCount = unreadCount;
       });
     });
+  }
+
+  Future<void> _loadSellerProfiles(
+    List<Product> products,
+  ) async {
+    final sellerIds = products
+        .map((product) => product.sellerId)
+        .where((sellerId) => sellerId.isNotEmpty)
+        .toSet();
+
+    for (final sellerId in sellerIds) {
+      if (_sellerProfiles.containsKey(sellerId) ||
+          _loadingSellerIds.contains(sellerId)) {
+        continue;
+      }
+
+      _loadingSellerIds.add(sellerId);
+
+      try {
+        final profile =
+            await _sellerProfileService.getSellerProfile(
+          sellerId,
+        );
+
+        if (!mounted) {
+          return;
+        }
+
+        if (profile != null) {
+          setState(() {
+            _sellerProfiles[sellerId] = profile;
+          });
+        }
+      } catch (_) {
+        // Ignore individual seller profile errors.
+      } finally {
+        _loadingSellerIds.remove(sellerId);
+      }
+    }
   }
 
   @override
@@ -329,15 +378,33 @@ class _FigHubHomeState extends State<FigHubHome> {
           _selectedCategory == 'All' ||
               product.category == _selectedCategory;
 
-      final matchesSearch =
-          _searchQuery.isEmpty ||
-              product.name
-                  .toLowerCase()
-                  .contains(
-                    _searchQuery.toLowerCase(),
-                  );
+      if (!matchesCategory) {
+        return false;
+      }
 
-      return matchesCategory && matchesSearch;
+      if (_searchQuery.trim().isEmpty) {
+        return true;
+      }
+
+      final sellerProfile =
+          _sellerProfiles[product.sellerId];
+
+      final sellerName =
+          sellerProfile?.name ?? '';
+
+      final matchesProduct =
+          SearchService.matches(
+        product.name,
+        _searchQuery,
+      );
+
+      final matchesSeller =
+          SearchService.matches(
+        sellerName,
+        _searchQuery,
+      );
+
+      return matchesProduct || matchesSeller;
     }).toList();
   }
 
@@ -413,6 +480,23 @@ class _FigHubHomeState extends State<FigHubHome> {
     setState(() {});
   }
 
+  Future<void> _openSellerProfile(
+    String sellerId,
+  ) async {
+    if (sellerId.isEmpty) {
+      return;
+    }
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SellerProfilePage(
+          sellerId: sellerId,
+        ),
+      ),
+    );
+  }
+
   Future<void> _openSellerDashboard() async {
     await Navigator.push(
       context,
@@ -462,6 +546,8 @@ class _FigHubHomeState extends State<FigHubHome> {
     }
 
     setState(() {});
+
+    _loadSellerProfiles(_products);
   }
 
   Future<void> _openChat() async {
@@ -688,12 +774,19 @@ class _FigHubHomeState extends State<FigHubHome> {
               ),
               child: _ProductCard(
                 product: product,
+                sellerProfile:
+                    _sellerProfiles[product.sellerId],
                 isFavorite: _isFavorite(product),
                 onFavorite: () {
                   _toggleFavorite(product);
                 },
                 onTap: () {
                   _openProductDetails(product);
+                },
+                onSellerTap: () {
+                  _openSellerProfile(
+                    product.sellerId,
+                  );
                 },
               ),
             ),
@@ -743,15 +836,19 @@ class _FigHubHomeState extends State<FigHubHome> {
 
 class _ProductCard extends StatelessWidget {
   final Product product;
+  final SellerProfile? sellerProfile;
   final bool isFavorite;
   final VoidCallback onFavorite;
   final VoidCallback onTap;
+  final VoidCallback onSellerTap;
 
   const _ProductCard({
     required this.product,
+    required this.sellerProfile,
     required this.isFavorite,
     required this.onFavorite,
     required this.onTap,
+    required this.onSellerTap,
   });
 
   String _statusLabel(
@@ -872,6 +969,63 @@ class _ProductCard extends StatelessWidget {
     );
   }
 
+  Widget _buildSellerInfo(BuildContext context) {
+    final sellerName =
+        sellerProfile?.name.isNotEmpty == true
+            ? sellerProfile!.name
+            : '';
+
+    if (sellerName.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return InkWell(
+      onTap: onSellerTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          vertical: 3,
+          horizontal: 2,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (sellerProfile?.photoUrl.isNotEmpty ==
+                true)
+              CircleAvatar(
+                radius: 10,
+                backgroundImage: NetworkImage(
+                  sellerProfile!.photoUrl,
+                ),
+                onBackgroundImageError: (_, _) {},
+              )
+            else
+              const Icon(
+                Icons.person_outline,
+                size: 18,
+              ),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                sellerName,
+                maxLines: 1,
+                overflow:
+                    TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .primary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -900,6 +1054,8 @@ class _ProductCard extends StatelessWidget {
                             FontWeight.bold,
                       ),
                     ),
+                    const SizedBox(height: 5),
+                    _buildSellerInfo(context),
                     const SizedBox(height: 6),
                     Text(
                       _categoryLabel(
