@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'chat_page.dart';
 import 'app_localizations.dart';
+import 'chat_page.dart';
+import 'chat_service.dart';
 
 class ChatListPage extends StatelessWidget {
   final List<String> productNames;
@@ -30,12 +31,78 @@ class ChatListPage extends StatelessWidget {
         ? 'اضغط لفتح المحادثة'
         : 'Tap to open conversation';
 
+    final loadingText = localization.isArabic
+        ? 'جاري تحميل المحادثات...'
+        : 'Loading conversations...';
+
+    final chatService = ChatService();
+
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
       ),
-      body: productNames.isEmpty
-          ? Center(
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: chatService.watchMyChats(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState ==
+              ConnectionState.waiting) {
+            return Center(
+              child: Column(
+                mainAxisAlignment:
+                    MainAxisAlignment.center,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 14),
+                  Text(loadingText),
+                ],
+              ),
+            );
+          }
+
+          if (snapshot.hasError) {
+            final error = snapshot.error.toString();
+
+            return Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment:
+                      MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      size: 70,
+                      color: Colors.red,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      localization.isArabic
+                          ? 'حدث خطأ أثناء تحميل المحادثات'
+                          : 'An error occurred while loading conversations',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    SelectableText(
+                      error,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          final chats = snapshot.data ?? const [];
+
+          if (chats.isEmpty) {
+            return Center(
               child: Column(
                 mainAxisAlignment:
                     MainAxisAlignment.center,
@@ -61,55 +128,82 @@ class ChatListPage extends StatelessWidget {
                   ),
                 ],
               ),
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: productNames.length,
-              separatorBuilder: (_, _) =>
-                  const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                final productName = productNames[index];
+            );
+          }
 
-                return Card(
-                  child: ListTile(
-                    contentPadding:
-                        const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    leading: const CircleAvatar(
-                      radius: 25,
-                      child: Icon(
-                        Icons.person_outline,
-                      ),
-                    ),
-                    title: Text(
-                      productName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    subtitle: Text(openConversation),
-                    trailing: const Icon(
-                      Icons.arrow_forward_ios,
-                      size: 16,
-                    ),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ChatPage(
-                            productName: productName,
-                          ),
-                        ),
-                      );
-                    },
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: chats.length,
+            separatorBuilder: (_, _) =>
+                const SizedBox(height: 10),
+            itemBuilder: (context, index) {
+              final chat = chats[index];
+
+              final chatId =
+                  chat['id'] as String? ?? '';
+
+              final productName =
+                  chat['productName'] as String? ?? '';
+
+              final lastMessage =
+                  chat['lastMessage'] as String? ?? '';
+
+              return Card(
+                child: ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
                   ),
-                );
-              },
-            ),
+                  leading: const CircleAvatar(
+                    radius: 25,
+                    child: Icon(
+                      Icons.person_outline,
+                    ),
+                  ),
+                  title: Text(
+                    productName.isEmpty
+                        ? (localization.isArabic
+                            ? 'منتج'
+                            : 'Product')
+                        : productName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: Text(
+                    lastMessage.isEmpty
+                        ? openConversation
+                        : lastMessage,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: const Icon(
+                    Icons.arrow_forward_ios,
+                    size: 16,
+                  ),
+                  onTap: chatId.isEmpty
+                      ? null
+                      : () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ChatPage(
+                                chatId: chatId,
+                                productName:
+                                    productName,
+                              ),
+                            ),
+                          );
+                        },
+                ),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }

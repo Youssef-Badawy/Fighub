@@ -1,9 +1,11 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'app_localizations.dart';
 import 'chat_page.dart';
+import 'chat_service.dart';
 import 'product_model.dart';
 import 'product_service.dart';
 
@@ -25,9 +27,11 @@ class ProductDetailsPage extends StatefulWidget {
 class _ProductDetailsPageState
     extends State<ProductDetailsPage> {
   final ProductService _productService = ProductService();
+  final ChatService _chatService = ChatService();
 
   late String _productStatus;
   bool _isUpdatingStatus = false;
+  bool _isOpeningChat = false;
 
   @override
   void initState() {
@@ -83,7 +87,7 @@ class _ProductDetailsPageState
           content: Text(message),
         ),
       );
-    } catch (error) {
+    } catch (_) {
       if (!mounted) {
         return;
       }
@@ -137,15 +141,126 @@ class _ProductDetailsPageState
     );
   }
 
-  void _openChat() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ChatPage(
-          productName: widget.product.name,
+  Future<void> _openChat() async {
+    if (_isOpeningChat) {
+      return;
+    }
+
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      if (!mounted) {
+        return;
+      }
+
+      final localization = AppLocalizations.of(context);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            localization.isArabic
+                ? 'يجب تسجيل الدخول أولًا.'
+                : 'You must sign in first.',
+          ),
         ),
-      ),
-    );
+      );
+
+      return;
+    }
+
+    final productId = widget.product.id;
+
+    if (productId == null || productId.isEmpty) {
+      if (!mounted) {
+        return;
+      }
+
+      final localization = AppLocalizations.of(context);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            localization.isArabic
+                ? 'لا يمكن فتح المحادثة لهذا المنتج.'
+                : 'Unable to open chat for this product.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    if (widget.product.sellerId.isEmpty ||
+        widget.product.sellerId == user.uid) {
+      if (!mounted) {
+        return;
+      }
+
+      final localization = AppLocalizations.of(context);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            localization.isArabic
+                ? 'لا يمكنك بدء محادثة مع نفسك.'
+                : 'You cannot start a chat with yourself.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    setState(() {
+      _isOpeningChat = true;
+    });
+
+    try {
+      final chatId = await _chatService.getOrCreateChat(
+        productId: productId,
+        productName: widget.product.name,
+        sellerId: widget.product.sellerId,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatPage(
+            chatId: chatId,
+            productName: widget.product.name,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      final localization = AppLocalizations.of(context);
+
+      final errorMessage = error.toString();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(
+            localization.isArabic
+                ? 'خطأ فتح المحادثة:\n$errorMessage'
+                : 'Chat opening error:\n$errorMessage',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isOpeningChat = false;
+        });
+      }
+    }
   }
 
   String _statusLabel(
@@ -457,12 +572,26 @@ class _ProductDetailsPageState
           SizedBox(
             height: 52,
             child: OutlinedButton.icon(
-              onPressed: _openChat,
-              icon: const Icon(
-                Icons.chat_bubble_outline,
-              ),
+              onPressed: _isOpeningChat
+                  ? null
+                  : _openChat,
+              icon: _isOpeningChat
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Icon(
+                      Icons.chat_bubble_outline,
+                    ),
               label: Text(
-                chatText,
+                _isOpeningChat
+                    ? (isArabic
+                        ? 'جاري فتح المحادثة...'
+                        : 'Opening chat...')
+                    : chatText,
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,

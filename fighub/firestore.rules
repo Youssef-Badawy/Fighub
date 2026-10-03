@@ -5,62 +5,120 @@ service cloud.firestore {
 
     match /products/{productId} {
 
-      // المستخدم المسجل يقدر يشوف المنتجات
       allow read: if request.auth != null;
 
-      // المستخدم يقدر يضيف منتج باسمه فقط
       allow create: if request.auth != null
                     && request.resource.data.sellerId == request.auth.uid;
 
-      // المستخدم يقدر يعدل منتجاته فقط
-      // ولا يمكن تغيير صاحب المنتج
       allow update: if request.auth != null
                     && resource.data.sellerId == request.auth.uid
                     && request.resource.data.sellerId
                        == resource.data.sellerId;
 
-      // المستخدم يقدر يحذف منتجاته فقط
       allow delete: if request.auth != null
                     && resource.data.sellerId == request.auth.uid;
     }
 
     match /users/{userId} {
 
-      // المستخدم يقدر يقرأ بيانات حسابه فقط
       allow read: if request.auth != null
                     && request.auth.uid == userId;
 
-      // المستخدم يقدر إنشاء بيانات حسابه فقط
       allow create: if request.auth != null
                       && request.auth.uid == userId;
 
-      // المستخدم يقدر تعديل بيانات حسابه فقط
       allow update: if request.auth != null
                       && request.auth.uid == userId;
 
-      // لا نحتاج حذف حساب المستخدم من التطبيق حاليًا
       allow delete: if false;
 
-      // المفضلة الخاصة بالمستخدم
       match /favorites/{favoriteId} {
 
-        // المستخدم يقدر يشوف مفضلاته فقط
         allow read: if request.auth != null
                       && request.auth.uid == userId;
 
-        // المستخدم يقدر إضافة مفضلة لحسابه فقط
         allow create: if request.auth != null
                       && request.auth.uid == userId
                       && request.resource.data.productId == favoriteId;
 
-        // المستخدم يقدر تعديل مفضلته فقط
         allow update: if request.auth != null
                       && request.auth.uid == userId
                       && request.resource.data.productId == favoriteId;
 
-        // المستخدم يقدر حذف مفضلته فقط
         allow delete: if request.auth != null
                       && request.auth.uid == userId;
+      }
+
+      match /notifications/{notificationId} {
+
+        allow read: if request.auth != null
+                    && request.auth.uid == userId;
+
+        allow create: if request.auth != null
+                      && request.resource.data.title is string
+                      && request.resource.data.message is string
+                      && request.resource.data.isRead == false;
+
+        allow update: if request.auth != null
+                      && request.auth.uid == userId
+                      && request.resource.data.diff(resource.data)
+                         .affectedKeys()
+                         .hasOnly(['isRead']);
+
+        allow delete: if request.auth != null
+                      && request.auth.uid == userId;
+      }
+    }
+
+    match /chats/{chatId} {
+
+      allow get: if request.auth != null
+                 && (
+                   !exists(
+                     /databases/$(database)/documents/chats/$(chatId)
+                   )
+                   || request.auth.uid in resource.data.participants
+                 );
+
+      allow list: if request.auth != null
+                  && request.auth.uid in resource.data.participants;
+
+      allow create: if request.auth != null
+                    && request.resource.data.buyerId is string
+                    && request.resource.data.sellerId is string
+                    && request.resource.data.buyerId
+                       != request.resource.data.sellerId
+                    && request.resource.data.participants is list
+                    && request.resource.data.participants.size() == 2
+                    && request.auth.uid
+                       == request.resource.data.buyerId
+                    && request.resource.data.participants.hasAll([
+                      request.resource.data.buyerId,
+                      request.resource.data.sellerId
+                    ]);
+
+      allow update: if request.auth != null
+                    && request.auth.uid in resource.data.participants;
+
+      allow delete: if false;
+
+      match /messages/{messageId} {
+
+        allow read: if request.auth != null
+                    && request.auth.uid in
+                       get(
+                         /databases/$(database)/documents/chats/$(chatId)
+                       ).data.participants;
+
+        allow create: if request.auth != null
+                      && request.auth.uid in
+                         get(
+                           /databases/$(database)/documents/chats/$(chatId)
+                         ).data.participants
+                      && request.resource.data.senderId
+                         == request.auth.uid;
+
+        allow update, delete: if false;
       }
     }
   }

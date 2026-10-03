@@ -13,6 +13,7 @@ import 'chat_list_page.dart';
 import 'favorite_service.dart';
 import 'favorites_page.dart';
 import 'firebase_options.dart';
+import 'notification_service.dart';
 import 'notifications_page.dart';
 import 'product_details_page.dart';
 import 'product_model.dart';
@@ -155,11 +156,17 @@ class _FigHubHomeState extends State<FigHubHome> {
 
   final ProductService _productService = ProductService();
   final FavoriteService _favoriteService = FavoriteService();
+  final NotificationService _notificationService =
+      NotificationService();
 
   StreamSubscription<List<Product>>? _productsSubscription;
   StreamSubscription<List<String>>? _favoritesSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>?
+      _notificationsSubscription;
 
   final List<String> _favoriteIds = [];
+
+  int _unreadNotificationsCount = 0;
 
   final List<String> _categories = const [
     'All',
@@ -209,12 +216,31 @@ class _FigHubHomeState extends State<FigHubHome> {
         _refreshFavoritesList();
       });
     });
+
+    _notificationsSubscription = _notificationService
+        .watchMyNotifications()
+        .listen((notificationList) {
+      if (!mounted) {
+        return;
+      }
+
+      final unreadCount = notificationList.where(
+        (notification) {
+          return !(notification['isRead'] as bool? ?? false);
+        },
+      ).length;
+
+      setState(() {
+        _unreadNotificationsCount = unreadCount;
+      });
+    });
   }
 
   @override
   void dispose() {
     _productsSubscription?.cancel();
     _favoritesSubscription?.cancel();
+    _notificationsSubscription?.cancel();
     super.dispose();
   }
 
@@ -258,13 +284,13 @@ class _FigHubHomeState extends State<FigHubHome> {
       } else {
         await _favoriteService.addFavorite(productId);
       }
-    } catch (error) {
+    } catch (_) {
       if (!mounted) {
         return;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
             'حدث خطأ أثناء تحديث المفضلة.',
           ),
@@ -299,13 +325,17 @@ class _FigHubHomeState extends State<FigHubHome> {
 
   List<Product> get _filteredProducts {
     return _products.where((product) {
-      final matchesCategory = _selectedCategory == 'All' ||
-          product.category == _selectedCategory;
+      final matchesCategory =
+          _selectedCategory == 'All' ||
+              product.category == _selectedCategory;
 
-      final matchesSearch = _searchQuery.isEmpty ||
-          product.name.toLowerCase().contains(
-                _searchQuery.toLowerCase(),
-              );
+      final matchesSearch =
+          _searchQuery.isEmpty ||
+              product.name
+                  .toLowerCase()
+                  .contains(
+                    _searchQuery.toLowerCase(),
+                  );
 
       return matchesCategory && matchesSearch;
     }).toList();
@@ -354,12 +384,7 @@ class _FigHubHomeState extends State<FigHubHome> {
       return;
     }
 
-    setState(() {
-      _notifications.insert(
-        0,
-        'تم إضافة المنتج "${product.name}" بنجاح.',
-      );
-    });
+    setState(() {});
   }
 
   Future<void> _openProductDetails(Product product) async {
@@ -375,11 +400,6 @@ class _FigHubHomeState extends State<FigHubHome> {
 
             setState(() {
               product.status = status;
-
-              _notifications.insert(
-                0,
-                'تم تحديث حالة "${product.name}" إلى $status.',
-              );
             });
           },
         ),
@@ -488,9 +508,7 @@ class _FigHubHomeState extends State<FigHubHome> {
         actions: [
           IconButton(
             onPressed: _openNotifications,
-            icon: const Icon(
-              Icons.notifications_outlined,
-            ),
+            icon: _buildNotificationIcon(),
           ),
           IconButton(
             onPressed: _openProfile,
@@ -535,8 +553,12 @@ class _FigHubHomeState extends State<FigHubHome> {
             label: localization.sell,
           ),
           NavigationDestination(
-            icon: const Icon(Icons.chat_bubble_outline),
-            selectedIcon: const Icon(Icons.chat_bubble),
+            icon: const Icon(
+              Icons.chat_bubble_outline,
+            ),
+            selectedIcon: const Icon(
+              Icons.chat_bubble,
+            ),
             label: localization.messages,
           ),
         ],
@@ -544,7 +566,59 @@ class _FigHubHomeState extends State<FigHubHome> {
     );
   }
 
-  Widget _buildHome(AppLocalizations localization) {
+  Widget _buildNotificationIcon() {
+    if (_unreadNotificationsCount == 0) {
+      return const Icon(
+        Icons.notifications_outlined,
+      );
+    }
+
+    final displayCount =
+        _unreadNotificationsCount > 99
+            ? '99+'
+            : _unreadNotificationsCount.toString();
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        const Icon(
+          Icons.notifications_outlined,
+        ),
+        Positioned(
+          right: -6,
+          top: -7,
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 5,
+              vertical: 2,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.red,
+              borderRadius:
+                  BorderRadius.circular(12),
+            ),
+            constraints: const BoxConstraints(
+              minWidth: 18,
+              minHeight: 18,
+            ),
+            child: Text(
+              displayCount,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHome(
+    AppLocalizations localization,
+  ) {
     final products = _filteredProducts;
 
     return ListView(
@@ -580,7 +654,8 @@ class _FigHubHomeState extends State<FigHubHome> {
                     category,
                   ),
                 ),
-                selected: _selectedCategory == category,
+                selected:
+                    _selectedCategory == category,
                 onSelected: (_) {
                   setState(() {
                     _selectedCategory = category;
@@ -683,7 +758,8 @@ class _ProductCard extends StatelessWidget {
     BuildContext context,
     String status,
   ) {
-    final localization = AppLocalizations.of(context);
+    final localization =
+        AppLocalizations.of(context);
 
     switch (status) {
       case 'Reserved':
@@ -699,7 +775,8 @@ class _ProductCard extends StatelessWidget {
     BuildContext context,
     String category,
   ) {
-    final localization = AppLocalizations.of(context);
+    final localization =
+        AppLocalizations.of(context);
 
     switch (category) {
       case 'Marvel':
@@ -748,7 +825,8 @@ class _ProductCard extends StatelessWidget {
                         width: 90,
                         height: 90,
                         child: Icon(
-                          Icons.image_not_supported_outlined,
+                          Icons
+                              .image_not_supported_outlined,
                           size: 40,
                         ),
                       );
