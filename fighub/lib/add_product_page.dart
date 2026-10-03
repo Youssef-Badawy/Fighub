@@ -1,10 +1,11 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'app_localizations.dart';
+import 'cloudinary_service.dart';
 import 'product_model.dart';
 import 'product_service.dart';
 
@@ -31,12 +32,14 @@ class _AddProductPageState extends State<AddProductPage> {
 
   final ImagePicker _imagePicker = ImagePicker();
   final ProductService _productService = ProductService();
+  final CloudinaryService _cloudinaryService =
+      CloudinaryService();
 
   String _category = 'Marvel';
   String _condition = 'New';
   String _paymentMethod = 'Cash on Delivery';
 
-  String? _imagePath;
+  XFile? _imageFile;
   bool _isPublishing = false;
 
   @override
@@ -48,18 +51,37 @@ class _AddProductPageState extends State<AddProductPage> {
   }
 
   Future<void> _pickImage() async {
-    final image = await _imagePicker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-    );
+    try {
+      final image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
 
-    if (image == null) {
-      return;
+      if (image == null) {
+        return;
+      }
+
+      setState(() {
+        _imageFile = image;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      final localization = AppLocalizations.of(context);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(
+            localization.isArabic
+                ? 'حدث خطأ أثناء اختيار الصورة:\n$error'
+                : 'Error selecting image:\n$error',
+          ),
+        ),
+      );
     }
-
-    setState(() {
-      _imagePath = image.path;
-    });
   }
 
   Future<void> _publishProduct() async {
@@ -87,6 +109,14 @@ class _AddProductPageState extends State<AddProductPage> {
     });
 
     try {
+      String? imageUrl;
+
+      if (_imageFile != null) {
+        imageUrl = await _cloudinaryService.uploadImage(
+          _imageFile!,
+        );
+      }
+
       final product = Product(
         name: _nameController.text.trim(),
         price: _priceController.text.trim(),
@@ -94,7 +124,7 @@ class _AddProductPageState extends State<AddProductPage> {
         condition: _condition,
         description: _descriptionController.text.trim(),
         paymentMethod: _paymentMethod,
-        imagePath: _imagePath,
+        imagePath: imageUrl,
         sellerId: user.uid,
       );
 
@@ -112,12 +142,15 @@ class _AddProductPageState extends State<AddProductPage> {
 
       final localization = AppLocalizations.of(context);
 
+      final errorMessage = error.toString();
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          duration: const Duration(seconds: 8),
           content: Text(
             localization.isArabic
-                ? 'حدث خطأ أثناء نشر المنتج'
-                : 'An error occurred while publishing the product',
+                ? 'حدث خطأ أثناء نشر المنتج:\n$errorMessage'
+                : 'An error occurred while publishing the product:\n$errorMessage',
           ),
         ),
       );
@@ -204,8 +237,9 @@ class _AddProductPageState extends State<AddProductPage> {
     final productNameLabel =
         isArabic ? 'اسم المنتج' : 'Product name';
 
-    final productNameHint =
-        isArabic ? 'مثال: Spider-Man Figure' : 'Example: Spider-Man Figure';
+    final productNameHint = isArabic
+        ? 'مثال: Spider-Man Figure'
+        : 'Example: Spider-Man Figure';
 
     final priceLabel = isArabic ? 'السعر' : 'Price';
 
@@ -260,7 +294,7 @@ class _AddProductPageState extends State<AddProductPage> {
                     color: Colors.grey.shade400,
                   ),
                 ),
-                child: _imagePath == null
+                child: _imageFile == null
                     ? Column(
                         mainAxisAlignment:
                             MainAxisAlignment.center,
@@ -283,11 +317,40 @@ class _AddProductPageState extends State<AddProductPage> {
                     : ClipRRect(
                         borderRadius:
                             BorderRadius.circular(16),
-                        child: Image.file(
-                          File(_imagePath!),
-                          width: double.infinity,
-                          height: 220,
-                          fit: BoxFit.cover,
+                        child: FutureBuilder<List<int>>(
+                          future: _imageFile!.readAsBytes(),
+                          builder: (
+                            context,
+                            snapshot,
+                          ) {
+                            if (snapshot.connectionState !=
+                                ConnectionState.done) {
+                              return const Center(
+                                child:
+                                    CircularProgressIndicator(),
+                              );
+                            }
+
+                            if (snapshot.hasError ||
+                                snapshot.data == null) {
+                              return Center(
+                                child: Text(
+                                  isArabic
+                                      ? 'تعذر عرض الصورة'
+                                      : 'Unable to display image',
+                                ),
+                              );
+                            }
+
+                            return Image.memory(
+                              Uint8List.fromList(
+                                snapshot.data!,
+                              ),
+                              width: double.infinity,
+                              height: 220,
+                              fit: BoxFit.cover,
+                            );
+                          },
                         ),
                       ),
               ),
@@ -299,7 +362,7 @@ class _AddProductPageState extends State<AddProductPage> {
                     _isPublishing ? null : _pickImage,
                 icon: const Icon(Icons.image_outlined),
                 label: Text(
-                  _imagePath == null
+                  _imageFile == null
                       ? addImageText
                       : changeImageText,
                 ),
@@ -318,6 +381,7 @@ class _AddProductPageState extends State<AddProductPage> {
                 if (value == null || value.trim().isEmpty) {
                   return requiredMessage;
                 }
+
                 return null;
               },
             ),
@@ -335,6 +399,7 @@ class _AddProductPageState extends State<AddProductPage> {
                 if (value == null || value.trim().isEmpty) {
                   return requiredMessage;
                 }
+
                 return null;
               },
             ),

@@ -344,6 +344,96 @@ class _ProductDetailsPageState
     }
   }
 
+  Widget _buildProductImage(
+    BuildContext context,
+    String noImage,
+  ) {
+    final imagePath = widget.product.imagePath;
+
+    if (imagePath == null || imagePath.isEmpty) {
+      return _buildImagePlaceholder(noImage);
+    }
+
+    final isNetworkImage =
+        imagePath.startsWith('http://') ||
+        imagePath.startsWith('https://');
+
+    if (isNetworkImage) {
+      return Image.network(
+        imagePath,
+        width: double.infinity,
+        height: 280,
+        fit: BoxFit.cover,
+        errorBuilder: (
+          context,
+          error,
+          stackTrace,
+        ) {
+          return _buildImagePlaceholder(noImage);
+        },
+        loadingBuilder: (
+          context,
+          child,
+          loadingProgress,
+        ) {
+          if (loadingProgress == null) {
+            return child;
+          }
+
+          return Container(
+            width: double.infinity,
+            height: 280,
+            color: Colors.grey.shade200,
+            child: const Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        },
+      );
+    }
+
+    final localFile = File(imagePath);
+
+    if (!localFile.existsSync()) {
+      return _buildImagePlaceholder(noImage);
+    }
+
+    return Image.file(
+      localFile,
+      width: double.infinity,
+      height: 280,
+      fit: BoxFit.cover,
+      errorBuilder: (
+        context,
+        error,
+        stackTrace,
+      ) {
+        return _buildImagePlaceholder(noImage);
+      },
+    );
+  }
+
+  Widget _buildImagePlaceholder(String noImage) {
+    return Container(
+      width: double.infinity,
+      height: 280,
+      color: Colors.grey.shade200,
+      child: Column(
+        mainAxisAlignment:
+            MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.image_outlined,
+            size: 70,
+            color: Colors.grey,
+          ),
+          const SizedBox(height: 10),
+          Text(noImage),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final localization = AppLocalizations.of(context);
@@ -382,10 +472,6 @@ class _ProductDetailsPageState
         ? 'لا توجد صورة'
         : 'No Image';
 
-    final hasImage = widget.product.imagePath != null &&
-        widget.product.imagePath!.isNotEmpty &&
-        File(widget.product.imagePath!).existsSync();
-
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
@@ -395,31 +481,10 @@ class _ProductDetailsPageState
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
-            child: hasImage
-                ? Image.file(
-                    File(widget.product.imagePath!),
-                    width: double.infinity,
-                    height: 280,
-                    fit: BoxFit.cover,
-                  )
-                : Container(
-                    width: double.infinity,
-                    height: 280,
-                    color: Colors.grey.shade200,
-                    child: Column(
-                      mainAxisAlignment:
-                          MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.image_outlined,
-                          size: 70,
-                          color: Colors.grey,
-                        ),
-                        const SizedBox(height: 10),
-                        Text(noImage),
-                      ],
-                    ),
-                  ),
+            child: _buildProductImage(
+              context,
+              noImage,
+            ),
           ),
           const SizedBox(height: 18),
           Text(

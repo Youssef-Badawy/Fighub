@@ -278,6 +278,91 @@ class _SellerDashboardPageState
     }
   }
 
+  Widget _buildProductImage(Product product) {
+    final imagePath = product.imagePath;
+
+    if (imagePath == null || imagePath.isEmpty) {
+      return _buildImagePlaceholder();
+    }
+
+    final isNetworkImage =
+        imagePath.startsWith('http://') ||
+        imagePath.startsWith('https://');
+
+    if (isNetworkImage) {
+      return Image.network(
+        imagePath,
+        width: 95,
+        height: 95,
+        fit: BoxFit.cover,
+        errorBuilder: (
+          context,
+          error,
+          stackTrace,
+        ) {
+          return _buildImagePlaceholder();
+        },
+        loadingBuilder: (
+          context,
+          child,
+          loadingProgress,
+        ) {
+          if (loadingProgress == null) {
+            return child;
+          }
+
+          return Container(
+            width: 95,
+            height: 95,
+            color: Colors.grey.shade200,
+            child: const Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    final localFile = File(imagePath);
+
+    if (!localFile.existsSync()) {
+      return _buildImagePlaceholder();
+    }
+
+    return Image.file(
+      localFile,
+      width: 95,
+      height: 95,
+      fit: BoxFit.cover,
+      errorBuilder: (
+        context,
+        error,
+        stackTrace,
+      ) {
+        return _buildImagePlaceholder();
+      },
+    );
+  }
+
+  Widget _buildImagePlaceholder() {
+    return Container(
+      width: 95,
+      height: 95,
+      color: Colors.grey.shade200,
+      child: const Icon(
+        Icons.image_outlined,
+        size: 42,
+        color: Colors.grey,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final localization = AppLocalizations.of(context);
@@ -478,12 +563,6 @@ class _SellerDashboardPageState
                   itemBuilder: (context, index) {
                     final product = _products[index];
 
-                    final hasImage =
-                        product.imagePath != null &&
-                            product.imagePath!.isNotEmpty &&
-                            File(product.imagePath!)
-                                .existsSync();
-
                     return Card(
                       clipBehavior: Clip.antiAlias,
                       child: Padding(
@@ -497,27 +576,9 @@ class _SellerDashboardPageState
                                 ClipRRect(
                                   borderRadius:
                                       BorderRadius.circular(12),
-                                  child: hasImage
-                                      ? Image.file(
-                                          File(
-                                            product.imagePath!,
-                                          ),
-                                          width: 95,
-                                          height: 95,
-                                          fit: BoxFit.cover,
-                                        )
-                                      : Container(
-                                          width: 95,
-                                          height: 95,
-                                          color:
-                                              Colors.grey.shade200,
-                                          child: const Icon(
-                                            Icons
-                                                .image_outlined,
-                                            size: 42,
-                                            color: Colors.grey,
-                                          ),
-                                        ),
+                                  child: _buildProductImage(
+                                    product,
+                                  ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(

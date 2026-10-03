@@ -196,29 +196,74 @@ class _FavoriteProductImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasImage = imagePath != null &&
-        imagePath!.isNotEmpty &&
-        File(imagePath!).existsSync();
+    final hasPath =
+        imagePath != null && imagePath!.isNotEmpty;
+
+    final isNetworkImage = hasPath &&
+        (imagePath!.startsWith('http://') ||
+            imagePath!.startsWith('https://'));
+
+    final hasLocalImage =
+        hasPath && !isNetworkImage && File(imagePath!).existsSync();
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
-      child: hasImage
-          ? Image.file(
-              File(imagePath!),
+      child: isNetworkImage
+          ? Image.network(
+              imagePath!,
               width: 95,
               height: 95,
               fit: BoxFit.cover,
+              loadingBuilder:
+                  (context, child, loadingProgress) {
+                if (loadingProgress == null) {
+                  return child;
+                }
+
+                return Container(
+                  width: 95,
+                  height: 95,
+                  color: Colors.grey.shade200,
+                  child: const Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                      ),
+                    ),
+                  ),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return _placeholder();
+              },
             )
-          : Container(
-              width: 95,
-              height: 95,
-              color: Colors.grey.shade200,
-              child: const Icon(
-                Icons.image_outlined,
-                size: 42,
-                color: Colors.grey,
-              ),
-            ),
+          : hasLocalImage
+              ? Image.file(
+                  File(imagePath!),
+                  width: 95,
+                  height: 95,
+                  fit: BoxFit.cover,
+                  errorBuilder:
+                      (context, error, stackTrace) {
+                    return _placeholder();
+                  },
+                )
+              : _placeholder(),
+    );
+  }
+
+  Widget _placeholder() {
+    return Container(
+      width: 95,
+      height: 95,
+      color: Colors.grey.shade200,
+      child: const Icon(
+        Icons.image_outlined,
+        size: 42,
+        color: Colors.grey,
+      ),
     );
   }
 }

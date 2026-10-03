@@ -796,6 +796,82 @@ class _ProductCard extends StatelessWidget {
     }
   }
 
+  Widget _buildProductImage(BuildContext context) {
+    final imagePath = product.imagePath;
+
+    if (imagePath == null || imagePath.isEmpty) {
+      return _buildPlaceholder(context);
+    }
+
+    final isNetworkImage =
+        imagePath.startsWith('http://') ||
+        imagePath.startsWith('https://');
+
+    if (isNetworkImage) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.network(
+          imagePath,
+          width: 90,
+          height: 90,
+          fit: BoxFit.cover,
+          errorBuilder: (
+            context,
+            error,
+            stackTrace,
+          ) {
+            return _buildImageError();
+          },
+        ),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Image.file(
+        File(imagePath),
+        width: 90,
+        height: 90,
+        fit: BoxFit.cover,
+        errorBuilder: (
+          context,
+          error,
+          stackTrace,
+        ) {
+          return _buildImageError();
+        },
+      ),
+    );
+  }
+
+  Widget _buildPlaceholder(BuildContext context) {
+    return Container(
+      width: 90,
+      height: 90,
+      decoration: BoxDecoration(
+        color: Theme.of(context)
+            .colorScheme
+            .surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Icon(
+        Icons.image_outlined,
+        size: 40,
+      ),
+    );
+  }
+
+  Widget _buildImageError() {
+    return const SizedBox(
+      width: 90,
+      height: 90,
+      child: Icon(
+        Icons.image_not_supported_outlined,
+        size: 40,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -806,49 +882,7 @@ class _ProductCard extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
-              if (product.imagePath != null &&
-                  product.imagePath!.isNotEmpty)
-                ClipRRect(
-                  borderRadius:
-                      BorderRadius.circular(12),
-                  child: Image.file(
-                    File(product.imagePath!),
-                    width: 90,
-                    height: 90,
-                    fit: BoxFit.cover,
-                    errorBuilder: (
-                      context,
-                      error,
-                      stackTrace,
-                    ) {
-                      return const SizedBox(
-                        width: 90,
-                        height: 90,
-                        child: Icon(
-                          Icons
-                              .image_not_supported_outlined,
-                          size: 40,
-                        ),
-                      );
-                    },
-                  ),
-                )
-              else
-                Container(
-                  width: 90,
-                  height: 90,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .surfaceContainerHighest,
-                    borderRadius:
-                        BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.image_outlined,
-                    size: 40,
-                  ),
-                ),
+              _buildProductImage(context),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
