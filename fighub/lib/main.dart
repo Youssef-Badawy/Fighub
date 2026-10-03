@@ -1,21 +1,23 @@
+import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
 
-import 'product_model.dart';
-import 'product_details_page.dart';
-import 'add_product_page.dart';
-import 'seller_dashboard_page.dart';
-import 'chat_list_page.dart';
-import 'profile_page.dart';
-import 'notifications_page.dart';
-import 'favorites_page.dart';
 import 'app_localizations.dart';
 import 'app_settings.dart';
-import 'auth_manager.dart';
 import 'auth_gate.dart';
+import 'auth_manager.dart';
+import 'add_product_page.dart';
+import 'chat_list_page.dart';
+import 'favorites_page.dart';
 import 'firebase_options.dart';
+import 'notifications_page.dart';
+import 'product_details_page.dart';
+import 'product_model.dart';
+import 'product_service.dart';
+import 'profile_page.dart';
+import 'seller_dashboard_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -150,6 +152,10 @@ class _FigHubHomeState extends State<FigHubHome> {
   final List<Product> _favorites = [];
   final List<String> _notifications = [];
 
+  final ProductService _productService = ProductService();
+
+  StreamSubscription<List<Product>>? _productsSubscription;
+
   final List<String> _categories = const [
     'All',
     'Marvel',
@@ -162,6 +168,31 @@ class _FigHubHomeState extends State<FigHubHome> {
 
   String _selectedCategory = 'All';
   String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+
+    _productsSubscription = _productService
+        .watchProducts()
+        .listen((products) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _products
+          ..clear()
+          ..addAll(products);
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _productsSubscription?.cancel();
+    super.dispose();
+  }
 
   List<Product> get _filteredProducts {
     return _products.where((product) {
@@ -212,7 +243,7 @@ class _FigHubHomeState extends State<FigHubHome> {
     final product = await Navigator.push<Product>(
       context,
       MaterialPageRoute(
-        builder: (_) => AddProductPage(),
+        builder: (_) => const AddProductPage(),
       ),
     );
 
@@ -221,8 +252,6 @@ class _FigHubHomeState extends State<FigHubHome> {
     }
 
     setState(() {
-      _products.add(product);
-
       _notifications.insert(
         0,
         'تم إضافة المنتج "${product.name}" بنجاح.',
@@ -235,15 +264,12 @@ class _FigHubHomeState extends State<FigHubHome> {
       context,
       MaterialPageRoute(
         builder: (_) => ProductDetailsPage(
-          name: product.name,
-          price: product.price,
-          category: product.category,
-          condition: product.condition,
-          description: product.description,
-          paymentMethod: product.paymentMethod,
-          imagePath: product.imagePath,
-          status: product.status,
+          product: product,
           onStatusChanged: (status) {
+            if (!mounted) {
+              return;
+            }
+
             setState(() {
               product.status = status;
 

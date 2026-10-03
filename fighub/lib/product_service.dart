@@ -1,15 +1,32 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'product_model.dart';
 
 class ProductService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance;
 
-  CollectionReference<Map<String, dynamic>> get _productsCollection {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  CollectionReference<Map<String, dynamic>>
+      get _productsCollection {
     return _firestore.collection('products');
   }
 
   Future<String> addProduct(Product product) async {
+    final user = _auth.currentUser;
+
+    if (user == null) {
+      throw StateError('User must be signed in.');
+    }
+
+    if (product.sellerId != user.uid) {
+      throw StateError(
+        'You can only add products for your own account.',
+      );
+    }
+
     final document = await _productsCollection.add(
       product.toFirestore(),
     );
@@ -18,10 +35,42 @@ class ProductService {
   }
 
   Future<void> updateProduct(Product product) async {
+    final user = _auth.currentUser;
+
+    if (user == null) {
+      throw StateError('User must be signed in.');
+    }
+
     final productId = product.id;
 
     if (productId == null || productId.isEmpty) {
-      throw ArgumentError('Product ID is required to update a product.');
+      throw ArgumentError(
+        'Product ID is required to update a product.',
+      );
+    }
+
+    if (product.sellerId != user.uid) {
+      throw StateError(
+        'You can only update your own products.',
+      );
+    }
+
+    final document = await _productsCollection
+        .doc(productId)
+        .get();
+
+    if (!document.exists) {
+      throw StateError('Product not found.');
+    }
+
+    final data = document.data();
+
+    final ownerId = data?['sellerId'] as String?;
+
+    if (ownerId != user.uid) {
+      throw StateError(
+        'You can only update your own products.',
+      );
     }
 
     await _productsCollection
@@ -30,10 +79,46 @@ class ProductService {
   }
 
   Future<void> deleteProduct(String productId) async {
-    await _productsCollection.doc(productId).delete();
+    final user = _auth.currentUser;
+
+    if (user == null) {
+      throw StateError('User must be signed in.');
+    }
+
+    if (productId.isEmpty) {
+      throw ArgumentError(
+        'Product ID is required to delete a product.',
+      );
+    }
+
+    final document = await _productsCollection
+        .doc(productId)
+        .get();
+
+    if (!document.exists) {
+      throw StateError('Product not found.');
+    }
+
+    final data = document.data();
+
+    final ownerId = data?['sellerId'] as String?;
+
+    if (ownerId != user.uid) {
+      throw StateError(
+        'You can only delete your own products.',
+      );
+    }
+
+    await _productsCollection
+        .doc(productId)
+        .delete();
   }
 
   Future<Product?> getProduct(String productId) async {
+    if (productId.isEmpty) {
+      return null;
+    }
+
     final document =
         await _productsCollection.doc(productId).get();
 
@@ -57,9 +142,14 @@ class ProductService {
         );
   }
 
-  Stream<List<Product>> watchSellerProducts(String sellerId) {
+  Stream<List<Product>> watchSellerProducts(
+    String sellerId,
+  ) {
     return _productsCollection
-        .where('sellerId', isEqualTo: sellerId)
+        .where(
+          'sellerId',
+          isEqualTo: sellerId,
+        )
         .snapshots()
         .map(
           (snapshot) {
