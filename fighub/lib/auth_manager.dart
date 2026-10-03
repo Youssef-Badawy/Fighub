@@ -1,11 +1,10 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthManager extends ChangeNotifier {
-  static const String _loggedInKey = 'loggedIn';
-  static const String _nameKey = 'userName';
-  static const String _emailKey = 'userEmail';
-  static const String _phoneKey = 'userPhone';
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   bool _isLoggedIn = false;
   String _name = '';
@@ -18,50 +17,127 @@ class AuthManager extends ChangeNotifier {
   String get phone => _phone;
 
   Future<void> load() async {
-    final preferences = await SharedPreferences.getInstance();
+    final user = _auth.currentUser;
 
-    _isLoggedIn = preferences.getBool(_loggedInKey) ?? false;
-    _name = preferences.getString(_nameKey) ?? '';
-    _email = preferences.getString(_emailKey) ?? '';
-    _phone = preferences.getString(_phoneKey) ?? '';
+    if (user == null) {
+      _isLoggedIn = false;
+      _name = '';
+      _email = '';
+      _phone = '';
+      notifyListeners();
+      return;
+    }
+
+    _isLoggedIn = true;
+    _email = user.email ?? '';
+    _phone = user.phoneNumber ?? '';
+
+    try {
+      final document = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      if (document.exists) {
+        final data = document.data();
+
+        _name = data?['name'] as String? ?? '';
+        _phone = data?['phone'] as String? ?? _phone;
+      } else {
+        _name = user.displayName ?? '';
+      }
+    } catch (_) {
+      _name = user.displayName ?? '';
+    }
 
     notifyListeners();
   }
 
-  Future<void> login({
+  Future<void> register({
     required String name,
     required String email,
     required String phone,
+    required String password,
   }) async {
+    final credential = await _auth.createUserWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+
+    final user = credential.user;
+
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'user-not-created',
+        message: 'Unable to create the account.',
+      );
+    }
+
+    await user.updateDisplayName(name);
+
+    await _firestore.collection('users').doc(user.uid).set({
+      'name': name,
+      'email': email,
+      'phone': phone,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
     _isLoggedIn = true;
     _name = name;
     _email = email;
     _phone = phone;
 
     notifyListeners();
+  }
 
-    final preferences = await SharedPreferences.getInstance();
+  Future<void> login({
+    required String email,
+    required String password,
+  }) async {
+    final credential = await _auth.signInWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
 
-    await preferences.setBool(_loggedInKey, true);
-    await preferences.setString(_nameKey, name);
-    await preferences.setString(_emailKey, email);
-    await preferences.setString(_phoneKey, phone);
+    final user = credential.user;
+
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'user-not-found',
+        message: 'Unable to sign in.',
+      );
+    }
+
+    _isLoggedIn = true;
+    _email = user.email ?? email;
+    _phone = user.phoneNumber ?? '';
+
+    final document = await _firestore
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    if (document.exists) {
+      final data = document.data();
+
+      _name = data?['name'] as String? ?? '';
+      _phone = data?['phone'] as String? ?? _phone;
+    } else {
+      _name = user.displayName ?? '';
+    }
+
+    notifyListeners();
   }
 
   Future<void> logout() async {
+    await _auth.signOut();
+
     _isLoggedIn = false;
     _name = '';
     _email = '';
     _phone = '';
 
     notifyListeners();
-
-    final preferences = await SharedPreferences.getInstance();
-
-    await preferences.remove(_loggedInKey);
-    await preferences.remove(_nameKey);
-    await preferences.remove(_emailKey);
-    await preferences.remove(_phoneKey);
   }
 
   Future<void> updateProfile({
@@ -69,16 +145,32 @@ class AuthManager extends ChangeNotifier {
     required String email,
     required String phone,
   }) async {
+    final user = _auth.currentUser;
+
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'not-authenticated',
+        message: 'User is not signed in.',
+      );
+    }
+
+    if (email != user.email && email.isNotEmpty) {
+      await user.verifyBeforeUpdateEmail(email);
+    }
+
+    await user.updateDisplayName(name);
+
+    await _firestore.collection('users').doc(user.uid).set({
+      'name': name,
+      'email': email,
+      'phone': phone,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
     _name = name;
     _email = email;
     _phone = phone;
 
     notifyListeners();
-
-    final preferences = await SharedPreferences.getInstance();
-
-    await preferences.setString(_nameKey, name);
-    await preferences.setString(_emailKey, email);
-    await preferences.setString(_phoneKey, phone);
   }
 }

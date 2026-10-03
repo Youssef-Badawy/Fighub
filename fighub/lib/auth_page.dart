@@ -1,11 +1,14 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'auth_manager.dart';
+
 class AuthPage extends StatefulWidget {
-  final void Function(String name, String email, String phone) onLogin;
+  final AuthManager authManager;
 
   const AuthPage({
     super.key,
-    required this.onLogin,
+    required this.authManager,
   });
 
   @override
@@ -16,6 +19,7 @@ class _AuthPageState extends State<AuthPage> {
   bool isLogin = true;
   bool obscurePassword = true;
   bool obscureConfirmPassword = true;
+  bool isLoading = false;
 
   final _formKey = GlobalKey<FormState>();
 
@@ -35,18 +39,72 @@ class _AuthPageState extends State<AuthPage> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    final name = isLogin ? 'FigHub User' : nameController.text.trim();
+    setState(() {
+      isLoading = true;
+    });
 
-    widget.onLogin(
-      name,
-      emailController.text.trim(),
-      phoneController.text.trim(),
-    );
+    try {
+      if (isLogin) {
+        await widget.authManager.login(
+          email: emailController.text.trim(),
+          password: passwordController.text,
+        );
+      } else {
+        await widget.authManager.register(
+          name: nameController.text.trim(),
+          email: emailController.text.trim(),
+          phone: phoneController.text.trim(),
+          password: passwordController.text,
+        );
+      }
+    } on FirebaseAuthException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      String message;
+
+      switch (error.code) {
+        case 'email-already-in-use':
+          message = 'هذا البريد الإلكتروني مستخدم بالفعل.';
+          break;
+        case 'invalid-email':
+          message = 'البريد الإلكتروني غير صحيح.';
+          break;
+        case 'weak-password':
+          message = 'كلمة المرور ضعيفة. استخدم كلمة مرور أقوى.';
+          break;
+        case 'user-not-found':
+        case 'wrong-password':
+        case 'invalid-credential':
+          message = 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
+          break;
+        case 'network-request-failed':
+          message = 'تأكد من اتصال الإنترنت وحاول مرة أخرى.';
+          break;
+        default:
+          message = 'حدث خطأ أثناء تسجيل الدخول. حاول مرة أخرى.';
+      }
+
+      _showMessage(message);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      _showMessage('حدث خطأ غير متوقع. حاول مرة أخرى.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
   }
 
   String? _requiredValidator(String? value, String message) {
@@ -57,6 +115,14 @@ class _AuthPageState extends State<AuthPage> {
     return null;
   }
 
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -64,7 +130,9 @@ class _AuthPageState extends State<AuthPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(isLogin ? 'تسجيل الدخول' : 'إنشاء حساب'),
+        title: Text(
+          isLogin ? 'تسجيل الدخول' : 'إنشاء حساب',
+        ),
         centerTitle: true,
       ),
       body: SafeArea(
@@ -231,20 +299,32 @@ class _AuthPageState extends State<AuthPage> {
                   SizedBox(
                     height: 52,
                     child: FilledButton(
-                      onPressed: _submit,
-                      child: Text(
-                        isLogin ? 'تسجيل الدخول' : 'إنشاء الحساب',
-                      ),
+                      onPressed: isLoading ? null : _submit,
+                      child: isLoading
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Text(
+                              isLogin
+                                  ? 'تسجيل الدخول'
+                                  : 'إنشاء الحساب',
+                            ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   TextButton(
-                    onPressed: () {
-                      setState(() {
-                        isLogin = !isLogin;
-                        _formKey.currentState?.reset();
-                      });
-                    },
+                    onPressed: isLoading
+                        ? null
+                        : () {
+                            setState(() {
+                              isLogin = !isLogin;
+                              _formKey.currentState?.reset();
+                            });
+                          },
                     child: Text(
                       isLogin
                           ? 'ليس لديك حساب؟ إنشاء حساب'

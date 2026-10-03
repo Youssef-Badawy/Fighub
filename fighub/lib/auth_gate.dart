@@ -20,13 +20,7 @@ class AuthGate extends StatelessWidget {
     }
 
     return AuthPage(
-      onLogin: (name, email, phone) async {
-        await authManager.login(
-          name: name,
-          email: email,
-          phone: phone,
-        );
-      },
+      authManager: authManager,
     );
   }
 }
