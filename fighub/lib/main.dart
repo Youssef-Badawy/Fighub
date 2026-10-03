@@ -10,6 +10,7 @@ import 'auth_gate.dart';
 import 'auth_manager.dart';
 import 'add_product_page.dart';
 import 'chat_list_page.dart';
+import 'favorite_service.dart';
 import 'favorites_page.dart';
 import 'firebase_options.dart';
 import 'notifications_page.dart';
@@ -153,8 +154,12 @@ class _FigHubHomeState extends State<FigHubHome> {
   final List<String> _notifications = [];
 
   final ProductService _productService = ProductService();
+  final FavoriteService _favoriteService = FavoriteService();
 
   StreamSubscription<List<Product>>? _productsSubscription;
+  StreamSubscription<List<String>>? _favoritesSubscription;
+
+  final List<String> _favoriteIds = [];
 
   final List<String> _categories = const [
     'All',
@@ -184,6 +189,24 @@ class _FigHubHomeState extends State<FigHubHome> {
         _products
           ..clear()
           ..addAll(products);
+
+        _refreshFavoritesList();
+      });
+    });
+
+    _favoritesSubscription = _favoriteService
+        .watchFavoriteIds()
+        .listen((favoriteIds) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _favoriteIds
+          ..clear()
+          ..addAll(favoriteIds);
+
+        _refreshFavoritesList();
       });
     });
   }
@@ -191,7 +214,87 @@ class _FigHubHomeState extends State<FigHubHome> {
   @override
   void dispose() {
     _productsSubscription?.cancel();
+    _favoritesSubscription?.cancel();
     super.dispose();
+  }
+
+  void _refreshFavoritesList() {
+    _favorites
+      ..clear()
+      ..addAll(
+        _products.where(
+          (product) {
+            final productId = product.id;
+
+            return productId != null &&
+                _favoriteIds.contains(productId);
+          },
+        ),
+      );
+  }
+
+  bool _isFavorite(Product product) {
+    final productId = product.id;
+
+    if (productId == null || productId.isEmpty) {
+      return false;
+    }
+
+    return _favoriteIds.contains(productId);
+  }
+
+  Future<void> _toggleFavorite(Product product) async {
+    final productId = product.id;
+
+    if (productId == null || productId.isEmpty) {
+      return;
+    }
+
+    try {
+      final isCurrentlyFavorite = _isFavorite(product);
+
+      if (isCurrentlyFavorite) {
+        await _favoriteService.removeFavorite(productId);
+      } else {
+        await _favoriteService.addFavorite(productId);
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'حدث خطأ أثناء تحديث المفضلة.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _removeFavorite(Product product) async {
+    final productId = product.id;
+
+    if (productId == null || productId.isEmpty) {
+      return;
+    }
+
+    try {
+      await _favoriteService.removeFavorite(productId);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'حدث خطأ أثناء إزالة المنتج من المفضلة.',
+          ),
+        ),
+      );
+    }
   }
 
   List<Product> get _filteredProducts {
@@ -313,11 +416,7 @@ class _FigHubHomeState extends State<FigHubHome> {
       MaterialPageRoute(
         builder: (_) => FavoritesPage(
           favorites: _favorites,
-          onRemove: (product) {
-            setState(() {
-              _favorites.remove(product);
-            });
-          },
+          onRemove: _removeFavorite,
           onOpenProduct: _openProductDetails,
         ),
       ),
@@ -514,6 +613,10 @@ class _FigHubHomeState extends State<FigHubHome> {
               ),
               child: _ProductCard(
                 product: product,
+                isFavorite: _isFavorite(product),
+                onFavorite: () {
+                  _toggleFavorite(product);
+                },
                 onTap: () {
                   _openProductDetails(product);
                 },
@@ -527,11 +630,7 @@ class _FigHubHomeState extends State<FigHubHome> {
   Widget _buildFavoritesTab() {
     return FavoritesPage(
       favorites: _favorites,
-      onRemove: (product) {
-        setState(() {
-          _favorites.remove(product);
-        });
-      },
+      onRemove: _removeFavorite,
       onOpenProduct: _openProductDetails,
     );
   }
@@ -569,10 +668,14 @@ class _FigHubHomeState extends State<FigHubHome> {
 
 class _ProductCard extends StatelessWidget {
   final Product product;
+  final bool isFavorite;
+  final VoidCallback onFavorite;
   final VoidCallback onTap;
 
   const _ProductCard({
     required this.product,
+    required this.isFavorite,
+    required this.onFavorite,
     required this.onTap,
   });
 
@@ -733,6 +836,20 @@ class _ProductCard extends StatelessWidget {
                       ),
                     ),
                   ],
+                ),
+              ),
+              IconButton(
+                onPressed: onFavorite,
+                tooltip: isFavorite
+                    ? 'Remove from favorites'
+                    : 'Add to favorites',
+                icon: Icon(
+                  isFavorite
+                      ? Icons.favorite
+                      : Icons.favorite_border,
+                  color: isFavorite
+                      ? Colors.red
+                      : null,
                 ),
               ),
             ],

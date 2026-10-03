@@ -40,6 +40,28 @@ service cloud.firestore {
 
       // لا نحتاج حذف حساب المستخدم من التطبيق حاليًا
       allow delete: if false;
+
+      // المفضلة الخاصة بالمستخدم
+      match /favorites/{favoriteId} {
+
+        // المستخدم يقدر يشوف مفضلاته فقط
+        allow read: if request.auth != null
+                      && request.auth.uid == userId;
+
+        // المستخدم يقدر إضافة مفضلة لحسابه فقط
+        allow create: if request.auth != null
+                      && request.auth.uid == userId
+                      && request.resource.data.productId == favoriteId;
+
+        // المستخدم يقدر تعديل مفضلته فقط
+        allow update: if request.auth != null
+                      && request.auth.uid == userId
+                      && request.resource.data.productId == favoriteId;
+
+        // المستخدم يقدر حذف مفضلته فقط
+        allow delete: if request.auth != null
+                      && request.auth.uid == userId;
+      }
     }
   }
 }
