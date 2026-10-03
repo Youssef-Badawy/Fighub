@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import 'product_model.dart';
 import 'product_details_page.dart';
@@ -14,9 +15,14 @@ import 'app_localizations.dart';
 import 'app_settings.dart';
 import 'auth_manager.dart';
 import 'auth_gate.dart';
+import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
   final settings = AppSettings();
   await settings.loadSettings();
