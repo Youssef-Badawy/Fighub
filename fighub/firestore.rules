@@ -23,5 +23,23 @@ service cloud.firestore {
       allow delete: if request.auth != null
                     && resource.data.sellerId == request.auth.uid;
     }
+
+    match /users/{userId} {
+
+      // المستخدم يقدر يقرأ بيانات حسابه فقط
+      allow read: if request.auth != null
+                    && request.auth.uid == userId;
+
+      // المستخدم يقدر إنشاء بيانات حسابه فقط
+      allow create: if request.auth != null
+                      && request.auth.uid == userId;
+
+      // المستخدم يقدر تعديل بيانات حسابه فقط
+      allow update: if request.auth != null
+                      && request.auth.uid == userId;
+
+      // لا نحتاج حذف حساب المستخدم من التطبيق حاليًا
+      allow delete: if false;
+    }
   }
 }
