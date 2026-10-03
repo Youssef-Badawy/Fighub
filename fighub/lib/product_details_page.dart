@@ -2,12 +2,19 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'app_localizations.dart';
+import 'chat_page.dart';
+
 class ProductDetailsPage extends StatefulWidget {
   final String name;
   final String price;
   final String category;
   final String condition;
+  final String description;
+  final String paymentMethod;
   final String? imagePath;
+  final String status;
+  final ValueChanged<String> onStatusChanged;
 
   const ProductDetailsPage({
     super.key,
@@ -15,260 +22,416 @@ class ProductDetailsPage extends StatefulWidget {
     required this.price,
     required this.category,
     required this.condition,
-    this.imagePath,
+    required this.description,
+    required this.paymentMethod,
+    required this.imagePath,
+    required this.status,
+    required this.onStatusChanged,
   });
 
   @override
-  State<ProductDetailsPage> createState() => _ProductDetailsPageState();
+  State<ProductDetailsPage> createState() =>
+      _ProductDetailsPageState();
 }
 
-class _ProductDetailsPageState extends State<ProductDetailsPage> {
-  String _productStatus = 'Available';
-  bool _reservationSent = false;
+class _ProductDetailsPageState
+    extends State<ProductDetailsPage> {
+  late String _productStatus;
 
-  void _reserveProduct() {
-    if (_productStatus != 'Available' || _reservationSent) {
-      return;
-    }
-
-    setState(() {
-      _productStatus = 'Reserved';
-      _reservationSent = true;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Reservation sent successfully!'),
-      ),
-    );
+  @override
+  void initState() {
+    super.initState();
+    _productStatus = widget.status;
   }
 
   void _setStatus(String status) {
     setState(() {
       _productStatus = status;
-      if (status != 'Available') {
-        _reservationSent = false;
-      }
     });
+
+    widget.onStatusChanged(status);
+
+    final localization = AppLocalizations.of(context);
+
+    final message = localization.isArabic
+        ? 'تم تغيير حالة المنتج إلى ${_statusLabel(status, localization)}'
+        : 'Status changed to ${_statusLabel(status, localization)}';
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Product status changed to $status'),
+        content: Text(message),
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Product Details'),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: double.infinity,
-              height: 330,
-              decoration: BoxDecoration(
-                color: const Color(0xFF252529),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: widget.imagePath != null
-                  ? Image.file(
-                      File(widget.imagePath!),
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return const Icon(
-                          Icons.image_outlined,
-                          size: 90,
-                          color: Colors.grey,
-                        );
-                      },
-                    )
-                  : const Icon(
-                      Icons.image_outlined,
-                      size: 90,
-                      color: Colors.grey,
-                    ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              widget.name,
-              style: const TextStyle(
-                fontSize: 27,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              widget.price,
-              style: const TextStyle(
-                fontSize: 23,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _InfoChip(
-                  icon: Icons.category_outlined,
-                  text: widget.category,
-                ),
-                _InfoChip(
-                  icon: Icons.verified_outlined,
-                  text: widget.condition,
-                ),
-                const _InfoChip(
-                  icon: Icons.local_shipping_outlined,
-                  text: 'Shipping COD',
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Product Status',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _StatusButton(
-                    title: 'Available',
-                    selected: _productStatus == 'Available',
-                    onPressed: () => _setStatus('Available'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _StatusButton(
-                    title: 'Reserved',
-                    selected: _productStatus == 'Reserved',
-                    onPressed: () => _setStatus('Reserved'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _StatusButton(
-                    title: 'Shipping',
-                    selected: _productStatus == 'Shipping',
-                    onPressed: () => _setStatus('Shipping'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF18181B),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Payment & Shipping',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  SizedBox(height: 10),
-                  Text('Product payment: Cash on delivery'),
-                  SizedBox(height: 6),
-                  Text('Shipping fee: Paid on delivery'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Chat will be available soon.'),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.chat_bubble_outline_rounded),
-                    label: const Text('Chat Seller'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: _productStatus == 'Available' &&
-                            !_reservationSent
-                        ? _reserveProduct
-                        : null,
-                    icon: const Icon(Icons.bookmark_add_outlined),
-                    label: Text(
-                      _reservationSent ? 'Reserved' : 'Reserve',
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+  void _reserveProduct() {
+    if (_productStatus != 'Available') {
+      return;
+    }
+
+    _setStatus('Reserved');
+
+    final localization = AppLocalizations.of(context);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          localization.isArabic
+              ? 'تم حجز المنتج بنجاح'
+              : 'Product reserved successfully.',
         ),
       ),
     );
   }
-}
 
-class _InfoChip extends StatelessWidget {
-  final IconData icon;
-  final String text;
+  void _openChat() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatPage(
+          productName: widget.name,
+        ),
+      ),
+    );
+  }
 
-  const _InfoChip({
-    required this.icon,
-    required this.text,
-  });
+  String _statusLabel(
+    String status,
+    AppLocalizations localization,
+  ) {
+    if (!localization.isArabic) {
+      return status;
+    }
+
+    switch (status) {
+      case 'Available':
+        return 'متاح';
+      case 'Reserved':
+        return 'محجوز';
+      case 'Sold':
+        return 'تم البيع';
+      default:
+        return status;
+    }
+  }
+
+  String _conditionLabel(
+    AppLocalizations localization,
+  ) {
+    if (!localization.isArabic) {
+      return widget.condition;
+    }
+
+    switch (widget.condition) {
+      case 'New':
+        return 'جديد';
+      case 'Used':
+        return 'مستعمل';
+      case 'Rare':
+        return 'نادر';
+      default:
+        return widget.condition;
+    }
+  }
+
+  String _categoryLabel(
+    AppLocalizations localization,
+  ) {
+    if (!localization.isArabic) {
+      return widget.category;
+    }
+
+    switch (widget.category) {
+      case 'Marvel':
+        return 'مارفل';
+      case 'DC':
+        return 'دي سي';
+      case 'Game of Thrones':
+        return 'صراع العروش';
+      case 'Anime':
+        return 'أنمي';
+      case 'Star Wars':
+        return 'حرب النجوم';
+      case 'Other':
+        return 'أخرى';
+      default:
+        return widget.category;
+    }
+  }
+
+  String _paymentLabel(
+    AppLocalizations localization,
+  ) {
+    if (!localization.isArabic) {
+      return widget.paymentMethod;
+    }
+
+    switch (widget.paymentMethod) {
+      case 'Cash on Delivery':
+        return 'الدفع عند الاستلام';
+      case 'Electronic Wallet':
+        return 'محفظة إلكترونية';
+      default:
+        return widget.paymentMethod;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Chip(
-      avatar: Icon(icon, size: 17),
-      label: Text(text),
+    final localization = AppLocalizations.of(context);
+    final isArabic = localization.isArabic;
+
+    final title = isArabic
+        ? 'تفاصيل المنتج'
+        : 'Product Details';
+
+    final descriptionTitle =
+        isArabic ? 'الوصف' : 'Description';
+
+    final categoryTitle =
+        isArabic ? 'الفئة' : 'Category';
+
+    final conditionTitle =
+        isArabic ? 'الحالة' : 'Condition';
+
+    final paymentTitle =
+        isArabic ? 'طريقة الدفع' : 'Payment Method';
+
+    final statusTitle =
+        isArabic ? 'حالة المنتج' : 'Product Status';
+
+    final reserveText =
+        isArabic ? 'حجز المنتج' : 'Reserve Product';
+
+    final chatText =
+        isArabic ? 'محادثة مع البائع' : 'Chat Seller';
+
+    final noDescription = isArabic
+        ? 'لا يوجد وصف للمنتج.'
+        : 'No description available.';
+
+    final noImage = isArabic
+        ? 'لا توجد صورة'
+        : 'No Image';
+
+    final hasImage = widget.imagePath != null &&
+        widget.imagePath!.isNotEmpty &&
+        File(widget.imagePath!).existsSync();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: hasImage
+                ? Image.file(
+                    File(widget.imagePath!),
+                    width: double.infinity,
+                    height: 280,
+                    fit: BoxFit.cover,
+                  )
+                : Container(
+                    width: double.infinity,
+                    height: 280,
+                    color: Colors.grey.shade200,
+                    child: Column(
+                      mainAxisAlignment:
+                          MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.image_outlined,
+                          size: 70,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(height: 10),
+                        Text(noImage),
+                      ],
+                    ),
+                  ),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            widget.name,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            widget.price,
+            style: TextStyle(
+              fontSize: 21,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context)
+                  .colorScheme
+                  .primary,
+            ),
+          ),
+          const SizedBox(height: 18),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                children: [
+                  _InfoRow(
+                    title: categoryTitle,
+                    value: _categoryLabel(localization),
+                  ),
+                  const Divider(),
+                  _InfoRow(
+                    title: conditionTitle,
+                    value: _conditionLabel(localization),
+                  ),
+                  const Divider(),
+                  _InfoRow(
+                    title: paymentTitle,
+                    value: _paymentLabel(localization),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            descriptionTitle,
+            style: const TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            widget.description.trim().isEmpty
+                ? noDescription
+                : widget.description,
+            style: const TextStyle(
+              fontSize: 15,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 22),
+          Text(
+            statusTitle,
+            style: const TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ChoiceChip(
+                label: Text(
+                  _statusLabel(
+                    'Available',
+                    localization,
+                  ),
+                ),
+                selected: _productStatus == 'Available',
+                onSelected: (_) =>
+                    _setStatus('Available'),
+              ),
+              ChoiceChip(
+                label: Text(
+                  _statusLabel(
+                    'Reserved',
+                    localization,
+                  ),
+                ),
+                selected: _productStatus == 'Reserved',
+                onSelected: (_) =>
+                    _setStatus('Reserved'),
+              ),
+              ChoiceChip(
+                label: Text(
+                  _statusLabel(
+                    'Sold',
+                    localization,
+                  ),
+                ),
+                selected: _productStatus == 'Sold',
+                onSelected: (_) =>
+                    _setStatus('Sold'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 22),
+          if (_productStatus == 'Available')
+            SizedBox(
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: _reserveProduct,
+                icon: const Icon(
+                  Icons.bookmark_add_outlined,
+                ),
+                label: Text(
+                  reserveText,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 52,
+            child: OutlinedButton.icon(
+              onPressed: _openChat,
+              icon: const Icon(
+                Icons.chat_bubble_outline,
+              ),
+              label: Text(
+                chatText,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _StatusButton extends StatelessWidget {
+class _InfoRow extends StatelessWidget {
   final String title;
-  final bool selected;
-  final VoidCallback onPressed;
+  final String value;
 
-  const _StatusButton({
+  const _InfoRow({
     required this.title,
-    required this.selected,
-    required this.onPressed,
+    required this.value,
   });
 
   @override
   Widget build(BuildContext context) {
-    return FilledButton(
-      onPressed: onPressed,
-      style: FilledButton.styleFrom(
-        backgroundColor: selected
-            ? const Color(0xFFE53935)
-            : const Color(0xFF1A1A1D),
-        padding: const EdgeInsets.symmetric(vertical: 12),
-      ),
-      child: Text(title),
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+          ),
+        ),
+      ],
     );
   }
 }
