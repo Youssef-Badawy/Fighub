@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "47188495335",
+    "project_id": "fighub-egypt-2026",
+    "storage_bucket": "fighub-egypt-2026.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:47188495335:android:1355be16585fd37f500b42",
+        "android_client_info": {
+          "package_name": "com.example.fighub"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDbIwP7W8NOecjM3ezNWF_zkSZHOEa_gC0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
