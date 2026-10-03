@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -63,6 +64,17 @@ class _AddProductPageState extends State<AddProductPage> {
       return;
     }
 
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('يجب تسجيل الدخول أولاً'),
+        ),
+      );
+      return;
+    }
+
     final product = Product(
       name: _nameController.text.trim(),
       price: _priceController.text.trim(),
@@ -71,6 +83,7 @@ class _AddProductPageState extends State<AddProductPage> {
       description: _descriptionController.text.trim(),
       paymentMethod: _paymentMethod,
       imagePath: _imagePath,
+      sellerId: user.uid,
     );
 
     Navigator.pop(context, product);
