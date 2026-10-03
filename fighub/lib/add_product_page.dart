@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 
 import 'app_localizations.dart';
 import 'product_model.dart';
+import 'product_service.dart';
 
 class AddProductPage extends StatefulWidget {
   const AddProductPage({
@@ -29,12 +30,14 @@ class _AddProductPageState extends State<AddProductPage> {
       TextEditingController();
 
   final ImagePicker _imagePicker = ImagePicker();
+  final ProductService _productService = ProductService();
 
   String _category = 'Marvel';
   String _condition = 'New';
   String _paymentMethod = 'Cash on Delivery';
 
   String? _imagePath;
+  bool _isPublishing = false;
 
   @override
   void dispose() {
@@ -59,7 +62,7 @@ class _AddProductPageState extends State<AddProductPage> {
     });
   }
 
-  void _publishProduct() {
+  Future<void> _publishProduct() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -68,25 +71,63 @@ class _AddProductPageState extends State<AddProductPage> {
 
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('يجب تسجيل الدخول أولاً'),
+        SnackBar(
+          content: Text(
+            AppLocalizations.of(context).isArabic
+                ? 'يجب تسجيل الدخول أولاً'
+                : 'You must be logged in first',
+          ),
         ),
       );
       return;
     }
 
-    final product = Product(
-      name: _nameController.text.trim(),
-      price: _priceController.text.trim(),
-      category: _category,
-      condition: _condition,
-      description: _descriptionController.text.trim(),
-      paymentMethod: _paymentMethod,
-      imagePath: _imagePath,
-      sellerId: user.uid,
-    );
+    setState(() {
+      _isPublishing = true;
+    });
 
-    Navigator.pop(context, product);
+    try {
+      final product = Product(
+        name: _nameController.text.trim(),
+        price: _priceController.text.trim(),
+        category: _category,
+        condition: _condition,
+        description: _descriptionController.text.trim(),
+        paymentMethod: _paymentMethod,
+        imagePath: _imagePath,
+        sellerId: user.uid,
+      );
+
+      await _productService.addProduct(product);
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.pop(context, product);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      final localization = AppLocalizations.of(context);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            localization.isArabic
+                ? 'حدث خطأ أثناء نشر المنتج'
+                : 'An error occurred while publishing the product',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPublishing = false;
+        });
+      }
+    }
   }
 
   String _categoryLabel(
@@ -208,7 +249,7 @@ class _AddProductPageState extends State<AddProductPage> {
           padding: const EdgeInsets.all(16),
           children: [
             GestureDetector(
-              onTap: _pickImage,
+              onTap: _isPublishing ? null : _pickImage,
               child: Container(
                 height: 220,
                 width: double.infinity,
@@ -254,7 +295,8 @@ class _AddProductPageState extends State<AddProductPage> {
             const SizedBox(height: 10),
             Center(
               child: TextButton.icon(
-                onPressed: _pickImage,
+                onPressed:
+                    _isPublishing ? null : _pickImage,
                 icon: const Icon(Icons.image_outlined),
                 label: Text(
                   _imagePath == null
@@ -266,6 +308,7 @@ class _AddProductPageState extends State<AddProductPage> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _nameController,
+              enabled: !_isPublishing,
               decoration: InputDecoration(
                 labelText: productNameLabel,
                 hintText: productNameHint,
@@ -281,6 +324,7 @@ class _AddProductPageState extends State<AddProductPage> {
             const SizedBox(height: 14),
             TextFormField(
               controller: _priceController,
+              enabled: !_isPublishing,
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
                 labelText: priceLabel,
@@ -319,15 +363,17 @@ class _AddProductPageState extends State<AddProductPage> {
                   ),
                 );
               }).toList(),
-              onChanged: (value) {
-                if (value == null) {
-                  return;
-                }
+              onChanged: _isPublishing
+                  ? null
+                  : (value) {
+                      if (value == null) {
+                        return;
+                      }
 
-                setState(() {
-                  _category = value;
-                });
-              },
+                      setState(() {
+                        _category = value;
+                      });
+                    },
             ),
             const SizedBox(height: 14),
             DropdownButtonFormField<String>(
@@ -351,19 +397,22 @@ class _AddProductPageState extends State<AddProductPage> {
                   ),
                 );
               }).toList(),
-              onChanged: (value) {
-                if (value == null) {
-                  return;
-                }
+              onChanged: _isPublishing
+                  ? null
+                  : (value) {
+                      if (value == null) {
+                        return;
+                      }
 
-                setState(() {
-                  _condition = value;
-                });
-              },
+                      setState(() {
+                        _condition = value;
+                      });
+                    },
             ),
             const SizedBox(height: 14),
             TextFormField(
               controller: _descriptionController,
+              enabled: !_isPublishing,
               maxLines: 5,
               decoration: InputDecoration(
                 labelText: descriptionLabel,
@@ -393,24 +442,39 @@ class _AddProductPageState extends State<AddProductPage> {
                   ),
                 );
               }).toList(),
-              onChanged: (value) {
-                if (value == null) {
-                  return;
-                }
+              onChanged: _isPublishing
+                  ? null
+                  : (value) {
+                      if (value == null) {
+                        return;
+                      }
 
-                setState(() {
-                  _paymentMethod = value;
-                });
-              },
+                      setState(() {
+                        _paymentMethod = value;
+                      });
+                    },
             ),
             const SizedBox(height: 24),
             SizedBox(
               height: 52,
               child: ElevatedButton.icon(
-                onPressed: _publishProduct,
-                icon: const Icon(Icons.publish),
+                onPressed:
+                    _isPublishing ? null : _publishProduct,
+                icon: _isPublishing
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Icon(Icons.publish),
                 label: Text(
-                  publishText,
+                  _isPublishing
+                      ? (isArabic
+                          ? 'جاري النشر...'
+                          : 'Publishing...')
+                      : publishText,
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
