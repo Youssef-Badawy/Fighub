@@ -5,6 +5,7 @@ class Product {
   final String condition;
   final String description;
   final String paymentMethod;
+  final String? imagePath;
   String status;
 
   Product({
@@ -14,6 +15,7 @@ class Product {
     required this.condition,
     required this.description,
     required this.paymentMethod,
+    this.imagePath,
     this.status = 'Available',
   });
 }

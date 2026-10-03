@@ -1,6 +1,8 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+
 import 'product_model.dart';
 
 class AddProductPage extends StatefulWidget {
@@ -47,32 +49,28 @@ class _AddProductPageState extends State<AddProductPage> {
   }
 
   void _publishProduct() {
-  if (!_formKey.currentState!.validate()) {
-    return;
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    final product = Product(
+      name: _nameController.text.trim(),
+      price: '${_priceController.text.trim()} EGP',
+      category: _category,
+      condition: _condition,
+      description: _descriptionController.text.trim(),
+      paymentMethod: _paymentMethod,
+      imagePath: _selectedImage?.path,
+    );
+
+    Navigator.pop(context, product);
   }
-
-  final product = Product(
-    name: _nameController.text.trim(),
-    price: _priceController.text.trim(),
-    category: _category,
-    condition: _condition,
-    description: _descriptionController.text.trim(),
-    paymentMethod: _paymentMethod,
-  );
-
-  Navigator.pop(context, product);
-}
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Sell a Figure',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        title: const Text('Sell a Figure'),
       ),
       body: Form(
         key: _formKey,
@@ -85,7 +83,7 @@ class _AddProductPageState extends State<AddProductPage> {
                 onTap: _pickImage,
                 child: Container(
                   width: double.infinity,
-                  height: 190,
+                  height: 220,
                   decoration: BoxDecoration(
                     color: const Color(0xFF1A1A1D),
                     borderRadius: BorderRadius.circular(18),
@@ -98,24 +96,16 @@ class _AddProductPageState extends State<AddProductPage> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(
-                              Icons.add_photo_alternate_outlined,
+                              Icons.add_a_photo_outlined,
                               size: 55,
                               color: Colors.grey,
                             ),
                             SizedBox(height: 10),
                             Text(
-                              'Add product photos',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            SizedBox(height: 4),
-                            Text(
-                              'Tap to choose a photo',
+                              'Add product photo',
                               style: TextStyle(
                                 color: Colors.grey,
-                                fontSize: 13,
+                                fontSize: 16,
                               ),
                             ),
                           ],
@@ -125,7 +115,7 @@ class _AddProductPageState extends State<AddProductPage> {
                           child: Image.file(
                             File(_selectedImage!.path),
                             width: double.infinity,
-                            height: double.infinity,
+                            height: 220,
                             fit: BoxFit.cover,
                           ),
                         ),
@@ -134,27 +124,16 @@ class _AddProductPageState extends State<AddProductPage> {
 
               const SizedBox(height: 24),
 
-              const Text(
-                'Product Information',
-                style: TextStyle(
-                  fontSize: 21,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-
-              const SizedBox(height: 14),
-
               TextFormField(
                 controller: _nameController,
                 decoration: const InputDecoration(
                   labelText: 'Figure name',
-                  hintText: 'e.g. Batman, Jon Snow...',
-                  prefixIcon: Icon(Icons.toys_outlined),
+                  hintText: 'e.g. Batman',
                   border: OutlineInputBorder(),
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
-                    return 'Please enter the figure name';
+                    return 'Enter the figure name';
                   }
                   return null;
                 },
@@ -168,21 +147,13 @@ class _AddProductPageState extends State<AddProductPage> {
                 decoration: const InputDecoration(
                   labelText: 'Price',
                   hintText: 'e.g. 1500',
-                  prefixIcon: Icon(Icons.payments_outlined),
-                  suffixText: 'EGP',
                   border: OutlineInputBorder(),
+                  suffixText: 'EGP',
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
-                    return 'Please enter the price';
+                    return 'Enter the price';
                   }
-
-                  final price = double.tryParse(value);
-
-                  if (price == null || price <= 0) {
-                    return 'Please enter a valid price';
-                  }
-
                   return null;
                 },
               ),
@@ -193,7 +164,6 @@ class _AddProductPageState extends State<AddProductPage> {
                 initialValue: _category,
                 decoration: const InputDecoration(
                   labelText: 'Category',
-                  prefixIcon: Icon(Icons.category_outlined),
                   border: OutlineInputBorder(),
                 ),
                 items: const [
@@ -206,12 +176,12 @@ class _AddProductPageState extends State<AddProductPage> {
                     child: Text('DC'),
                   ),
                   DropdownMenuItem(
-                    value: 'Game of Thrones',
-                    child: Text('Game of Thrones'),
-                  ),
-                  DropdownMenuItem(
                     value: 'Anime',
                     child: Text('Anime'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Game of Thrones',
+                    child: Text('Game of Thrones'),
                   ),
                   DropdownMenuItem(
                     value: 'Star Wars',
@@ -237,7 +207,6 @@ class _AddProductPageState extends State<AddProductPage> {
                 initialValue: _condition,
                 decoration: const InputDecoration(
                   labelText: 'Condition',
-                  prefixIcon: Icon(Icons.inventory_2_outlined),
                   border: OutlineInputBorder(),
                 ),
                 items: const [
@@ -269,40 +238,10 @@ class _AddProductPageState extends State<AddProductPage> {
 
               const SizedBox(height: 16),
 
-              TextFormField(
-                controller: _descriptionController,
-                maxLines: 5,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  hintText: 'Tell buyers about your figure...',
-                  alignLabelWithHint: true,
-                  prefixIcon: Padding(
-                    padding: EdgeInsets.only(bottom: 80),
-                    child: Icon(Icons.description_outlined),
-                  ),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              const Text(
-                'Payment',
-                style: TextStyle(
-                  fontSize: 21,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
               DropdownButtonFormField<String>(
                 initialValue: _paymentMethod,
                 decoration: const InputDecoration(
-                  labelText: 'Product payment method',
-                  prefixIcon: Icon(
-                    Icons.account_balance_wallet_outlined,
-                  ),
+                  labelText: 'Product payment',
                   border: OutlineInputBorder(),
                 ),
                 items: const [
@@ -324,45 +263,30 @@ class _AddProductPageState extends State<AddProductPage> {
                 },
               ),
 
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
 
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A1A1D),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.local_shipping_outlined,
-                      color: Colors.orange,
-                    ),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Shipping fees are always paid on delivery.',
-                        style: TextStyle(fontSize: 14),
-                      ),
-                    ),
-                  ],
+              TextFormField(
+                controller: _descriptionController,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  hintText: 'Tell buyers about your figure...',
+                  border: OutlineInputBorder(),
                 ),
               ),
 
-              const SizedBox(height: 28),
+              const SizedBox(height: 24),
 
               SizedBox(
                 width: double.infinity,
-                height: 54,
+                height: 52,
                 child: FilledButton.icon(
                   onPressed: _publishProduct,
                   icon: const Icon(Icons.publish_rounded),
                   label: const Text(
                     'Publish Product',
                     style: TextStyle(
-                      fontSize: 17,
+                      fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
                   ),

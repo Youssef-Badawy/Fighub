@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'product_model.dart';
 import 'product_details_page.dart';
@@ -116,6 +118,7 @@ class _HomePageState extends State<HomePage> {
           price: product.price,
           category: product.category,
           condition: product.condition,
+          imagePath: product.imagePath,
         ),
       ),
     );
@@ -165,9 +168,7 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-
             const SizedBox(height: 26),
-
             const Text(
               'Categories',
               style: TextStyle(
@@ -175,9 +176,7 @@ class _HomePageState extends State<HomePage> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 14),
-
             SizedBox(
               height: 44,
               child: ListView(
@@ -211,9 +210,7 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
             ),
-
             const SizedBox(height: 28),
-
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -230,9 +227,7 @@ class _HomePageState extends State<HomePage> {
                 ),
               ],
             ),
-
             const SizedBox(height: 10),
-
             GridView.builder(
               itemCount: _products.length,
               shrinkWrap: true,
@@ -241,7 +236,7 @@ class _HomePageState extends State<HomePage> {
                 crossAxisCount: 2,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                childAspectRatio: 0.68,
+                childAspectRatio: 0.64,
               ),
               itemBuilder: (context, index) {
                 final product = _products[index];
@@ -251,13 +246,13 @@ class _HomePageState extends State<HomePage> {
                   price: product.price,
                   category: product.category,
                   condition: product.condition,
+                  status: product.status,
+                  imagePath: product.imagePath,
                   onTap: () => _openProduct(product),
                 );
               },
             ),
-
             const SizedBox(height: 28),
-
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(18),
@@ -315,7 +310,6 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
-
       bottomNavigationBar: NavigationBar(
         selectedIndex: 0,
         onDestinationSelected: (index) {
@@ -386,6 +380,8 @@ class _ProductCard extends StatelessWidget {
   final String price;
   final String category;
   final String condition;
+  final String status;
+  final String? imagePath;
   final VoidCallback onTap;
 
   const _ProductCard({
@@ -393,8 +389,22 @@ class _ProductCard extends StatelessWidget {
     required this.price,
     required this.category,
     required this.condition,
+    required this.status,
+    required this.imagePath,
     required this.onTap,
   });
+
+  Color _statusColor() {
+    if (status == 'Reserved') {
+      return const Color(0xFFFF9800);
+    }
+
+    if (status == 'Shipping') {
+      return const Color(0xFF2196F3);
+    }
+
+    return const Color(0xFF4CAF50);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -408,17 +418,53 @@ class _ProductCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: Container(
-                width: double.infinity,
-                color: const Color(0xFF252529),
-                child: const Icon(
-                  Icons.image_outlined,
-                  size: 65,
-                  color: Colors.grey,
-                ),
+              child: Stack(
+                children: [
+                  Container(
+                    width: double.infinity,
+                    color: const Color(0xFF252529),
+                    child: imagePath != null
+                        ? Image.file(
+                            File(imagePath!),
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Icon(
+                                Icons.image_outlined,
+                                size: 65,
+                                color: Colors.grey,
+                              );
+                            },
+                          )
+                        : const Icon(
+                            Icons.image_outlined,
+                            size: 65,
+                            color: Colors.grey,
+                          ),
+                  ),
+                  Positioned(
+                    top: 10,
+                    left: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _statusColor(),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        status,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-
             Padding(
               padding: const EdgeInsets.fromLTRB(11, 10, 11, 12),
               child: Column(
@@ -433,9 +479,7 @@ class _ProductCard extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-
                   const SizedBox(height: 4),
-
                   Text(
                     category,
                     maxLines: 1,
@@ -445,9 +489,7 @@ class _ProductCard extends StatelessWidget {
                       fontSize: 13,
                     ),
                   ),
-
                   const SizedBox(height: 7),
-
                   Row(
                     children: [
                       Expanded(
@@ -465,9 +507,7 @@ class _ProductCard extends StatelessWidget {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 5),
-
                   Text(
                     condition,
                     style: TextStyle(
