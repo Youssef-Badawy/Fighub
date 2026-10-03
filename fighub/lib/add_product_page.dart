@@ -1,7 +1,7 @@
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'product_model.dart';
 
 class AddProductPage extends StatefulWidget {
   const AddProductPage({super.key});
@@ -47,16 +47,21 @@ class _AddProductPageState extends State<AddProductPage> {
   }
 
   void _publishProduct() {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Product is ready to be published!'),
-      ),
-    );
+  if (!_formKey.currentState!.validate()) {
+    return;
   }
+
+  final product = Product(
+    name: _nameController.text.trim(),
+    price: _priceController.text.trim(),
+    category: _category,
+    condition: _condition,
+    description: _descriptionController.text.trim(),
+    paymentMethod: _paymentMethod,
+  );
+
+  Navigator.pop(context, product);
+}
 
   @override
   Widget build(BuildContext context) {

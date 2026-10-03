@@ -1,36 +1,26 @@
 import 'package:flutter/material.dart';
+import 'product_model.dart';
 
 class SellerDashboardPage extends StatefulWidget {
-  const SellerDashboardPage({super.key});
+  const SellerDashboardPage({
+  super.key,
+  required this.products,
+});
+
+final List<Product> products;
 
   @override
   State<SellerDashboardPage> createState() => _SellerDashboardPageState();
 }
 
 class _SellerDashboardPageState extends State<SellerDashboardPage> {
-  final List<_SellerProduct> _products = [
-    _SellerProduct(
-      name: 'Batman',
-      price: '1,200 EGP',
-      category: 'DC',
-      condition: 'New',
-      status: 'Available',
-    ),
-    _SellerProduct(
-      name: 'Jon Snow',
-      price: '950 EGP',
-      category: 'Game of Thrones',
-      condition: 'Used',
-      status: 'Reserved',
-    ),
-    _SellerProduct(
-      name: 'Spider-Man',
-      price: '750 EGP',
-      category: 'Marvel',
-      condition: 'New',
-      status: 'Shipping',
-    ),
-  ];
+  late List<Product> _products;
+
+@override
+void initState() {
+  super.initState();
+  _products = List<Product>.from(widget.products);
+}
 
   Color _statusColor(String status) {
     switch (status) {
@@ -230,18 +220,3 @@ class _SellerDashboardPageState extends State<SellerDashboardPage> {
   }
 }
 
-class _SellerProduct {
-  final String name;
-  final String price;
-  final String category;
-  final String condition;
-  String status;
-
-  _SellerProduct({
-    required this.name,
-    required this.price,
-    required this.category,
-    required this.condition,
-    required this.status,
-  });
-}
