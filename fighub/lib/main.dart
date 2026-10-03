@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'product_model.dart';
 import 'product_details_page.dart';
 import 'add_product_page.dart';
 import 'seller_dashboard_page.dart';
-import 'product_model.dart';
 
 void main() {
   runApp(const FigHubApp());
@@ -38,10 +38,43 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final List<Product> _products = [];
+  final List<Product> _products = [
+    Product(
+      name: 'Batman',
+      price: '1,500 EGP',
+      category: 'DC',
+      condition: 'Used - Good',
+      description: 'Batman action figure.',
+      paymentMethod: 'Cash on delivery',
+    ),
+    Product(
+      name: 'Jon Snow',
+      price: '2,000 EGP',
+      category: 'Game of Thrones',
+      condition: 'Rare',
+      description: 'Jon Snow collectible figure.',
+      paymentMethod: 'Cash on delivery',
+    ),
+    Product(
+      name: 'Spider-Man',
+      price: '1,200 EGP',
+      category: 'Marvel',
+      condition: 'New',
+      description: 'Spider-Man action figure.',
+      paymentMethod: 'Cash on delivery',
+    ),
+    Product(
+      name: 'Arya Stark',
+      price: '1,800 EGP',
+      category: 'Game of Thrones',
+      condition: 'Used - Excellent',
+      description: 'Arya Stark collectible figure.',
+      paymentMethod: 'Cash on delivery',
+    ),
+  ];
 
-  Future<void> _openAddProductPage() async {
-    final product = await Navigator.push<Product>(
+  Future<void> _openAddProduct() async {
+    final Product? product = await Navigator.push<Product>(
       context,
       MaterialPageRoute(
         builder: (context) => const AddProductPage(),
@@ -50,14 +83,14 @@ class _HomePageState extends State<HomePage> {
 
     if (product != null) {
       setState(() {
-        _products.add(product);
+        _products.insert(0, product);
       });
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Product published successfully'),
+          content: Text('Product published successfully!'),
         ),
       );
     }
@@ -69,6 +102,20 @@ class _HomePageState extends State<HomePage> {
       MaterialPageRoute(
         builder: (context) => SellerDashboardPage(
           products: _products,
+        ),
+      ),
+    );
+  }
+
+  void _openProduct(Product product) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProductDetailsPage(
+          name: product.name,
+          price: product.price,
+          category: product.category,
+          condition: product.condition,
         ),
       ),
     );
@@ -118,7 +165,9 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
+
             const SizedBox(height: 26),
+
             const Text(
               'Categories',
               style: TextStyle(
@@ -126,7 +175,9 @@ class _HomePageState extends State<HomePage> {
                 fontWeight: FontWeight.bold,
               ),
             ),
+
             const SizedBox(height: 14),
+
             SizedBox(
               height: 44,
               child: ListView(
@@ -160,7 +211,9 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
             ),
+
             const SizedBox(height: 28),
+
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -177,94 +230,34 @@ class _HomePageState extends State<HomePage> {
                 ),
               ],
             ),
+
             const SizedBox(height: 10),
-            GridView.count(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
+
+            GridView.builder(
+              itemCount: _products.length,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: 0.68,
-              children: [
-                _ProductCard(
-                  name: 'Batman',
-                  price: '1,500 EGP',
-                  category: 'DC',
-                  condition: 'Used - Good',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ProductDetailsPage(
-                          name: 'Batman',
-                          price: '1,500 EGP',
-                          category: 'DC',
-                          condition: 'Used - Good',
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                _ProductCard(
-                  name: 'Jon Snow',
-                  price: '2,000 EGP',
-                  category: 'Game of Thrones',
-                  condition: 'Rare',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ProductDetailsPage(
-                          name: 'Jon Snow',
-                          price: '2,000 EGP',
-                          category: 'Game of Thrones',
-                          condition: 'Rare',
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                _ProductCard(
-                  name: 'Spider-Man',
-                  price: '1,200 EGP',
-                  category: 'Marvel',
-                  condition: 'New',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ProductDetailsPage(
-                          name: 'Spider-Man',
-                          price: '1,200 EGP',
-                          category: 'Marvel',
-                          condition: 'New',
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                _ProductCard(
-                  name: 'Arya Stark',
-                  price: '1,800 EGP',
-                  category: 'Game of Thrones',
-                  condition: 'Used - Excellent',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ProductDetailsPage(
-                          name: 'Arya Stark',
-                          price: '1,800 EGP',
-                          category: 'Game of Thrones',
-                          condition: 'Used - Excellent',
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 0.68,
+              ),
+              itemBuilder: (context, index) {
+                final product = _products[index];
+
+                return _ProductCard(
+                  name: product.name,
+                  price: product.price,
+                  category: product.category,
+                  condition: product.condition,
+                  onTap: () => _openProduct(product),
+                );
+              },
             ),
+
             const SizedBox(height: 28),
+
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(18),
@@ -313,7 +306,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   FilledButton(
-                    onPressed: _openAddProductPage,
+                    onPressed: _openAddProduct,
                     child: const Text('Sell'),
                   ),
                 ],
@@ -322,11 +315,12 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
+
       bottomNavigationBar: NavigationBar(
         selectedIndex: 0,
         onDestinationSelected: (index) {
           if (index == 2) {
-            _openAddProductPage();
+            _openAddProduct();
           }
         },
         destinations: const [
@@ -424,6 +418,7 @@ class _ProductCard extends StatelessWidget {
                 ),
               ),
             ),
+
             Padding(
               padding: const EdgeInsets.fromLTRB(11, 10, 11, 12),
               child: Column(
@@ -438,7 +433,9 @@ class _ProductCard extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+
                   const SizedBox(height: 4),
+
                   Text(
                     category,
                     maxLines: 1,
@@ -448,7 +445,9 @@ class _ProductCard extends StatelessWidget {
                       fontSize: 13,
                     ),
                   ),
+
                   const SizedBox(height: 7),
+
                   Row(
                     children: [
                       Expanded(
@@ -466,7 +465,9 @@ class _ProductCard extends StatelessWidget {
                       ),
                     ],
                   ),
+
                   const SizedBox(height: 5),
+
                   Text(
                     condition,
                     style: TextStyle(
