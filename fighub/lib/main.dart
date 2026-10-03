@@ -1,124 +1,335 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
 import 'product_model.dart';
 import 'product_details_page.dart';
 import 'add_product_page.dart';
 import 'seller_dashboard_page.dart';
+import 'chat_list_page.dart';
+import 'profile_page.dart';
+import 'notifications_page.dart';
+import 'favorites_page.dart';
+import 'app_localizations.dart';
+import 'app_settings.dart';
+import 'auth_manager.dart';
+import 'auth_gate.dart';
 
-void main() {
-  runApp(const FigHubApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  final settings = AppSettings();
+  await settings.loadSettings();
+
+  final authManager = AuthManager();
+  await authManager.load();
+
+  runApp(
+    FigHubApp(
+      settings: settings,
+      authManager: authManager,
+    ),
+  );
 }
 
-class FigHubApp extends StatelessWidget {
-  const FigHubApp({super.key});
+class FigHubApp extends StatefulWidget {
+  final AppSettings settings;
+  final AuthManager authManager;
+
+  const FigHubApp({
+    super.key,
+    required this.settings,
+    required this.authManager,
+  });
+
+  @override
+  State<FigHubApp> createState() => _FigHubAppState();
+}
+
+class _FigHubAppState extends State<FigHubApp> {
+  @override
+  void initState() {
+    super.initState();
+
+    widget.settings.addListener(_refresh);
+    widget.authManager.addListener(_refresh);
+  }
+
+  @override
+  void dispose() {
+    widget.settings.removeListener(_refresh);
+    widget.authManager.removeListener(_refresh);
+    super.dispose();
+  }
+
+  void _refresh() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {});
+  }
+
+  ThemeData _lightTheme() {
+    return ThemeData(
+      useMaterial3: true,
+      colorSchemeSeed: Colors.blue,
+      brightness: Brightness.light,
+    );
+  }
+
+  ThemeData _darkTheme() {
+    return ThemeData(
+      useMaterial3: true,
+      colorSchemeSeed: Colors.blue,
+      brightness: Brightness.dark,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'FigHub',
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFF0D0D0F),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFE53935),
-          brightness: Brightness.dark,
+      locale: widget.settings.locale,
+      theme: _lightTheme(),
+      darkTheme: _darkTheme(),
+      themeMode: widget.settings.themeMode,
+      supportedLocales: const [
+        Locale('en'),
+        Locale('ar'),
+      ],
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        DefaultMaterialLocalizations.delegate,
+        DefaultWidgetsLocalizations.delegate,
+      ],
+      builder: (context, child) {
+        return Directionality(
+          textDirection: widget.settings.isArabic
+              ? TextDirection.rtl
+              : TextDirection.ltr,
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
+      home: AuthGate(
+        authManager: widget.authManager,
+        home: FigHubHome(
+          settings: widget.settings,
+          authManager: widget.authManager,
         ),
       ),
-      home: const HomePage(),
     );
   }
 }
 
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+class FigHubHome extends StatefulWidget {
+  final AppSettings settings;
+  final AuthManager authManager;
+
+  const FigHubHome({
+    super.key,
+    required this.settings,
+    required this.authManager,
+  });
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<FigHubHome> createState() => _FigHubHomeState();
 }
 
-class _HomePageState extends State<HomePage> {
-  final List<Product> _products = [
-    Product(
-      name: 'Batman',
-      price: '1,500 EGP',
-      category: 'DC',
-      condition: 'Used - Good',
-      description: 'Batman action figure.',
-      paymentMethod: 'Cash on delivery',
-    ),
-    Product(
-      name: 'Jon Snow',
-      price: '2,000 EGP',
-      category: 'Game of Thrones',
-      condition: 'Rare',
-      description: 'Jon Snow collectible figure.',
-      paymentMethod: 'Cash on delivery',
-    ),
-    Product(
-      name: 'Spider-Man',
-      price: '1,200 EGP',
-      category: 'Marvel',
-      condition: 'New',
-      description: 'Spider-Man action figure.',
-      paymentMethod: 'Cash on delivery',
-    ),
-    Product(
-      name: 'Arya Stark',
-      price: '1,800 EGP',
-      category: 'Game of Thrones',
-      condition: 'Used - Excellent',
-      description: 'Arya Stark collectible figure.',
-      paymentMethod: 'Cash on delivery',
-    ),
+class _FigHubHomeState extends State<FigHubHome> {
+  int _currentIndex = 0;
+
+  final List<Product> _products = [];
+  final List<Product> _favorites = [];
+  final List<String> _notifications = [];
+
+  final List<String> _categories = const [
+    'All',
+    'Marvel',
+    'DC',
+    'Game of Thrones',
+    'Anime',
+    'Star Wars',
+    'Other',
   ];
 
-  Future<void> _openAddProduct() async {
-    final Product? product = await Navigator.push<Product>(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const AddProductPage(),
-      ),
-    );
+  String _selectedCategory = 'All';
+  String _searchQuery = '';
 
-    if (product != null) {
-      setState(() {
-        _products.insert(0, product);
-      });
+  List<Product> get _filteredProducts {
+    return _products.where((product) {
+      final matchesCategory = _selectedCategory == 'All' ||
+          product.category == _selectedCategory;
 
-      if (!mounted) return;
+      final matchesSearch = _searchQuery.isEmpty ||
+          product.name.toLowerCase().contains(
+                _searchQuery.toLowerCase(),
+              );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Product published successfully!'),
-        ),
-      );
+      return matchesCategory && matchesSearch;
+    }).toList();
+  }
+
+  List<String> get _chatProducts {
+    return _products
+        .map((product) => product.name)
+        .toSet()
+        .toList();
+  }
+
+  String _categoryLabel(
+    BuildContext context,
+    String category,
+  ) {
+    final localization = AppLocalizations.of(context);
+
+    switch (category) {
+      case 'Marvel':
+        return localization.marvel;
+      case 'DC':
+        return localization.dc;
+      case 'Game of Thrones':
+        return localization.gameOfThrones;
+      case 'Anime':
+        return localization.anime;
+      case 'Star Wars':
+        return localization.starWars;
+      case 'Other':
+        return localization.other;
+      default:
+        return localization.all;
     }
   }
 
-  void _openSellerDashboard() {
-    Navigator.push(
+  Future<void> _openAddProduct() async {
+    final product = await Navigator.push<Product>(
       context,
       MaterialPageRoute(
-        builder: (context) => SellerDashboardPage(
-          products: _products,
-        ),
+        builder: (_) => AddProductPage(),
       ),
     );
+
+    if (!mounted || product == null) {
+      return;
+    }
+
+    setState(() {
+      _products.add(product);
+
+      _notifications.insert(
+        0,
+        'تم إضافة المنتج "${product.name}" بنجاح.',
+      );
+    });
   }
 
-  void _openProduct(Product product) {
-    Navigator.push(
+  Future<void> _openProductDetails(Product product) async {
+    await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ProductDetailsPage(
+        builder: (_) => ProductDetailsPage(
           name: product.name,
           price: product.price,
           category: product.category,
           condition: product.condition,
+          description: product.description,
+          paymentMethod: product.paymentMethod,
           imagePath: product.imagePath,
+          status: product.status,
+          onStatusChanged: (status) {
+            setState(() {
+              product.status = status;
+
+              _notifications.insert(
+                0,
+                'تم تحديث حالة "${product.name}" إلى $status.',
+              );
+            });
+          },
+        ),
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {});
+  }
+
+  Future<void> _openSellerDashboard() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SellerDashboardPage(
+          products: _products,
+        ),
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {});
+  }
+
+  Future<void> _openFavorites() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FavoritesPage(
+          favorites: _favorites,
+          onRemove: (product) {
+            setState(() {
+              _favorites.remove(product);
+            });
+          },
+          onOpenProduct: _openProductDetails,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openProfile() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProfilePage(
+          products: _products,
+          onMyProducts: _openSellerDashboard,
+          onFavorites: _openFavorites,
+          settings: widget.settings,
+          authManager: widget.authManager,
+        ),
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {});
+  }
+
+  Future<void> _openChat() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatListPage(
+          productNames: _chatProducts,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openNotifications() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => NotificationsPage(
+          notifications: _notifications,
         ),
       ),
     );
@@ -126,249 +337,198 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final localization = AppLocalizations.of(context);
+
+    final pages = [
+      _buildHome(localization),
+      _buildFavoritesTab(),
+      _buildSellTab(localization),
+      _buildChatTab(localization),
+    ];
+
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0D0D0F),
         title: const Text(
           'FigHub',
           style: TextStyle(
-            fontSize: 25,
             fontWeight: FontWeight.bold,
           ),
         ),
         actions: [
           IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.notifications_none_rounded),
+            onPressed: _openNotifications,
+            icon: const Icon(
+              Icons.notifications_outlined,
+            ),
           ),
           IconButton(
-            onPressed: _openSellerDashboard,
-            icon: const Icon(Icons.person_outline_rounded),
+            onPressed: _openProfile,
+            icon: const Icon(
+              Icons.person_outline,
+            ),
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              decoration: InputDecoration(
-                hintText: 'Search figures, characters...',
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: IconButton(
-                  onPressed: () {},
-                  icon: const Icon(Icons.tune_rounded),
-                ),
-                filled: true,
-                fillColor: const Color(0xFF1A1A1D),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-            const SizedBox(height: 26),
-            const Text(
-              'Categories',
-              style: TextStyle(
-                fontSize: 21,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 14),
-            SizedBox(
-              height: 44,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: const [
-                  _CategoryChip(
-                    title: 'All',
-                    icon: Icons.grid_view_rounded,
-                    selected: true,
-                  ),
-                  _CategoryChip(
-                    title: 'Marvel',
-                    icon: Icons.auto_awesome,
-                  ),
-                  _CategoryChip(
-                    title: 'DC',
-                    icon: Icons.shield_outlined,
-                  ),
-                  _CategoryChip(
-                    title: 'Anime',
-                    icon: Icons.animation_outlined,
-                  ),
-                  _CategoryChip(
-                    title: 'GOT',
-                    icon: Icons.castle_outlined,
-                  ),
-                  _CategoryChip(
-                    title: 'Star Wars',
-                    icon: Icons.star_border_rounded,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 28),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Featured Figures',
-                  style: TextStyle(
-                    fontSize: 21,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                TextButton(
-                  onPressed: () {},
-                  child: const Text('See all'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            GridView.builder(
-              itemCount: _products.length,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 0.64,
-              ),
-              itemBuilder: (context, index) {
-                final product = _products[index];
-
-                return _ProductCard(
-                  name: product.name,
-                  price: product.price,
-                  category: product.category,
-                  condition: product.condition,
-                  status: product.status,
-                  imagePath: product.imagePath,
-                  onTap: () => _openProduct(product),
-                );
-              },
-            ),
-            const SizedBox(height: 28),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
-                gradient: const LinearGradient(
-                  colors: [
-                    Color(0xFF25252A),
-                    Color(0xFF17171A),
-                  ],
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE53935),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: const Icon(
-                      Icons.sell_outlined,
-                      size: 28,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Have figures to sell?',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'List your collectibles on FigHub.',
-                          style: TextStyle(
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  FilledButton(
-                    onPressed: _openAddProduct,
-                    child: const Text('Sell'),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+      body: pages[_currentIndex],
       bottomNavigationBar: NavigationBar(
-        selectedIndex: 0,
+        selectedIndex: _currentIndex,
         onDestinationSelected: (index) {
           if (index == 2) {
             _openAddProduct();
+            return;
           }
+
+          if (index == 3) {
+            _openChat();
+            return;
+          }
+
+          setState(() {
+            _currentIndex = index;
+          });
         },
-        destinations: const [
+        destinations: [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: 'Home',
+            icon: const Icon(Icons.home_outlined),
+            selectedIcon: const Icon(Icons.home),
+            label: localization.home,
           ),
           NavigationDestination(
-            icon: Icon(Icons.favorite_border_rounded),
-            selectedIcon: Icon(Icons.favorite_rounded),
-            label: 'Favorites',
+            icon: const Icon(Icons.favorite_border),
+            selectedIcon: const Icon(Icons.favorite),
+            label: localization.favorites,
           ),
           NavigationDestination(
-            icon: Icon(Icons.add_box_outlined),
-            selectedIcon: Icon(Icons.add_box_rounded),
-            label: 'Sell',
+            icon: const Icon(Icons.sell_outlined),
+            selectedIcon: const Icon(Icons.sell),
+            label: localization.sell,
           ),
           NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline_rounded),
-            selectedIcon: Icon(Icons.chat_bubble_rounded),
-            label: 'Chat',
+            icon: const Icon(Icons.chat_bubble_outline),
+            selectedIcon: const Icon(Icons.chat_bubble),
+            label: localization.messages,
           ),
         ],
       ),
     );
   }
-}
 
-class _CategoryChip extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final bool selected;
+  Widget _buildHome(AppLocalizations localization) {
+    final products = _filteredProducts;
 
-  const _CategoryChip({
-    required this.title,
-    required this.icon,
-    this.selected = false,
-  });
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        TextField(
+          onChanged: (value) {
+            setState(() {
+              _searchQuery = value;
+            });
+          },
+          decoration: InputDecoration(
+            hintText: localization.search,
+            prefixIcon: const Icon(Icons.search),
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 42,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _categories.length,
+            separatorBuilder: (_, _) =>
+                const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final category = _categories[index];
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(right: 9),
+              return ChoiceChip(
+                label: Text(
+                  _categoryLabel(
+                    context,
+                    category,
+                  ),
+                ),
+                selected: _selectedCategory == category,
+                onSelected: (_) {
+                  setState(() {
+                    _selectedCategory = category;
+                  });
+                },
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 20),
+        if (products.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(
+                top: 80,
+              ),
+              child: Text(
+                localization.noProducts,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyLarge,
+              ),
+            ),
+          )
+        else
+          ...products.map(
+            (product) => Padding(
+              padding: const EdgeInsets.only(
+                bottom: 12,
+              ),
+              child: _ProductCard(
+                product: product,
+                onTap: () {
+                  _openProductDetails(product);
+                },
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildFavoritesTab() {
+    return FavoritesPage(
+      favorites: _favorites,
+      onRemove: (product) {
+        setState(() {
+          _favorites.remove(product);
+        });
+      },
+      onOpenProduct: _openProductDetails,
+    );
+  }
+
+  Widget _buildSellTab(
+    AppLocalizations localization,
+  ) {
+    return Center(
       child: FilledButton.icon(
-        onPressed: () {},
-        icon: Icon(icon, size: 17),
-        label: Text(title),
-        style: FilledButton.styleFrom(
-          backgroundColor: selected
-              ? const Color(0xFFE53935)
-              : const Color(0xFF1A1A1D),
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+        onPressed: _openAddProduct,
+        icon: const Icon(Icons.add),
+        label: Text(
+          localization.sell,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChatTab(
+    AppLocalizations localization,
+  ) {
+    return Center(
+      child: FilledButton.icon(
+        onPressed: _openChat,
+        icon: const Icon(
+          Icons.chat_bubble_outline,
+        ),
+        label: Text(
+          localization.messages,
         ),
       ),
     );
@@ -376,149 +536,175 @@ class _CategoryChip extends StatelessWidget {
 }
 
 class _ProductCard extends StatelessWidget {
-  final String name;
-  final String price;
-  final String category;
-  final String condition;
-  final String status;
-  final String? imagePath;
+  final Product product;
   final VoidCallback onTap;
 
   const _ProductCard({
-    required this.name,
-    required this.price,
-    required this.category,
-    required this.condition,
-    required this.status,
-    required this.imagePath,
+    required this.product,
     required this.onTap,
   });
 
-  Color _statusColor() {
-    if (status == 'Reserved') {
-      return const Color(0xFFFF9800);
-    }
+  String _statusLabel(
+    BuildContext context,
+    String status,
+  ) {
+    final localization = AppLocalizations.of(context);
 
-    if (status == 'Shipping') {
-      return const Color(0xFF2196F3);
+    switch (status) {
+      case 'Reserved':
+        return localization.reserved;
+      case 'Sold':
+        return localization.productSold;
+      default:
+        return localization.available;
     }
+  }
 
-    return const Color(0xFF4CAF50);
+  String _categoryLabel(
+    BuildContext context,
+    String category,
+  ) {
+    final localization = AppLocalizations.of(context);
+
+    switch (category) {
+      case 'Marvel':
+        return localization.marvel;
+      case 'DC':
+        return localization.dc;
+      case 'Game of Thrones':
+        return localization.gameOfThrones;
+      case 'Anime':
+        return localization.anime;
+      case 'Star Wars':
+        return localization.starWars;
+      case 'Other':
+        return localization.other;
+      default:
+        return localization.all;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
-      color: const Color(0xFF18181B),
       child: InkWell(
         onTap: onTap,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Stack(
-                children: [
-                  Container(
-                    width: double.infinity,
-                    color: const Color(0xFF252529),
-                    child: imagePath != null
-                        ? Image.file(
-                            File(imagePath!),
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return const Icon(
-                                Icons.image_outlined,
-                                size: 65,
-                                color: Colors.grey,
-                              );
-                            },
-                          )
-                        : const Icon(
-                            Icons.image_outlined,
-                            size: 65,
-                            color: Colors.grey,
-                          ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              if (product.imagePath != null &&
+                  product.imagePath!.isNotEmpty)
+                ClipRRect(
+                  borderRadius:
+                      BorderRadius.circular(12),
+                  child: Image.file(
+                    File(product.imagePath!),
+                    width: 90,
+                    height: 90,
+                    fit: BoxFit.cover,
+                    errorBuilder: (
+                      context,
+                      error,
+                      stackTrace,
+                    ) {
+                      return const SizedBox(
+                        width: 90,
+                        height: 90,
+                        child: Icon(
+                          Icons.image_not_supported_outlined,
+                          size: 40,
+                        ),
+                      );
+                    },
                   ),
-                  Positioned(
-                    top: 10,
-                    left: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 5,
+                )
+              else
+                Container(
+                  width: 90,
+                  height: 90,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest,
+                    borderRadius:
+                        BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.image_outlined,
+                    size: 40,
+                  ),
+                ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product.name,
+                      maxLines: 2,
+                      overflow:
+                          TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight:
+                            FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _categoryLabel(
+                        context,
+                        product.category,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${product.price} EGP',
+                      style: TextStyle(
+                        fontWeight:
+                            FontWeight.bold,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding:
+                          const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: _statusColor(),
-                        borderRadius: BorderRadius.circular(20),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primaryContainer,
+                        borderRadius:
+                            BorderRadius.circular(8),
                       ),
                       child: Text(
-                        status,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
+                        _statusLabel(
+                          context,
+                          product.status,
+                        ),
+                        style: TextStyle(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onPrimaryContainer,
+                          fontSize: 12,
+                          fontWeight:
+                              FontWeight.bold,
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(11, 10, 11, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    category,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 7),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          price,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const Icon(
-                        Icons.favorite_border_rounded,
-                        size: 20,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    condition,
-                    style: TextStyle(
-                      color: Colors.grey.shade500,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
