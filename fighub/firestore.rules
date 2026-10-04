@@ -143,18 +143,54 @@ service cloud.firestore {
                              == 'Available'
                           && resource.data.reservedBy
                              == null
-                          && resource.data.waitingUsers[0]
-                             == request.auth.uid
                           && request.resource.data.status
                              == 'Reserved'
                           && request.resource.data.reservedBy
                              == request.auth.uid
+                          && getAfter(
+                               /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)/reservations/$(request.auth.uid)
+                             ).data.userId
+                             == request.auth.uid
+                          && getAfter(
+                               /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)/reservations/$(request.auth.uid)
+                             ).data.status
+                             == 'Active'
                           && request.resource.data.diff(resource.data)
                              .affectedKeys()
                              .hasOnly([
                                'status',
                                'reservedBy',
                                'reservedAt',
+                               'waitingUsers'
+                             ])
+                        )
+                        ||
+                        (
+                          resource.data.status
+                             == 'Reserved'
+                          && resource.data.reservedBy
+                             != null
+                          && request.resource.data.status
+                             == 'Reserved'
+                          && request.resource.data.reservedBy
+                             == resource.data.reservedBy
+                          && request.resource.data.waitingUsers.size()
+                             == resource.data.waitingUsers.size() + 1
+                          && request.resource.data.waitingUsers[
+                               resource.data.waitingUsers.size()
+                             ]
+                             == request.auth.uid
+                          && getAfter(
+                               /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)/reservations/$(request.auth.uid)
+                             ).data.userId
+                             == request.auth.uid
+                          && getAfter(
+                               /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)/reservations/$(request.auth.uid)
+                             ).data.status
+                             == 'Waiting'
+                          && request.resource.data.diff(resource.data)
+                             .affectedKeys()
+                             .hasOnly([
                                'waitingUsers'
                              ])
                         )
