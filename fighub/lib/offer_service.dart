@@ -30,15 +30,10 @@ class OfferService {
   Future<String> createOffer(Offer offer) async {
     final uid = _uid;
 
-    if (offer.sellerId != uid) {
-      throw StateError(
-        'You can only create offers for your own account.',
-      );
-    }
+    final offerData = offer.toFirestore();
+    offerData['sellerId'] = uid;
 
-    final reference = await _offers.add(
-      offer.toFirestore(),
-    );
+    final reference = await _offers.add(offerData);
 
     return reference.id;
   }
