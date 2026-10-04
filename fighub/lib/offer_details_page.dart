@@ -282,8 +282,10 @@ class OfferDetailsPage extends StatelessWidget {
                                 }
 
                                 return FilledButton.icon(
-                                  onPressed: item.status == 'Available'
-                                      ? () async {
+                                  onPressed: !isActive
+                                      ? null
+                                      : item.status == 'Available'
+                                          ? () async {
                                           try {
                                             await OfferService().reserveItem(
                                               offerId: offerId,
@@ -318,9 +320,11 @@ class OfferDetailsPage extends StatelessWidget {
                                     Icons.bookmark_border,
                                   ),
                                   label: Text(
-                                    item.status == 'Available'
-                                        ? 'احجز القطعة'
-                                        : 'القطعة محجوزة',
+                                    !isActive
+                                        ? 'العرض لم يبدأ بعد'
+                                        : item.status == 'Available'
+                                            ? 'احجز القطعة'
+                                            : 'القطعة محجوزة',
                                   ),
                                 );
                               },
