@@ -36,7 +36,7 @@ exports.notifyUsersAboutNewOffer = onDocumentCreated(
         return;
       }
 
-      const batch = db.batch();
+      let batch = db.batch();
       let notificationCount = 0;
 
       for (const userDocument of usersSnapshot.docs) {
@@ -60,6 +60,7 @@ exports.notifyUsersAboutNewOffer = onDocumentCreated(
 
         if (notificationCount >= 450) {
           await batch.commit();
+          batch = db.batch();
           notificationCount = 0;
         }
       }
