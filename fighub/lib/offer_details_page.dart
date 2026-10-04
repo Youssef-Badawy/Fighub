@@ -205,9 +205,24 @@ class OfferDetailsPage extends StatelessWidget {
                               builder: (context) {
                                 final currentUserId =
                                     FirebaseAuth.instance.currentUser?.uid;
+
                                 final isMyReservation =
                                     item.reservedBy != null &&
                                     item.reservedBy == currentUserId;
+
+                                final waitingIndex =
+                                    currentUserId == null
+                                        ? -1
+                                        : item.waitingUsers.indexOf(
+                                            currentUserId,
+                                          );
+
+                                final isWaiting =
+                                    waitingIndex >= 0;
+
+                                final isFirstWaiting =
+                                    isWaiting &&
+                                    waitingIndex == 0;
 
                                 if (isMyReservation) {
                                   return FilledButton.icon(
@@ -236,7 +251,9 @@ class OfferDetailsPage extends StatelessWidget {
                                                   Navigator.of(dialogContext)
                                                       .pop(true);
                                                 },
-                                                child: const Text('نعم، إلغاء'),
+                                                child: const Text(
+                                                  'نعم، إلغاء',
+                                                ),
                                               ),
                                             ],
                                           );
@@ -246,7 +263,8 @@ class OfferDetailsPage extends StatelessWidget {
                                       if (confirmed != true) return;
 
                                       try {
-                                        await OfferService().cancelReservation(
+                                        await OfferService()
+                                            .cancelReservation(
                                           offerId: offerId,
                                           itemId: item.id!,
                                         );
@@ -281,41 +299,136 @@ class OfferDetailsPage extends StatelessWidget {
                                   );
                                 }
 
+                                if (isWaiting) {
+                                  if (isFirstWaiting &&
+                                      isActive &&
+                                      item.status == 'Available') {
+                                    return FilledButton.icon(
+                                      onPressed: () async {
+                                        try {
+                                          await OfferService()
+                                              .claimWaitingReservation(
+                                            offerId: offerId,
+                                            itemId: item.id!,
+                                          );
+
+                                          if (!context.mounted) return;
+
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'تم استلام الحجز بنجاح',
+                                              ),
+                                            ),
+                                          );
+                                        } catch (e) {
+                                          if (!context.mounted) return;
+
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                'تعذر استلام الحجز: $e',
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      },
+                                      icon: const Icon(
+                                        Icons.check_circle_outline,
+                                      ),
+                                      label: const Text(
+                                        'استلام الحجز',
+                                      ),
+                                    );
+                                  }
+
+                                  return OutlinedButton.icon(
+                                    onPressed: null,
+                                    icon: const Icon(
+                                      Icons.hourglass_top,
+                                    ),
+                                    label: Text(
+                                      'أنت في الانتظار - ترتيبك ${waitingIndex + 1}',
+                                    ),
+                                  );
+                                }
+
                                 return FilledButton.icon(
                                   onPressed: !isActive
                                       ? null
                                       : item.status == 'Available'
                                           ? () async {
-                                          try {
-                                            await OfferService().reserveItem(
-                                              offerId: offerId,
-                                              itemId: item.id!,
-                                            );
+                                              try {
+                                                await OfferService()
+                                                    .reserveItem(
+                                                  offerId: offerId,
+                                                  itemId: item.id!,
+                                                );
 
-                                            if (!context.mounted) return;
+                                                if (!context.mounted) {
+                                                  return;
+                                                }
 
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(
-                                              const SnackBar(
-                                                content: Text(
-                                                  'تم حجز القطعة بنجاح',
-                                                ),
-                                              ),
-                                            );
-                                          } catch (e) {
-                                            if (!context.mounted) return;
+                                                ScaffoldMessenger.of(context)
+                                                    .showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text(
+                                                      'تم حجز القطعة بنجاح',
+                                                    ),
+                                                  ),
+                                                );
+                                              } catch (e) {
+                                                if (!context.mounted) {
+                                                  return;
+                                                }
 
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(
-                                              SnackBar(
-                                                content: Text(
-                                                  'تعذر حجز القطعة: $e',
-                                                ),
-                                              ),
-                                            );
-                                          }
-                                        }
-                                      : null,
+                                                ScaffoldMessenger.of(context)
+                                                    .showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      'تعذر حجز القطعة: $e',
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                            }
+                                          : () async {
+                                              try {
+                                                await OfferService()
+                                                    .reserveItem(
+                                                  offerId: offerId,
+                                                  itemId: item.id!,
+                                                );
+
+                                                if (!context.mounted) {
+                                                  return;
+                                                }
+
+                                                ScaffoldMessenger.of(context)
+                                                    .showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text(
+                                                      'تمت إضافتك إلى قائمة الانتظار',
+                                                    ),
+                                                  ),
+                                                );
+                                              } catch (e) {
+                                                if (!context.mounted) {
+                                                  return;
+                                                }
+
+                                                ScaffoldMessenger.of(context)
+                                                    .showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      'تعذر الانضمام لقائمة الانتظار: $e',
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                            },
                                   icon: const Icon(
                                     Icons.bookmark_border,
                                   ),
@@ -324,7 +437,7 @@ class OfferDetailsPage extends StatelessWidget {
                                         ? 'العرض لم يبدأ بعد'
                                         : item.status == 'Available'
                                             ? 'احجز القطعة'
-                                            : 'القطعة محجوزة',
+                                            : 'انضم لقائمة الانتظار',
                                   ),
                                 );
                               },

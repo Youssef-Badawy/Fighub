@@ -155,12 +155,46 @@ class OfferService {
         final currentReservedBy =
             itemData['reservedBy'] as String?;
 
+        final rawWaitingUsers =
+            itemData['waitingUsers'];
+
+        final waitingUsers = rawWaitingUsers is List
+            ? rawWaitingUsers.whereType<String>().toList()
+            : <String>[];
+
         if (currentStatus != 'Available' ||
             (currentReservedBy != null &&
                 currentReservedBy.isNotEmpty)) {
-          throw StateError(
-            'This item has already been reserved.',
+          if (waitingUsers.contains(uid)) {
+            throw StateError(
+              'You are already in the waiting list.',
+            );
+          }
+
+          transaction.set(
+            reservationReference,
+            {
+              'userId': uid,
+              'offerId': offerId,
+              'itemId': itemId,
+              'status': 'Waiting',
+              'createdAt':
+                  FieldValue.serverTimestamp(),
+              'cancelledAt': null,
+            },
           );
+
+          transaction.update(
+            itemReference,
+            {
+              'waitingUsers': [
+                ...waitingUsers,
+                uid,
+              ],
+            },
+          );
+
+          return;
         }
 
         transaction.set(
@@ -183,6 +217,7 @@ class OfferService {
             'reservedBy': uid,
             'reservedAt':
                 FieldValue.serverTimestamp(),
+            'waitingUsers': waitingUsers,
           },
         );
       },
@@ -203,6 +238,107 @@ class OfferService {
         message: 'تم حجز قطعة من العرض الخاص بك.',
       );
     }
+  }
+
+  Future<void> claimWaitingReservation({
+    required String offerId,
+    required String itemId,
+  }) async {
+    final uid = _uid;
+
+    if (offerId.isEmpty || itemId.isEmpty) {
+      throw ArgumentError(
+        'Offer ID and item ID are required.',
+      );
+    }
+
+    final itemReference = _offers
+        .doc(offerId)
+        .collection('items')
+        .doc(itemId);
+
+    final reservationReference = itemReference
+        .collection('reservations')
+        .doc(uid);
+
+    await _firestore.runTransaction(
+      (transaction) async {
+        final itemSnapshot =
+            await transaction.get(itemReference);
+
+        final reservationSnapshot =
+            await transaction.get(reservationReference);
+
+        if (!itemSnapshot.exists) {
+          throw StateError('Offer item not found.');
+        }
+
+        if (!reservationSnapshot.exists) {
+          throw StateError(
+            'Waiting reservation not found.',
+          );
+        }
+
+        final itemData =
+            itemSnapshot.data() ?? {};
+
+        final reservationData =
+            reservationSnapshot.data() ?? {};
+
+        final rawWaitingUsers =
+            itemData['waitingUsers'];
+
+        final waitingUsers = rawWaitingUsers is List
+            ? rawWaitingUsers.whereType<String>().toList()
+            : <String>[];
+
+        final currentStatus =
+            itemData['status'] as String? ?? 'Available';
+
+        final currentReservedBy =
+            itemData['reservedBy'] as String?;
+
+        if (reservationData['status'] != 'Waiting') {
+          throw StateError(
+            'Reservation is not waiting.',
+          );
+        }
+
+        if (currentStatus != 'Available' ||
+            (currentReservedBy != null &&
+                currentReservedBy.isNotEmpty)) {
+          throw StateError(
+            'This item is not available yet.',
+          );
+        }
+
+        if (waitingUsers.isEmpty ||
+            waitingUsers.first != uid) {
+          throw StateError(
+            'You are not first in the waiting list.',
+          );
+        }
+
+        transaction.update(
+          reservationReference,
+          {
+            'status': 'Active',
+            'cancelledAt': null,
+          },
+        );
+
+        transaction.update(
+          itemReference,
+          {
+            'status': 'Reserved',
+            'reservedBy': uid,
+            'reservedAt':
+                FieldValue.serverTimestamp(),
+            'waitingUsers': waitingUsers.sublist(1),
+          },
+        );
+      },
+    );
   }
 
   Stream<List<Map<String, dynamic>>> watchItemReservations({
@@ -299,12 +435,20 @@ class OfferService {
           },
         );
 
+        final rawWaitingUsers =
+            itemData['waitingUsers'];
+
+        final waitingUsers = rawWaitingUsers is List
+            ? rawWaitingUsers.whereType<String>().toList()
+            : <String>[];
+
         transaction.update(
           itemReference,
           {
             'status': 'Available',
             'reservedBy': null,
             'reservedAt': null,
+            'waitingUsers': waitingUsers,
           },
         );
       },

@@ -12,6 +12,7 @@ class OfferItem {
   String status;
   String? reservedBy;
   DateTime? reservedAt;
+  List<String> waitingUsers;
 
   OfferItem({
     this.id,
@@ -24,6 +25,7 @@ class OfferItem {
     this.status = 'Available',
     this.reservedBy,
     this.reservedAt,
+    this.waitingUsers = const [],
   });
 
   Map<String, dynamic> toFirestore() {
@@ -37,6 +39,7 @@ class OfferItem {
       'status': status,
       'reservedBy': reservedBy,
       'reservedAt': reservedAt,
+      'waitingUsers': waitingUsers,
     };
   }
 
@@ -51,6 +54,10 @@ class OfferItem {
         : <String>[];
 
     final timestamp = data['reservedAt'];
+    final rawWaitingUsers = data['waitingUsers'];
+    final waitingUsers = rawWaitingUsers is List
+        ? rawWaitingUsers.whereType<String>().toList()
+        : <String>[];
 
     return OfferItem(
       id: document.id,
@@ -64,6 +71,7 @@ class OfferItem {
       reservedBy: data['reservedBy'] as String?,
       reservedAt:
           timestamp is Timestamp ? timestamp.toDate() : null,
+      waitingUsers: waitingUsers,
     );
   }
 }
