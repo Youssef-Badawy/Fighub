@@ -82,6 +82,20 @@ class OfferService {
         );
   }
 
+  Stream<Offer?> watchOffer(String offerId) {
+    if (offerId.isEmpty) {
+      return Stream.value(null);
+    }
+
+    return _offers
+        .doc(offerId)
+        .snapshots()
+        .map(
+          (snapshot) =>
+              snapshot.exists ? Offer.fromFirestore(snapshot) : null,
+        );
+  }
+
   Stream<List<OfferItem>> watchOfferItems(
     String offerId,
   ) {
@@ -296,4 +310,14 @@ class OfferService {
       },
     );
   }
+  bool isOfferActive(Offer offer) {
+    final scheduledAt = offer.scheduledAt;
+
+    if (scheduledAt == null) {
+      return true;
+    }
+
+    return !DateTime.now().isBefore(scheduledAt);
+  }
+
 }

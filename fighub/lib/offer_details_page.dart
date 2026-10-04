@@ -20,9 +20,82 @@ class OfferDetailsPage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('تفاصيل العرض'),
       ),
-      body: StreamBuilder<List<OfferItem>>(
-        stream: offerService.watchOfferItems(offerId),
-        builder: (context, snapshot) {
+      body: StreamBuilder<Offer?>(
+        stream: offerService.watchOffer(offerId),
+        builder: (context, offerSnapshot) {
+          if (offerSnapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+
+          if (offerSnapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'حدث خطأ أثناء تحميل العرض:\n${offerSnapshot.error}',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          }
+
+          final offer = offerSnapshot.data;
+
+          if (offer == null) {
+            return const Center(
+              child: Text('العرض غير موجود.'),
+            );
+          }
+
+          final isActive = offerService.isOfferActive(offer);
+
+          return Column(
+            children: [
+              Card(
+                margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        offer.title,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                      if (offer.description.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(offer.description),
+                      ],
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Chip(
+                            label: Text(
+                              isActive ? 'العرض متاح' : 'لم يبدأ بعد',
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          if (offer.scheduledAt != null)
+                            Expanded(
+                              child: Text(
+                                'يبدأ: ${offer.scheduledAt}',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Expanded(
+                child: StreamBuilder<List<OfferItem>>(
+                  stream: offerService.watchOfferItems(offerId),
+                  builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
               child: CircularProgressIndicator(),
@@ -51,7 +124,7 @@ class OfferDetailsPage extends StatelessWidget {
             );
           }
 
-          return ListView.separated(
+                    return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: items.length,
             separatorBuilder: (_, _) => const SizedBox(height: 14),
@@ -260,6 +333,11 @@ class OfferDetailsPage extends StatelessWidget {
                 ),
               );
             },
+                    );
+                  },
+                ),
+              ),
+            ],
           );
         },
       ),
