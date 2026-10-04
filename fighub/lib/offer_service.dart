@@ -191,6 +191,43 @@ class OfferService {
     }
   }
 
+  Stream<List<Map<String, dynamic>>> watchItemReservations({
+    required String offerId,
+    required String itemId,
+  }) {
+    return _offers
+        .doc(offerId)
+        .collection('items')
+        .doc(itemId)
+        .collection('reservations')
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map(
+                (doc) => {
+                  'id': doc.id,
+                  ...doc.data(),
+                },
+              )
+              .toList(),
+        );
+  }
+
+  Stream<Map<String, dynamic>?> watchReservation({
+    required String offerId,
+    required String itemId,
+    required String userId,
+  }) {
+    return _offers
+        .doc(offerId)
+        .collection('items')
+        .doc(itemId)
+        .collection('reservations')
+        .doc(userId)
+        .snapshots()
+        .map((snapshot) => snapshot.exists ? snapshot.data() : null);
+  }
+
   Future<void> cancelReservation({
     required String offerId,
     required String itemId,

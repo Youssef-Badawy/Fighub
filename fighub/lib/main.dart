@@ -10,6 +10,7 @@ import 'auth_gate.dart';
 import 'auth_manager.dart';
 import 'add_product_page.dart';
 import 'create_offer_page.dart';
+import 'offers_page.dart';
 import 'chat_list_page.dart';
 import 'favorite_service.dart';
 import 'favorites_page.dart';
@@ -750,6 +751,21 @@ class _FigHubHomeState extends State<FigHubHome> {
                 },
               );
             },
+          ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const OffersPage(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.local_offer_outlined),
+            label: const Text('العروض الجماعية'),
           ),
         ),
         const SizedBox(height: 20),
