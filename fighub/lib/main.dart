@@ -610,11 +610,6 @@ class _FigHubHomeState extends State<FigHubHome> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) {
-          if (index == 2) {
-            _openAddProduct();
-            return;
-          }
-
           if (index == 3) {
             _openChat();
             return;
