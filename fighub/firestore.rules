@@ -70,6 +70,96 @@ service cloud.firestore {
       }
     }
 
+
+    match /offers/{offerId} {
+
+      allow read: if request.auth != null;
+
+      allow create: if request.auth != null
+                    && request.resource.data.sellerId
+                       == request.auth.uid;
+
+      allow update: if request.auth != null
+                    && resource.data.sellerId
+                       == request.auth.uid
+                    && request.resource.data.sellerId
+                       == resource.data.sellerId;
+
+      allow delete: if request.auth != null
+                    && resource.data.sellerId
+                       == request.auth.uid;
+
+      match /items/{itemId} {
+
+        allow read: if request.auth != null;
+
+        allow create: if request.auth != null
+                      && get(
+                        /databases/$(database)/documents/offers/$(offerId)
+                      ).data.sellerId
+                         == request.auth.uid;
+
+        allow update: if request.auth != null
+                      && (
+                        (
+                          get(
+                            /databases/$(database)/documents/offers/$(offerId)
+                          ).data.sellerId
+                             == request.auth.uid
+                        )
+                        ||
+                        (
+                          resource.data.reservedBy
+                             == request.auth.uid
+                          && request.resource.data.reservedBy
+                             == null
+                          && request.resource.data.status
+                             == 'Available'
+                          && request.resource.data.diff(resource.data)
+                             .affectedKeys()
+                             .hasOnly([
+                               'status',
+                               'reservedBy',
+                               'reservedAt'
+                             ])
+                        )
+                      );
+
+        allow delete: if request.auth != null
+                      && get(
+                        /databases/$(database)/documents/offers/$(offerId)
+                      ).data.sellerId
+                         == request.auth.uid;
+
+        match /reservations/{reservationId} {
+
+          allow read: if request.auth != null
+                      && (
+                        request.auth.uid == reservationId
+                        ||
+                        get(
+                          /databases/$(database)/documents/offers/$(offerId)
+                        ).data.sellerId
+                           == request.auth.uid
+                      );
+
+          allow create: if request.auth != null
+                        && request.auth.uid == reservationId
+                        && request.resource.data.userId
+                           == request.auth.uid
+                        && request.resource.data.status
+                           == 'Active';
+
+          allow update: if request.auth != null
+                        && request.auth.uid == reservationId
+                        && request.resource.data.userId
+                           == request.auth.uid;
+
+          allow delete: if false;
+        }
+      }
+    }
+
     match /chats/{chatId} {
 
       allow get: if request.auth != null
