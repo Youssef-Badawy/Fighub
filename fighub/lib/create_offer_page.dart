@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'offer_model.dart';
 import 'offer_service.dart';
+import 'offer_manager_page.dart';
 
 class CreateOfferPage extends StatefulWidget {
   const CreateOfferPage({super.key});
@@ -88,7 +89,13 @@ class _CreateOfferPageState extends State<CreateOfferPage> {
         return;
       }
 
-      Navigator.of(context).pop(offerId);
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => OfferManagerPage(
+            offerId: offerId,
+          ),
+        ),
+      );
     } catch (error) {
       if (!mounted) {
         return;

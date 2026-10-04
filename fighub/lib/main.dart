@@ -9,6 +9,7 @@ import 'app_settings.dart';
 import 'auth_gate.dart';
 import 'auth_manager.dart';
 import 'add_product_page.dart';
+import 'create_offer_page.dart';
 import 'chat_list_page.dart';
 import 'favorite_service.dart';
 import 'favorites_page.dart';
@@ -807,12 +808,33 @@ class _FigHubHomeState extends State<FigHubHome> {
     AppLocalizations localization,
   ) {
     return Center(
-      child: FilledButton.icon(
-        onPressed: _openAddProduct,
-        icon: const Icon(Icons.add),
-        label: Text(
-          localization.sell,
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 260,
+            child: FilledButton.icon(
+              onPressed: _openAddProduct,
+              icon: const Icon(Icons.add_shopping_cart),
+              label: const Text('بيع قطعة عادية'),
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: 260,
+            child: FilledButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const CreateOfferPage(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.local_offer_outlined),
+              label: const Text('إنشاء عرض جماعي'),
+            ),
+          ),
+        ],
       ),
     );
   }
