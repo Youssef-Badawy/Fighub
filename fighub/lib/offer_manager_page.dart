@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'chat_page.dart';
+import 'chat_service.dart';
+
 import 'add_offer_item_page.dart';
 import 'offer_details_page.dart';
 import 'offer_model.dart';
@@ -167,9 +170,73 @@ class OfferManagerPage extends StatelessWidget {
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
-                                    child: Text(
-                                      'محجوز بواسطة: $name',
-                                      overflow: TextOverflow.ellipsis,
+                                    child: InkWell(
+                                      onTap: () async {
+                                        try {
+                                          final offer =
+                                              await offerService
+                                                  .watchOffer(offerId)
+                                                  .first;
+
+                                          if (offer == null) {
+                                            throw StateError(
+                                              'العرض غير موجود.',
+                                            );
+                                          }
+
+                                          final chatId =
+                                              await ChatService()
+                                                  .getOrCreateOfferChat(
+                                            offerId: offerId,
+                                            itemId: item.id!,
+                                            itemName: item.name,
+                                            buyerId: reservedBy,
+                                            sellerId: offer.sellerId,
+                                          );
+
+                                          if (!context.mounted) {
+                                            return;
+                                          }
+
+                                          await Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) => ChatPage(
+                                                chatId: chatId,
+                                                productName: item.name,
+                                              ),
+                                            ),
+                                          );
+                                        } catch (e) {
+                                          if (!context.mounted) {
+                                            return;
+                                          }
+
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                'تعذر فتح المحادثة: $e',
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      },
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 4,
+                                        ),
+                                        child: Text(
+                                          'محجوز بواسطة: $name',
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .primary,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ],

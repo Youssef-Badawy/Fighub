@@ -257,7 +257,7 @@ service cloud.firestore {
                     && request.resource.data.participants is list
                     && request.resource.data.participants.size() == 2
                     && request.auth.uid
-                       == request.resource.data.buyerId
+                       in request.resource.data.participants
                     && request.resource.data.participants.hasAll([
                       request.resource.data.buyerId,
                       request.resource.data.sellerId

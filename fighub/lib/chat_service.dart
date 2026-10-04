@@ -108,6 +108,89 @@ class ChatService {
     return chatId;
   }
 
+  Future<String> getOrCreateOfferChat({
+    required String offerId,
+    required String itemId,
+    required String itemName,
+    required String buyerId,
+    required String sellerId,
+  }) async {
+    final user = _auth.currentUser;
+
+    if (user == null) {
+      throw StateError('User must be signed in.');
+    }
+
+    if (offerId.isEmpty || itemId.isEmpty) {
+      throw ArgumentError(
+        'Offer ID and item ID are required.',
+      );
+    }
+
+    if (buyerId.isEmpty || sellerId.isEmpty) {
+      throw ArgumentError(
+        'Buyer ID and seller ID are required.',
+      );
+    }
+
+    if (buyerId == sellerId) {
+      throw StateError(
+        'Buyer and seller must be different.',
+      );
+    }
+
+    if (user.uid != sellerId) {
+      throw StateError(
+        'Only the seller can start this offer chat.',
+      );
+    }
+
+    final participants = [
+      buyerId,
+      sellerId,
+    ]..sort();
+
+    final chatId =
+        'offer_${offerId}_${itemId}_${participants[0]}_${participants[1]}';
+
+    final chatReference =
+        _firestore.collection('chats').doc(chatId);
+
+    final chatDocument =
+        await chatReference.get();
+
+    if (!chatDocument.exists) {
+      await chatReference.set({
+        'offerId': offerId,
+        'itemId': itemId,
+        'productId': 'offer_$offerId',
+        'productName': itemName,
+        'buyerId': buyerId,
+        'sellerId': sellerId,
+        'participants': [
+          buyerId,
+          sellerId,
+        ],
+        'createdAt':
+            FieldValue.serverTimestamp(),
+        'updatedAt':
+            FieldValue.serverTimestamp(),
+        'lastMessage': '',
+      });
+
+      await _notificationService.addNotification(
+        userId: buyerId,
+        title: 'محادثة جديدة',
+        message:
+            'بدأ البائع محادثة بخصوص $itemName.',
+        productId: 'offer_$offerId',
+        chatId: chatId,
+      );
+    }
+
+    return chatId;
+  }
+
   Future<void> sendMessage({
     required String chatId,
     required String text,
