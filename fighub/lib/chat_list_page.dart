@@ -7,17 +7,13 @@ import 'chat_service.dart';
 class ChatListPage extends StatelessWidget {
   final List<String> productNames;
 
-  const ChatListPage({
-    super.key,
-    required this.productNames,
-  });
+  const ChatListPage({super.key, required this.productNames});
 
   @override
   Widget build(BuildContext context) {
     final localization = AppLocalizations.of(context);
 
-    final title =
-        localization.isArabic ? 'المحادثات' : 'Messages';
+    final title = localization.isArabic ? 'المحادثات' : 'Messages';
 
     final emptyTitle = localization.isArabic
         ? 'لا توجد محادثات حتى الآن.'
@@ -38,18 +34,14 @@ class ChatListPage extends StatelessWidget {
     final chatService = ChatService();
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-      ),
+      appBar: AppBar(title: Text(title)),
       body: StreamBuilder<List<Map<String, dynamic>>>(
         stream: chatService.watchMyChats(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState ==
-              ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return Center(
               child: Column(
-                mainAxisAlignment:
-                    MainAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const CircularProgressIndicator(),
                   const SizedBox(height: 14),
@@ -66,8 +58,7 @@ class ChatListPage extends StatelessWidget {
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
                 child: Column(
-                  mainAxisAlignment:
-                      MainAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Icon(
                       Icons.error_outline,
@@ -89,9 +80,7 @@ class ChatListPage extends StatelessWidget {
                     SelectableText(
                       error,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 14,
-                      ),
+                      style: const TextStyle(fontSize: 14),
                     ),
                   ],
                 ),
@@ -104,8 +93,7 @@ class ChatListPage extends StatelessWidget {
           if (chats.isEmpty) {
             return Center(
               child: Column(
-                mainAxisAlignment:
-                    MainAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Icon(
                     Icons.chat_bubble_outline,
@@ -122,10 +110,7 @@ class ChatListPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    emptySubtitle,
-                    textAlign: TextAlign.center,
-                  ),
+                  Text(emptySubtitle, textAlign: TextAlign.center),
                 ],
               ),
             );
@@ -134,89 +119,56 @@ class ChatListPage extends StatelessWidget {
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: chats.length,
-            separatorBuilder: (_, _) =>
-                const SizedBox(height: 10),
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
             itemBuilder: (context, index) {
               final chat = chats[index];
 
-              final chatId =
-                  chat['id'] as String? ?? '';
+              final chatId = chat['id'] as String? ?? '';
 
-              final productName =
-                  chat['productName'] as String? ?? '';
+              final productName = chat['productName'] as String? ?? '';
 
-              final lastMessage =
-                  chat['lastMessage'] as String? ?? '';
+              final lastMessage = chat['lastMessage'] as String? ?? '';
 
-              return StreamBuilder<
-                  Map<String, dynamic>?>(
-                stream: chatService.watchChatPartner(
-                  chatId,
-                ),
+              return StreamBuilder<Map<String, dynamic>?>(
+                stream: chatService.watchChatPartner(chatId),
                 builder: (context, partnerSnapshot) {
-                  final partner =
-                      partnerSnapshot.data;
+                  final partner = partnerSnapshot.data;
 
-                  final partnerName =
-                      partner?['name']
-                              as String? ??
-                          '';
+                  final partnerName = partner?['name'] as String? ?? '';
 
-                  final partnerPhoto =
-                      partner?['photoUrl']
-                              as String? ??
-                          '';
+                  final partnerPhoto = partner?['photoUrl'] as String? ?? '';
 
                   return Card(
                     child: ListTile(
-                      contentPadding:
-                          const EdgeInsets.symmetric(
+                      contentPadding: const EdgeInsets.symmetric(
                         horizontal: 14,
                         vertical: 8,
                       ),
                       leading: CircleAvatar(
                         radius: 25,
-                        backgroundImage:
-                            partnerPhoto.isNotEmpty
-                                ? NetworkImage(
-                                    partnerPhoto,
-                                  )
-                                : null,
+                        backgroundImage: partnerPhoto.isNotEmpty
+                            ? NetworkImage(partnerPhoto)
+                            : null,
                         child: partnerPhoto.isEmpty
-                            ? const Icon(
-                                Icons.person_outline,
-                              )
+                            ? const Icon(Icons.person_outline)
                             : null,
                       ),
                       title: Text(
                         partnerName.isEmpty
                             ? (productName.isEmpty
-                                ? (localization.isArabic
-                                    ? 'مستخدم'
-                                    : 'User')
-                                : productName)
+                                  ? (localization.isArabic ? 'مستخدم' : 'User')
+                                  : productName)
                             : partnerName,
                         maxLines: 1,
-                        overflow:
-                            TextOverflow.ellipsis,
-                        style:
-                            const TextStyle(
-                          fontWeight:
-                              FontWeight.bold,
-                        ),
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       subtitle: Text(
-                        lastMessage.isEmpty
-                            ? openConversation
-                            : lastMessage,
+                        lastMessage.isEmpty ? openConversation : lastMessage,
                         maxLines: 1,
-                        overflow:
-                            TextOverflow.ellipsis,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      trailing: const Icon(
-                        Icons.arrow_forward_ios,
-                        size: 16,
-                      ),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                       onTap: chatId.isEmpty
                           ? null
                           : () {
@@ -225,8 +177,7 @@ class ChatListPage extends StatelessWidget {
                                 MaterialPageRoute(
                                   builder: (_) => ChatPage(
                                     chatId: chatId,
-                                    productName:
-                                        productName,
+                                    productName: productName,
                                   ),
                                 ),
                               );

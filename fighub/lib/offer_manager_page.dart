@@ -12,10 +12,7 @@ import 'seller_profile_service.dart';
 class OfferManagerPage extends StatelessWidget {
   final String offerId;
 
-  const OfferManagerPage({
-    super.key,
-    required this.offerId,
-  });
+  const OfferManagerPage({super.key, required this.offerId});
 
   @override
   Widget build(BuildContext context) {
@@ -31,9 +28,7 @@ class OfferManagerPage extends StatelessWidget {
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => OfferDetailsPage(
-                    offerId: offerId,
-                  ),
+                  builder: (_) => OfferDetailsPage(offerId: offerId),
                 ),
               );
             },
@@ -93,9 +88,7 @@ class OfferManagerPage extends StatelessWidget {
                     Navigator.of(context).pop();
 
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('تم حذف العرض بنجاح'),
-                      ),
+                      const SnackBar(content: Text('تم حذف العرض بنجاح')),
                     );
                   } catch (error) {
                     if (!context.mounted) {
@@ -103,11 +96,7 @@ class OfferManagerPage extends StatelessWidget {
                     }
 
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'تعذر حذف العرض: $error',
-                        ),
-                      ),
+                      SnackBar(content: Text('تعذر حذف العرض: $error')),
                     );
                   }
                 },
@@ -119,11 +108,8 @@ class OfferManagerPage extends StatelessWidget {
       body: StreamBuilder<Offer?>(
         stream: offerService.watchOffer(offerId),
         builder: (context, offerSnapshot) {
-          if (offerSnapshot.connectionState ==
-              ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
+          if (offerSnapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
           }
 
           if (offerSnapshot.hasError) {
@@ -142,24 +128,19 @@ class OfferManagerPage extends StatelessWidget {
           final offer = offerSnapshot.data;
 
           if (offer == null) {
-            return const Center(
-              child: Text('العرض غير موجود.'),
-            );
+            return const Center(child: Text('العرض غير موجود.'));
           }
 
           return StreamBuilder<SellerProfile?>(
-            stream: SellerProfileService()
-                .watchSellerProfile(offer.sellerId),
+            stream: SellerProfileService().watchSellerProfile(offer.sellerId),
             builder: (context, profileSnapshot) {
               final profile = profileSnapshot.data;
 
-              final sellerName =
-                  profile?.name.trim().isNotEmpty == true
-                      ? profile!.name
-                      : 'مستخدم FigHub';
+              final sellerName = profile?.name.trim().isNotEmpty == true
+                  ? profile!.name
+                  : 'مستخدم FigHub';
 
-              final hasPhoto =
-                  profile?.photoUrl.isNotEmpty == true;
+              final hasPhoto = profile?.photoUrl.isNotEmpty == true;
 
               return StreamBuilder<List<OfferItem>>(
                 stream: offerService.watchOfferItems(offerId),
@@ -167,9 +148,7 @@ class OfferManagerPage extends StatelessWidget {
                   if (itemsSnapshot.connectionState ==
                           ConnectionState.waiting &&
                       !itemsSnapshot.hasData) {
-                    return const Center(
-                      child: CircularProgressIndicator(),
-                    );
+                    return const Center(child: CircularProgressIndicator());
                   }
 
                   if (itemsSnapshot.hasError) {
@@ -188,43 +167,31 @@ class OfferManagerPage extends StatelessWidget {
                   final items = itemsSnapshot.data ?? [];
 
                   final reservedCount = items
-                      .where(
-                        (item) => item.status == 'Reserved',
-                      )
+                      .where((item) => item.status == 'Reserved')
                       .length;
 
-                  final canDelete = items.isNotEmpty &&
-                      reservedCount == items.length;
+                  final canDelete =
+                      items.isNotEmpty && reservedCount == items.length;
 
                   return Column(
                     children: [
                       Card(
-                        margin: const EdgeInsets.fromLTRB(
-                          16,
-                          16,
-                          16,
-                          8,
-                        ),
+                        margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                         child: Padding(
                           padding: const EdgeInsets.all(16),
                           child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
                                 children: [
                                   CircleAvatar(
                                     radius: 24,
                                     backgroundImage: hasPhoto
-                                        ? NetworkImage(
-                                            profile!.photoUrl,
-                                          )
+                                        ? NetworkImage(profile!.photoUrl)
                                         : null,
                                     child: hasPhoto
                                         ? null
-                                        : const Icon(
-                                            Icons.person_outline,
-                                          ),
+                                        : const Icon(Icons.person_outline),
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
@@ -234,19 +201,15 @@ class OfferManagerPage extends StatelessWidget {
                                       children: [
                                         const Text(
                                           'صاحب العرض',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                          ),
+                                          style: TextStyle(fontSize: 12),
                                         ),
                                         Text(
                                           sellerName,
                                           style: const TextStyle(
-                                            fontWeight:
-                                                FontWeight.bold,
+                                            fontWeight: FontWeight.bold,
                                             fontSize: 16,
                                           ),
-                                          overflow:
-                                              TextOverflow.ellipsis,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ],
                                     ),
@@ -268,9 +231,7 @@ class OfferManagerPage extends StatelessWidget {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              if (offer.description
-                                  .trim()
-                                  .isNotEmpty) ...[
+                              if (offer.description.trim().isNotEmpty) ...[
                                 const SizedBox(height: 8),
                                 Text(offer.description),
                               ],
@@ -295,9 +256,7 @@ class OfferManagerPage extends StatelessWidget {
                                 const SizedBox(height: 8),
                                 const Text(
                                   'جميع القطع محجوزة ويمكن حذف العرض.',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                  style: TextStyle(fontWeight: FontWeight.w600),
                                 ),
                               ],
                             ],
@@ -331,20 +290,16 @@ class OfferManagerPage extends StatelessWidget {
 
                                   return Card(
                                     child: ListTile(
-                                      leading: item.imagePaths
-                                              .isNotEmpty
+                                      leading: item.imagePaths.isNotEmpty
                                           ? ClipRRect(
                                               borderRadius:
-                                                  BorderRadius.circular(
-                                                8,
-                                              ),
+                                                  BorderRadius.circular(8),
                                               child: Image.network(
                                                 item.imagePaths.first,
                                                 width: 64,
                                                 height: 64,
                                                 fit: BoxFit.cover,
-                                                errorBuilder:
-                                                    (_, _, _) {
+                                                errorBuilder: (_, _, _) {
                                                   return const SizedBox(
                                                     width: 64,
                                                     height: 64,
@@ -359,42 +314,31 @@ class OfferManagerPage extends StatelessWidget {
                                           : const SizedBox(
                                               width: 64,
                                               height: 64,
-                                              child: Icon(
-                                                Icons.image_outlined,
-                                              ),
+                                              child: Icon(Icons.image_outlined),
                                             ),
                                       title: Text(item.name),
-                                      subtitle: StreamBuilder<
-                                          List<Map<String, dynamic>>>(
+                                      subtitle: StreamBuilder<List<Map<String, dynamic>>>(
                                         stream: offerService
                                             .watchItemReservations(
-                                          offerId: offerId,
-                                          itemId: item.id!,
-                                        ),
-                                        builder: (
-                                          context,
-                                          reservationSnapshot,
-                                        ) {
+                                              offerId: offerId,
+                                              itemId: item.id!,
+                                            ),
+                                        builder: (context, reservationSnapshot) {
                                           final reservations =
-                                              reservationSnapshot.data ??
-                                                  [];
+                                              reservationSnapshot.data ?? [];
 
-                                          final activeReservation =
-                                              reservations
-                                                  .cast<
-                                                      Map<String,
-                                                          dynamic>?>()
-                                                  .firstWhere(
-                                                    (reservation) =>
-                                                        reservation?[
-                                                                'status'] ==
-                                                            'Active',
-                                                    orElse: () => null,
-                                                  );
+                                          final activeReservation = reservations
+                                              .cast<Map<String, dynamic>?>()
+                                              .firstWhere(
+                                                (reservation) =>
+                                                    reservation?['status'] ==
+                                                    'Active',
+                                                orElse: () => null,
+                                              );
 
                                           final reservedBy =
-                                              activeReservation?[
-                                                  'userId'] as String?;
+                                              activeReservation?['userId']
+                                                  as String?;
 
                                           if (reservedBy == null) {
                                             return Text(
@@ -403,21 +347,15 @@ class OfferManagerPage extends StatelessWidget {
                                             );
                                           }
 
-                                          return StreamBuilder<
-                                              SellerProfile?>(
+                                          return StreamBuilder<SellerProfile?>(
                                             stream: SellerProfileService()
-                                                .watchSellerProfile(
-                                              reservedBy,
-                                            ),
-                                            builder: (
-                                              context,
-                                              profileSnapshot,
-                                            ) {
+                                                .watchSellerProfile(reservedBy),
+                                            builder: (context, profileSnapshot) {
                                               final profile =
                                                   profileSnapshot.data;
 
-                                              final name = profile
-                                                          ?.name
+                                              final name =
+                                                  profile?.name
                                                           .trim()
                                                           .isNotEmpty ==
                                                       true
@@ -426,30 +364,29 @@ class OfferManagerPage extends StatelessWidget {
 
                                               return Column(
                                                 crossAxisAlignment:
-                                                    CrossAxisAlignment
-                                                        .start,
+                                                    CrossAxisAlignment.start,
                                                 children: [
                                                   Text(
                                                     '${item.price} جنيه • '
                                                     '${item.status}',
                                                   ),
-                                                  const SizedBox(
-                                                    height: 6,
-                                                  ),
+                                                  const SizedBox(height: 6),
                                                   Row(
                                                     children: [
                                                       CircleAvatar(
                                                         radius: 16,
                                                         backgroundImage:
-                                                            profile?.photoUrl
-                                                                        .isNotEmpty ==
-                                                                    true
-                                                                ? NetworkImage(
-                                                                    profile!
-                                                                        .photoUrl,
-                                                                  )
-                                                                : null,
-                                                        child: profile
+                                                            profile
+                                                                    ?.photoUrl
+                                                                    .isNotEmpty ==
+                                                                true
+                                                            ? NetworkImage(
+                                                                profile!
+                                                                    .photoUrl,
+                                                              )
+                                                            : null,
+                                                        child:
+                                                            profile
                                                                     ?.photoUrl
                                                                     .isNotEmpty ==
                                                                 true
@@ -460,27 +397,24 @@ class OfferManagerPage extends StatelessWidget {
                                                                 size: 18,
                                                               ),
                                                       ),
-                                                      const SizedBox(
-                                                        width: 8,
-                                                      ),
+                                                      const SizedBox(width: 8),
                                                       Expanded(
                                                         child: InkWell(
-                                                          onTap:
-                                                              () async {
+                                                          onTap: () async {
                                                             try {
-                                                              final chatId =
-                                                                  await ChatService()
-                                                                      .getOrCreateOfferChat(
+                                                              final chatId = await ChatService().getOrCreateOfferChat(
                                                                 offerId:
                                                                     offerId,
                                                                 itemId:
                                                                     item.id!,
                                                                 itemName:
                                                                     item.name,
+                                                                imagePaths: item
+                                                                    .imagePaths,
                                                                 buyerId:
                                                                     reservedBy,
-                                                                sellerId:
-                                                                    offer.sellerId,
+                                                                sellerId: offer
+                                                                    .sellerId,
                                                               );
 
                                                               if (!context
@@ -488,14 +422,11 @@ class OfferManagerPage extends StatelessWidget {
                                                                 return;
                                                               }
 
-                                                              await Navigator
-                                                                  .of(
+                                                              await Navigator.of(
                                                                 context,
                                                               ).push(
                                                                 MaterialPageRoute(
-                                                                  builder:
-                                                                      (_) =>
-                                                                          ChatPage(
+                                                                  builder: (_) => ChatPage(
                                                                     chatId:
                                                                         chatId,
                                                                     productName:
@@ -509,13 +440,11 @@ class OfferManagerPage extends StatelessWidget {
                                                                 return;
                                                               }
 
-                                                              ScaffoldMessenger
-                                                                  .of(
+                                                              ScaffoldMessenger.of(
                                                                 context,
                                                               ).showSnackBar(
                                                                 SnackBar(
-                                                                  content:
-                                                                      Text(
+                                                                  content: Text(
                                                                     'تعذر فتح المحادثة: $e',
                                                                   ),
                                                                 ),
@@ -523,31 +452,24 @@ class OfferManagerPage extends StatelessWidget {
                                                             }
                                                           },
                                                           borderRadius:
-                                                              BorderRadius
-                                                                  .circular(
-                                                            8,
-                                                          ),
-                                                          child:
-                                                              Padding(
+                                                              BorderRadius.circular(
+                                                                8,
+                                                              ),
+                                                          child: Padding(
                                                             padding:
-                                                                const EdgeInsets
-                                                                    .symmetric(
-                                                              vertical: 4,
-                                                            ),
-                                                            child:
-                                                                Text(
+                                                                const EdgeInsets.symmetric(
+                                                                  vertical: 4,
+                                                                ),
+                                                            child: Text(
                                                               'محجوز بواسطة: '
                                                               '$name',
                                                               overflow:
                                                                   TextOverflow
                                                                       .ellipsis,
-                                                              style:
-                                                                  TextStyle(
+                                                              style: TextStyle(
                                                                 color: Theme.of(
                                                                   context,
-                                                                )
-                                                                    .colorScheme
-                                                                    .primary,
+                                                                ).colorScheme.primary,
                                                                 fontWeight:
                                                                     FontWeight
                                                                         .w600,
@@ -564,9 +486,7 @@ class OfferManagerPage extends StatelessWidget {
                                           );
                                         },
                                       ),
-                                      trailing: Text(
-                                        item.condition,
-                                      ),
+                                      trailing: Text(item.condition),
                                     ),
                                   );
                                 },
@@ -584,9 +504,7 @@ class OfferManagerPage extends StatelessWidget {
         onPressed: () {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => AddOfferItemPage(
-                offerId: offerId,
-              ),
+              builder: (_) => AddOfferItemPage(offerId: offerId),
             ),
           );
         },
