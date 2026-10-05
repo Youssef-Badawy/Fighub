@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'interests.dart';
 import 'notification_service.dart';
 import 'offer_model.dart';
 
@@ -71,6 +72,68 @@ class OfferService {
     return itemReference.id;
   }
 
+  Future<void> deleteOffer(String offerId) async {
+    final uid = _uid;
+
+    if (offerId.isEmpty) {
+      throw ArgumentError('Offer ID is required.');
+    }
+
+    final offerReference = _offers.doc(offerId);
+    final offerSnapshot = await offerReference.get();
+
+    if (!offerSnapshot.exists) {
+      throw StateError('Offer not found.');
+    }
+
+    final offerData = offerSnapshot.data() ?? {};
+
+    if (offerData['sellerId'] != uid) {
+      throw StateError(
+        'You can only delete your own offers.',
+      );
+    }
+
+    final itemsSnapshot =
+        await offerReference.collection('items').get();
+
+    if (itemsSnapshot.docs.isEmpty) {
+      throw StateError(
+        'Add at least one item before deleting the offer.',
+      );
+    }
+
+    final allReserved = itemsSnapshot.docs.every(
+      (document) {
+        final data = document.data();
+        return data['status'] == 'Reserved';
+      },
+    );
+
+    if (!allReserved) {
+      throw StateError(
+        'All offer items must be reserved before deleting the offer.',
+      );
+    }
+
+    final batch = _firestore.batch();
+
+    for (final item in itemsSnapshot.docs) {
+      final reservationsSnapshot =
+          await item.reference.collection('reservations').get();
+
+      for (final reservation in reservationsSnapshot.docs) {
+        batch.delete(reservation.reference);
+      }
+
+      batch.delete(item.reference);
+    }
+
+    batch.delete(offerReference);
+
+    await batch.commit();
+  }
+
   Stream<List<Offer>> watchOffers() {
     return _offers
         .orderBy('createdAt', descending: true)
@@ -80,6 +143,56 @@ class OfferService {
               .map(Offer.fromFirestore)
               .toList(),
         );
+  }
+
+  Stream<List<Offer>> watchRecommendedOffers(
+    List<String> interests,
+  ) {
+    final normalizedInterests = interests
+        .map((interest) => interest.trim())
+        .where((interest) => interest.isNotEmpty)
+        .toList();
+
+    if (normalizedInterests.isEmpty) {
+      return Stream.value(
+        const <Offer>[],
+      );
+    }
+
+    return watchOffers().asyncMap(
+      (offers) async {
+        final recommended = <Offer>[];
+
+        for (final offer in offers) {
+          if (offer.id == null || offer.id!.isEmpty) {
+            continue;
+          }
+
+          final items = await watchOfferItems(
+            offer.id!,
+          ).first;
+
+          final hasMatch = items.any(
+            (item) {
+              return normalizedInterests.any(
+                (interest) {
+                  return FigHubInterests.matchesInterest(
+                    interest: interest,
+                    category: item.category,
+                  );
+                },
+              );
+            },
+          );
+
+          if (hasMatch) {
+            recommended.add(offer);
+          }
+        }
+
+        return recommended;
+      },
+    );
   }
 
   Stream<Offer?> watchOffer(String offerId) {

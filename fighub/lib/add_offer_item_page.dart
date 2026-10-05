@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'interests.dart';
+
 import 'cloudinary_service.dart';
 import 'offer_model.dart';
 import 'offer_service.dart';
@@ -33,15 +35,7 @@ class _AddOfferItemPageState extends State<AddOfferItemPage> {
   String _condition = 'Used';
   bool _isSaving = false;
 
-  final List<String> _categories = [
-    'Marvel',
-    'DC',
-    'Anime',
-    'Star Wars',
-    'Gaming',
-    'Movies',
-    'Other',
-  ];
+  final List<String> _categories = FigHubInterests.all;
 
   final List<String> _conditions = [
     'New',

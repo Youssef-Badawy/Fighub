@@ -142,6 +142,40 @@ class ProductService {
         );
   }
 
+  Stream<List<Product>> watchRecommendedProducts(
+    List<String> interests,
+  ) {
+    final normalizedInterests = interests
+        .map((interest) => interest.trim().toLowerCase())
+        .where((interest) => interest.isNotEmpty)
+        .toSet();
+
+    return watchProducts().map((products) {
+      if (normalizedInterests.isEmpty) {
+        return products;
+      }
+
+      final recommended = <Product>[];
+      final others = <Product>[];
+
+      for (final product in products) {
+        final category =
+            product.category.trim().toLowerCase();
+
+        if (normalizedInterests.contains(category)) {
+          recommended.add(product);
+        } else {
+          others.add(product);
+        }
+      }
+
+      return [
+        ...recommended,
+        ...others,
+      ];
+    });
+  }
+
   Stream<List<Product>> watchSellerProducts(
     String sellerId,
   ) {

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'offer_manager_page.dart';
 import 'offer_model.dart';
 import 'offer_service.dart';
+import 'seller_profile_service.dart';
 
 class OfferDetailsPage extends StatelessWidget {
   final String offerId;
@@ -50,16 +52,80 @@ class OfferDetailsPage extends StatelessWidget {
           }
 
           final isActive = offerService.isOfferActive(offer);
+          final currentUserId =
+              FirebaseAuth.instance.currentUser?.uid;
+          final isOwner = currentUserId == offer.sellerId;
 
-          return Column(
-            children: [
-              Card(
+          return StreamBuilder<SellerProfile?>(
+            stream: SellerProfileService()
+                .watchSellerProfile(offer.sellerId),
+            builder: (context, profileSnapshot) {
+              final profile = profileSnapshot.data;
+
+              final sellerName =
+                  profile?.name.trim().isNotEmpty == true
+                      ? profile!.name
+                      : 'مستخدم FigHub';
+
+              final hasPhoto =
+                  profile?.photoUrl.isNotEmpty == true;
+
+              return Column(
+                children: [
+                  Card(
                 margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 22,
+                            backgroundImage: hasPhoto
+                                ? NetworkImage(profile!.photoUrl)
+                                : null,
+                            child: hasPhoto
+                                ? null
+                                : const Icon(
+                                    Icons.person_outline,
+                                  ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'صاحب العرض',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                Text(
+                                  sellerName,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  overflow:
+                                      TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (isOwner)
+                            const Chip(
+                              avatar: Icon(
+                                Icons.storefront_outlined,
+                                size: 18,
+                              ),
+                              label: Text('عرضي'),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
                       Text(
                         offer.title,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -88,6 +154,28 @@ class OfferDetailsPage extends StatelessWidget {
                             ),
                         ],
                       ),
+                      if (isOwner) ...[
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      OfferManagerPage(
+                                    offerId: offerId,
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(
+                              Icons.settings_outlined,
+                            ),
+                            label: const Text('إدارة العرض'),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -453,8 +541,10 @@ class OfferDetailsPage extends StatelessWidget {
                     );
                   },
                 ),
-              ),
-            ],
+                  ),
+                ],
+              );
+            },
           );
         },
       ),

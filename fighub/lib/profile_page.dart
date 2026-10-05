@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'product_model.dart';
@@ -7,6 +9,9 @@ import 'app_localizations.dart';
 import 'auth_manager.dart';
 import 'account_page.dart';
 import 'auth_profile_header.dart';
+import 'interests_page.dart';
+import 'verification_page.dart';
+import 'admin_verification_page.dart';
 
 class ProfilePage extends StatelessWidget {
   final List<Product> products;
@@ -138,6 +143,131 @@ class ProfilePage extends StatelessWidget {
               ),
               onTap: onFavorites,
             ),
+          ),
+
+          const SizedBox(height: 10),
+
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.interests_outlined),
+              title: Text(
+                settings.isArabic
+                    ? 'الاهتمامات'
+                    : 'Interests',
+              ),
+              subtitle: Text(
+                settings.isArabic
+                    ? 'اختر أنواع الشخصيات التي تهمك'
+                    : 'Choose the types of figures you like',
+              ),
+              trailing: const Icon(
+                Icons.arrow_forward_ios,
+                size: 16,
+              ),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => InterestsPage(
+                      authManager: authManager,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          Card(
+            child: ListTile(
+              leading: const Icon(
+                Icons.verified_outlined,
+              ),
+              title: Text(
+                settings.isArabic
+                    ? 'توثيق الحساب'
+                    : 'Verification',
+              ),
+              subtitle: Text(
+                settings.isArabic
+                    ? 'قدّم طلب توثيق حسابك'
+                    : 'Apply to become a verified seller',
+              ),
+              trailing: const Icon(
+                Icons.arrow_forward_ios,
+                size: 16,
+              ),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const VerificationPage(),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            future: () async {
+              final user =
+                  FirebaseAuth.instance.currentUser;
+
+              if (user == null) {
+                return FirebaseFirestore.instance
+                    .collection('users')
+                    .doc('__no_user__')
+                    .get();
+              }
+
+              return FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(user.uid)
+                  .get();
+            }(),
+            builder: (context, snapshot) {
+              final isAdmin =
+                  snapshot.data?.data()?['role'] == 'admin';
+
+              if (!isAdmin) {
+                return const SizedBox.shrink();
+              }
+
+              return Card(
+                child: ListTile(
+                  leading: const Icon(
+                    Icons.admin_panel_settings_outlined,
+                  ),
+                  title: Text(
+                    settings.isArabic
+                        ? 'إدارة التوثيق'
+                        : 'Verification Admin',
+                  ),
+                  subtitle: Text(
+                    settings.isArabic
+                        ? 'مراجعة طلبات توثيق الحسابات'
+                        : 'Review verification requests',
+                  ),
+                  trailing: const Icon(
+                    Icons.arrow_forward_ios,
+                    size: 16,
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const AdminVerificationPage(),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
           ),
 
           const SizedBox(height: 10),

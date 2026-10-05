@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'auth_manager.dart';
+import 'interests_page.dart';
 
 class AuthPage extends StatefulWidget {
   final AuthManager authManager;
@@ -60,6 +61,18 @@ class _AuthPageState extends State<AuthPage> {
           email: emailController.text.trim(),
           phone: phoneController.text.trim(),
           password: passwordController.text,
+        );
+
+        if (!mounted) {
+          return;
+        }
+
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => InterestsPage(
+              authManager: widget.authManager,
+            ),
+          ),
         );
       }
     } on FirebaseAuthException catch (error) {

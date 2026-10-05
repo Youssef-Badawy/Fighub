@@ -20,12 +20,14 @@ class AuthManager extends ChangeNotifier {
   String _email = '';
   String _phone = '';
   String _photoUrl = '';
+  List<String> _interests = [];
 
   bool get isLoggedIn => _isLoggedIn;
   String get name => _name;
   String get email => _email;
   String get phone => _phone;
   String get photoUrl => _photoUrl;
+  List<String> get interests => List.unmodifiable(_interests);
 
   Future<void> load() async {
     final user = _auth.currentUser;
@@ -36,6 +38,7 @@ class AuthManager extends ChangeNotifier {
       _email = '';
       _phone = '';
       _photoUrl = '';
+      _interests = [];
       notifyListeners();
       return;
     }
@@ -59,11 +62,19 @@ class AuthManager extends ChangeNotifier {
             data?['phone'] as String? ?? _phone;
         _photoUrl =
             data?['photoUrl'] as String? ?? _photoUrl;
+
+        final rawInterests = data?['interests'];
+
+        _interests = rawInterests is List
+            ? rawInterests.whereType<String>().toList()
+            : [];
       } else {
         _name = user.displayName ?? '';
+        _interests = [];
       }
     } catch (_) {
       _name = user.displayName ?? '';
+      _interests = [];
     }
 
     await _syncSellerProfile();
@@ -76,6 +87,7 @@ class AuthManager extends ChangeNotifier {
     required String email,
     required String phone,
     required String password,
+    List<String> interests = const [],
   }) async {
     final credential =
         await _auth.createUserWithEmailAndPassword(
@@ -102,6 +114,7 @@ class AuthManager extends ChangeNotifier {
       'email': email,
       'phone': phone,
       'photoUrl': '',
+      'interests': interests,
       'createdAt': FieldValue.serverTimestamp(),
     });
 
@@ -110,6 +123,7 @@ class AuthManager extends ChangeNotifier {
     _email = email;
     _phone = phone;
     _photoUrl = '';
+    _interests = List<String>.from(interests);
 
     await _syncSellerProfile();
 
@@ -153,8 +167,15 @@ class AuthManager extends ChangeNotifier {
           data?['phone'] as String? ?? _phone;
       _photoUrl =
           data?['photoUrl'] as String? ?? _photoUrl;
+
+      final rawInterests = data?['interests'];
+
+      _interests = rawInterests is List
+          ? rawInterests.whereType<String>().toList()
+          : [];
     } else {
       _name = user.displayName ?? '';
+      _interests = [];
     }
 
     await _syncSellerProfile();
@@ -170,6 +191,7 @@ class AuthManager extends ChangeNotifier {
     _email = '';
     _phone = '';
     _photoUrl = '';
+    _interests = [];
 
     notifyListeners();
   }
@@ -178,6 +200,7 @@ class AuthManager extends ChangeNotifier {
     required String name,
     required String email,
     required String phone,
+    List<String>? interests,
   }) async {
     final user = _auth.currentUser;
 
@@ -194,22 +217,60 @@ class AuthManager extends ChangeNotifier {
 
     await user.updateDisplayName(name);
 
-    await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .set({
+    final updates = <String, dynamic>{
       'name': name,
       'email': email,
       'phone': phone,
       'photoUrl': _photoUrl,
       'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    };
+
+    if (interests != null) {
+      updates['interests'] = interests;
+    }
+
+    await _firestore
+        .collection('users')
+        .doc(user.uid)
+        .set(
+          updates,
+          SetOptions(merge: true),
+        );
 
     _name = name;
     _email = email;
     _phone = phone;
 
+    if (interests != null) {
+      _interests = List<String>.from(interests);
+    }
+
     await _syncSellerProfile();
+
+    notifyListeners();
+  }
+
+  Future<void> updateInterests(
+    List<String> interests,
+  ) async {
+    final user = _auth.currentUser;
+
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'not-authenticated',
+        message: 'User is not signed in.',
+      );
+    }
+
+    await _firestore
+        .collection('users')
+        .doc(user.uid)
+        .set({
+      'interests': interests,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    _interests = List<String>.from(interests);
 
     notifyListeners();
   }

@@ -80,6 +80,17 @@ class SellerProfileService {
     return SellerProfile.fromFirestore(document);
   }
 
+  Stream<List<SellerProfile>> watchAllSellerProfiles() {
+    return _sellerProfilesCollection
+        .orderBy('name')
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map(SellerProfile.fromFirestore)
+          .toList();
+    });
+  }
+
   Stream<SellerProfile?> watchSellerProfile(
     String sellerId,
   ) {

@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
+import 'interests.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'app_localizations.dart';
@@ -519,14 +521,7 @@ class _AddProductPageState extends State<AddProductPage> {
                 labelText: categoryLabel,
                 border: const OutlineInputBorder(),
               ),
-              items: [
-                'Marvel',
-                'DC',
-                'Game of Thrones',
-                'Anime',
-                'Star Wars',
-                'Other',
-              ].map((value) {
+              items: FigHubInterests.all.map((value) {
                 return DropdownMenuItem(
                   value: value,
                   child: Text(

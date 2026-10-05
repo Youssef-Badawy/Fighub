@@ -68,6 +68,36 @@ service cloud.firestore {
         allow delete: if request.auth != null
                       && request.auth.uid == userId;
       }
+
+      match /following/{followingUserId} {
+
+        allow read: if request.auth != null;
+
+        allow create: if request.auth != null
+                      && request.auth.uid == userId
+                      && request.resource.data.userId
+                         == followingUserId;
+
+        allow delete: if request.auth != null
+                      && request.auth.uid == userId;
+
+        allow update: if false;
+      }
+
+      match /followers/{followerUserId} {
+
+        allow read: if request.auth != null;
+
+        allow create: if request.auth != null
+                      && request.auth.uid == followerUserId
+                      && request.resource.data.userId
+                         == followerUserId;
+
+        allow delete: if request.auth != null
+                      && request.auth.uid == followerUserId;
+
+        allow update: if false;
+      }
     }
 
 
@@ -231,9 +261,97 @@ service cloud.firestore {
                         && request.resource.data.userId
                            == request.auth.uid;
 
-          allow delete: if false;
+          allow delete: if request.auth != null
+                        && get(
+                          /databases/$(database)/documents/offers/$(offerId)
+                        ).data.sellerId
+                           == request.auth.uid;
         }
       }
+    }
+
+    match /verification_requests/{requestId} {
+
+      allow read: if request.auth != null
+                  && (
+                    resource.data.userId == request.auth.uid
+                    ||
+                    get(
+                      /databases/$(database)/documents/users/$(request.auth.uid)
+                    ).data.role == 'admin'
+                  );
+
+      allow create: if request.auth != null
+                    && request.resource.data.userId
+                       == request.auth.uid
+                    && request.resource.data.planId is string
+                    && (
+                      request.resource.data.planId
+                        == 'monthly'
+                      ||
+                      request.resource.data.planId
+                        == 'three_months'
+                    )
+                    && request.resource.data.amount is int
+                    && (
+                      (
+                        request.resource.data.planId
+                          == 'monthly'
+                        &&
+                        request.resource.data.amount
+                          == 100
+                      )
+                      ||
+                      (
+                        request.resource.data.planId
+                          == 'three_months'
+                        &&
+                        request.resource.data.amount
+                          == 200
+                      )
+                    )
+                    && request.resource.data.durationMonths
+                       is int
+                    && (
+                      (
+                        request.resource.data.planId
+                          == 'monthly'
+                        &&
+                        request.resource.data.durationMonths
+                          == 1
+                      )
+                      ||
+                      (
+                        request.resource.data.planId
+                          == 'three_months'
+                        &&
+                        request.resource.data.durationMonths
+                          == 3
+                      )
+                    )
+                    && request.resource.data.status
+                       == 'Pending'
+                    && request.resource.data.paymentProofUrl
+                       is string
+                    && request.resource.data.paymentProofUrl
+                       != ''
+                    && request.resource.data.rejectionReason
+                       == ''
+                    && request.resource.data.reviewedAt
+                       == null
+                    && request.resource.data.startsAt
+                       == null
+                    && request.resource.data.expiresAt
+                       == null;
+
+      allow update: if request.auth != null
+                    && get(
+                      /databases/$(database)/documents/users/$(request.auth.uid)
+                    ).data.role == 'admin'
+                    && request.resource.data.userId
+                       == resource.data.userId;
+
+      allow delete: if false;
     }
 
     match /chats/{chatId} {
