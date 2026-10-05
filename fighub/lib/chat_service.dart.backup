@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'notification_service.dart';
-import 'worker_push_service.dart';
 
 class ChatService {
   final FirebaseFirestore _firestore =
@@ -12,9 +11,6 @@ class ChatService {
 
   final NotificationService _notificationService =
       NotificationService();
-
-  final WorkerPushService _workerPushService =
-      WorkerPushService();
 
   String? get currentUserId {
     return _auth.currentUser?.uid;
@@ -276,17 +272,6 @@ class ChatService {
       productId: productId,
       chatId: chatId,
     );
-
-    try {
-      await _workerPushService.sendPush(
-        userId: recipientId,
-        title: 'رسالة جديدة',
-        message: '$productName: $message',
-      );
-    } catch (_) {
-      // Push notification failure must not prevent
-      // the chat message from being saved successfully.
-    }
   }
 
   Future<void> deleteMessage({
