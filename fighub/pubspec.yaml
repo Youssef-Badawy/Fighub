@@ -18,6 +18,8 @@ dependencies:
   firebase_auth: ^6.7.0
   cloud_firestore: ^6.10.0
   http: ^1.6.0
+  firebase_messaging: ^16.7.0
+  onesignal_flutter: ^5.7.0
 
 dev_dependencies:
   flutter_test:

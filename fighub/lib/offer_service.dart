@@ -103,17 +103,23 @@ class OfferService {
       );
     }
 
-    final allReserved = itemsSnapshot.docs.every(
-      (document) {
-        final data = document.data();
-        return data['status'] == 'Reserved';
-      },
-    );
+    for (final item in itemsSnapshot.docs) {
+      final reservationsSnapshot =
+          await item.reference.collection('reservations').get();
 
-    if (!allReserved) {
-      throw StateError(
-        'All offer items must be reserved before deleting the offer.',
+      final hasActiveReservation =
+          reservationsSnapshot.docs.any(
+        (reservation) {
+          final data = reservation.data();
+          return data['status'] == 'Active';
+        },
       );
+
+      if (hasActiveReservation) {
+        throw StateError(
+          'This offer has an active reservation and cannot be deleted.',
+        );
+      }
     }
 
     final batch = _firestore.batch();

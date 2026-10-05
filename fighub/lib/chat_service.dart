@@ -274,6 +274,128 @@ class ChatService {
     );
   }
 
+  Future<void> deleteMessage({
+    required String chatId,
+    required String messageId,
+  }) async {
+    final user = _auth.currentUser;
+
+    if (user == null ||
+        chatId.isEmpty ||
+        messageId.isEmpty) {
+      return;
+    }
+
+    final messageReference = _messagesCollection(chatId)
+        .doc(messageId);
+
+    final messageSnapshot =
+        await messageReference.get();
+
+    if (!messageSnapshot.exists) {
+      return;
+    }
+
+    final messageData =
+        messageSnapshot.data() ?? {};
+
+    if (messageData['senderId'] != user.uid) {
+      throw StateError(
+        'You can only delete your own messages.',
+      );
+    }
+
+    await messageReference.delete();
+
+    final latestMessages =
+        await _messagesCollection(chatId)
+            .orderBy(
+              'createdAt',
+              descending: true,
+            )
+            .limit(1)
+            .get();
+
+    final latestMessage =
+        latestMessages.docs.isEmpty
+            ? null
+            : latestMessages.docs.first.data();
+
+    await _firestore
+        .collection('chats')
+        .doc(chatId)
+        .update({
+      'lastMessage':
+          latestMessage?['text'] as String? ?? '',
+      'updatedAt':
+          FieldValue.serverTimestamp(),
+    });
+  }
+
+  Stream<Map<String, dynamic>?> watchChatPartner(
+    String chatId,
+  ) {
+    final user = _auth.currentUser;
+
+    if (user == null || chatId.isEmpty) {
+      return Stream.value(null);
+    }
+
+    return _firestore
+        .collection('chats')
+        .doc(chatId)
+        .snapshots()
+        .asyncMap((chatSnapshot) async {
+      if (!chatSnapshot.exists) {
+        return null;
+      }
+
+      final data = chatSnapshot.data() ?? {};
+      final participants = data['participants'];
+
+      if (participants is! List) {
+        return null;
+      }
+
+      final participantIds =
+          participants.whereType<String>().toList();
+
+      final otherUserId = participantIds.firstWhere(
+        (id) => id != user.uid,
+        orElse: () => '',
+      );
+
+      if (otherUserId.isEmpty) {
+        return null;
+      }
+
+      final profileSnapshot =
+          await _firestore
+              .collection('seller_profiles')
+              .doc(otherUserId)
+              .get();
+
+      if (!profileSnapshot.exists) {
+        return {
+          'id': otherUserId,
+          'name': '',
+          'photoUrl': '',
+        };
+      }
+
+      final profile =
+          profileSnapshot.data() ?? {};
+
+      return {
+        'id': otherUserId,
+        'name':
+            profile['name'] as String? ?? '',
+        'photoUrl':
+            profile['photoUrl'] as String? ?? '',
+      };
+    });
+  }
+
   Stream<List<Map<String, dynamic>>> watchMessages(
     String chatId,
   ) {

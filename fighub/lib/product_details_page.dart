@@ -650,9 +650,17 @@ class _ProductDetailsPageState
                 });
               },
               itemBuilder: (context, index) {
-                return _buildImageItem(
-                  images[index],
-                  noImage,
+                return GestureDetector(
+                  onTap: () {
+                    _openFullScreenGallery(
+                      images,
+                      index,
+                    );
+                  },
+                  child: _buildImageItem(
+                    images[index],
+                    noImage,
+                  ),
                 );
               },
             ),
@@ -722,6 +730,20 @@ class _ProductDetailsPageState
           ),
         ],
       ],
+    );
+  }
+
+  void _openFullScreenGallery(
+    List<String> images,
+    int initialIndex,
+  ) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _FullScreenImageGallery(
+          images: images,
+          initialIndex: initialIndex,
+        ),
+      ),
     );
   }
 
@@ -1045,6 +1067,149 @@ class _InfoRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+class _FullScreenImageGallery extends StatefulWidget {
+  final List<String> images;
+  final int initialIndex;
+
+  const _FullScreenImageGallery({
+    required this.images,
+    required this.initialIndex,
+  });
+
+  @override
+  State<_FullScreenImageGallery> createState() =>
+      _FullScreenImageGalleryState();
+}
+
+class _FullScreenImageGalleryState
+    extends State<_FullScreenImageGallery> {
+  late final PageController _pageController;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _currentIndex = widget.initialIndex;
+
+    _pageController = PageController(
+      initialPage: widget.initialIndex,
+    );
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  Widget _buildImage(String imagePath) {
+    final isNetworkImage =
+        imagePath.startsWith('http://') ||
+        imagePath.startsWith('https://');
+
+    if (isNetworkImage) {
+      return InteractiveViewer(
+        minScale: 1,
+        maxScale: 4,
+        child: Image.network(
+          imagePath,
+          fit: BoxFit.contain,
+          errorBuilder: (
+            context,
+            error,
+            stackTrace,
+          ) {
+            return const Center(
+              child: Icon(
+                Icons.broken_image_outlined,
+                size: 70,
+                color: Colors.white54,
+              ),
+            );
+          },
+          loadingBuilder: (
+            context,
+            child,
+            loadingProgress,
+          ) {
+            if (loadingProgress == null) {
+              return child;
+            }
+
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          },
+        ),
+      );
+    }
+
+    final file = File(imagePath);
+
+    if (!file.existsSync()) {
+      return const Center(
+        child: Icon(
+          Icons.broken_image_outlined,
+          size: 70,
+          color: Colors.white54,
+        ),
+      );
+    }
+
+    return InteractiveViewer(
+      minScale: 1,
+      maxScale: 4,
+      child: Image.file(
+        file,
+        fit: BoxFit.contain,
+        errorBuilder: (
+          context,
+          error,
+          stackTrace,
+        ) {
+          return const Center(
+            child: Icon(
+              Icons.broken_image_outlined,
+              size: 70,
+              color: Colors.white54,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text(
+          '${_currentIndex + 1} / ${widget.images.length}',
+        ),
+      ),
+      body: PageView.builder(
+        controller: _pageController,
+        itemCount: widget.images.length,
+        onPageChanged: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        itemBuilder: (context, index) {
+          return Center(
+            child: _buildImage(
+              widget.images[index],
+            ),
+          );
+        },
+      ),
     );
   }
 }

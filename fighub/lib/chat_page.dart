@@ -111,19 +111,94 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
+  Future<void> _deleteMessage(
+    String messageId,
+  ) async {
+    try {
+      await _chatService.deleteMessage(
+        chatId: widget.chatId,
+        messageId: messageId,
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'لا يمكنك حذف هذه الرسالة.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _confirmDeleteMessage(
+    Map<String, dynamic> message,
+  ) async {
+    final messageId =
+        message['id'] as String? ?? '';
+
+    if (messageId.isEmpty) {
+      return;
+    }
+
+    final senderId =
+        message['senderId'] as String? ?? '';
+
+    if (senderId != _chatService.currentUserId) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Delete message'),
+          content: const Text(
+            'Do you want to delete this message?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      await _deleteMessage(messageId);
+    }
+  }
+
   Widget _buildMessageBubble(
     BuildContext context,
     Map<String, dynamic> message,
   ) {
-    final senderId = message['senderId'] as String? ?? '';
-    final text = message['text'] as String? ?? '';
+    final senderId =
+        message['senderId'] as String? ?? '';
+
+    final text =
+        message['text'] as String? ?? '';
 
     final currentUserId =
         _chatService.currentUserId;
 
-    final isMine = senderId == currentUserId;
+    final isMine =
+        senderId == currentUserId;
 
-    return Align(
+    final bubble = Align(
       alignment: isMine
           ? AlignmentDirectional.centerEnd
           : AlignmentDirectional.centerStart,
@@ -155,14 +230,23 @@ class _ChatPageState extends State<ChatPage> {
         ),
       ),
     );
+
+    if (!isMine) {
+      return bubble;
+    }
+
+    return GestureDetector(
+      onLongPress: () {
+        _confirmDeleteMessage(message);
+      },
+      child: bubble,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final localization = AppLocalizations.of(context);
     final isArabic = localization.isArabic;
-
-    final chatTitle = isArabic ? 'المحادثة' : 'Chat';
 
     final sendMessageHint =
         isArabic ? 'اكتب رسالة...' : 'Type a message...';
@@ -184,8 +268,49 @@ class _ChatPageState extends State<ChatPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          '$chatTitle - ${widget.productName}',
+        title: StreamBuilder<Map<String, dynamic>?>(
+          stream: _chatService.watchChatPartner(
+            widget.chatId,
+          ),
+          builder: (context, snapshot) {
+            final partner =
+                snapshot.data;
+
+            final partnerName =
+                partner?['name'] as String? ?? '';
+
+            final partnerPhoto =
+                partner?['photoUrl'] as String? ?? '';
+
+            return Row(
+              children: [
+                CircleAvatar(
+                  radius: 19,
+                  backgroundImage:
+                      partnerPhoto.isNotEmpty
+                          ? NetworkImage(partnerPhoto)
+                          : null,
+                  child: partnerPhoto.isEmpty
+                      ? const Icon(
+                          Icons.person_outline,
+                          size: 21,
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    partnerName.isEmpty
+                        ? widget.productName
+                        : partnerName,
+                    maxLines: 1,
+                    overflow:
+                        TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
       body: Column(

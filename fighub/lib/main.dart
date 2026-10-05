@@ -26,6 +26,8 @@ import 'offer_service.dart';
 import 'product_details_page.dart';
 import 'product_model.dart';
 import 'product_service.dart';
+import 'push_notification_service.dart';
+import 'one_signal_service.dart';
 import 'profile_page.dart';
 import 'search_service.dart';
 import 'seller_dashboard_page.dart';
@@ -170,6 +172,11 @@ class _FigHubHomeState extends State<FigHubHome> {
   final List<String> _notifications = [];
 
   final ProductService _productService = ProductService();
+  final PushNotificationService _pushNotificationService =
+      PushNotificationService();
+
+  final OneSignalService _oneSignalService =
+      OneSignalService();
   final OfferService _offerService = OfferService();
   final FollowService _followService = FollowService();
   final FavoriteService _favoriteService = FavoriteService();
@@ -204,6 +211,8 @@ class _FigHubHomeState extends State<FigHubHome> {
   @override
   void initState() {
     super.initState();
+
+    _initializePushNotifications();
 
     widget.authManager.addListener(_onAuthManagerChanged);
 
@@ -379,6 +388,24 @@ class _FigHubHomeState extends State<FigHubHome> {
       } finally {
         _loadingSellerIds.remove(sellerId);
       }
+    }
+  }
+
+  Future<void> _initializePushNotifications() async {
+    try {
+      await _pushNotificationService.initialize();
+
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user != null) {
+      await _oneSignalService.initialize(
+        userId: user.uid,
+      );
+    }
+    } catch (error) {
+      debugPrint(
+        'Push notification initialization failed: $error',
+      );
     }
   }
 

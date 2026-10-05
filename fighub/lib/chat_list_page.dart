@@ -148,57 +148,92 @@ class ChatListPage extends StatelessWidget {
               final lastMessage =
                   chat['lastMessage'] as String? ?? '';
 
-              return Card(
-                child: ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
-                  ),
-                  leading: const CircleAvatar(
-                    radius: 25,
-                    child: Icon(
-                      Icons.person_outline,
-                    ),
-                  ),
-                  title: Text(
-                    productName.isEmpty
-                        ? (localization.isArabic
-                            ? 'منتج'
-                            : 'Product')
-                        : productName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  subtitle: Text(
-                    lastMessage.isEmpty
-                        ? openConversation
-                        : lastMessage,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: const Icon(
-                    Icons.arrow_forward_ios,
-                    size: 16,
-                  ),
-                  onTap: chatId.isEmpty
-                      ? null
-                      : () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ChatPage(
-                                chatId: chatId,
-                                productName:
-                                    productName,
-                              ),
-                            ),
-                          );
-                        },
+              return StreamBuilder<
+                  Map<String, dynamic>?>(
+                stream: chatService.watchChatPartner(
+                  chatId,
                 ),
+                builder: (context, partnerSnapshot) {
+                  final partner =
+                      partnerSnapshot.data;
+
+                  final partnerName =
+                      partner?['name']
+                              as String? ??
+                          '';
+
+                  final partnerPhoto =
+                      partner?['photoUrl']
+                              as String? ??
+                          '';
+
+                  return Card(
+                    child: ListTile(
+                      contentPadding:
+                          const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      leading: CircleAvatar(
+                        radius: 25,
+                        backgroundImage:
+                            partnerPhoto.isNotEmpty
+                                ? NetworkImage(
+                                    partnerPhoto,
+                                  )
+                                : null,
+                        child: partnerPhoto.isEmpty
+                            ? const Icon(
+                                Icons.person_outline,
+                              )
+                            : null,
+                      ),
+                      title: Text(
+                        partnerName.isEmpty
+                            ? (productName.isEmpty
+                                ? (localization.isArabic
+                                    ? 'مستخدم'
+                                    : 'User')
+                                : productName)
+                            : partnerName,
+                        maxLines: 1,
+                        overflow:
+                            TextOverflow.ellipsis,
+                        style:
+                            const TextStyle(
+                          fontWeight:
+                              FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: Text(
+                        lastMessage.isEmpty
+                            ? openConversation
+                            : lastMessage,
+                        maxLines: 1,
+                        overflow:
+                            TextOverflow.ellipsis,
+                      ),
+                      trailing: const Icon(
+                        Icons.arrow_forward_ios,
+                        size: 16,
+                      ),
+                      onTap: chatId.isEmpty
+                          ? null
+                          : () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ChatPage(
+                                    chatId: chatId,
+                                    productName:
+                                        productName,
+                                  ),
+                                ),
+                              );
+                            },
+                    ),
+                  );
+                },
               );
             },
           );

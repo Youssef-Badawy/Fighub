@@ -43,10 +43,7 @@ class OfferManagerPage extends StatelessWidget {
             builder: (context, snapshot) {
               final items = snapshot.data ?? [];
 
-              final canDelete = items.isNotEmpty &&
-                  items.every(
-                    (item) => item.status == 'Reserved',
-                  );
+              final canDelete = items.isNotEmpty;
 
               if (!canDelete) {
                 return const SizedBox.shrink();
