@@ -177,13 +177,13 @@ class ChatListPage extends StatelessWidget {
                                 builder: (dialogContext) => AlertDialog(
                                   title: Text(
                                     localization.isArabic
-                                        ? 'حذف المحادثة بالكامل؟'
-                                        : 'Delete entire conversation?',
+                                        ? 'مسح سجل المحادثة عندك؟'
+                                        : 'Clear chat history for you?',
                                   ),
                                   content: Text(
                                     localization.isArabic
-                                        ? 'سيتم حذف المحادثة وكل رسائلها عند الطرفين. لا يمكن التراجع عن هذا الإجراء.'
-                                        : 'This deletes the conversation and all its messages for both participants. This cannot be undone.',
+                                        ? 'سيتم إخفاء الرسائل القديمة عندك فقط. الطرف الآخر سيحتفظ بالمحادثة، وستظهر لك الرسائل الجديدة فقط.'
+                                        : 'This hides old messages only for you. The other participant keeps the conversation, and new messages will still appear.',
                                   ),
                                   actions: [
                                     TextButton(
@@ -219,8 +219,8 @@ class ChatListPage extends StatelessWidget {
                                   SnackBar(
                                     content: Text(
                                       localization.isArabic
-                                          ? 'تم حذف المحادثة بالكامل'
-                                          : 'Conversation deleted',
+                                          ? 'تم مسح سجل المحادثة عندك'
+                                          : 'Chat history cleared for you',
                                     ),
                                   ),
                                 );

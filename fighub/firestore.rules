@@ -404,10 +404,58 @@ service cloud.firestore {
                     ]);
 
       allow update: if request.auth != null
-                    && request.auth.uid in resource.data.participants;
+                    && request.auth.uid in resource.data.participants
+                    && request.resource.data.diff(resource.data)
+                         .affectedKeys().hasOnly([
+                           'offerItems',
+                           'settlementBuyerConfirmed',
+                           'settlementSellerConfirmed',
+                           'settledOrders',
+                           'updatedAt',
+                           'lastMessage',
+                           'clearedAt',
+                           'lastReadBy'
+                         ])
+                    && (
+                      !request.resource.data.diff(resource.data)
+                         .affectedKeys().hasAny(['clearedAt'])
+                      || (
+                        'clearedAt' in request.resource.data
+                        && request.resource.data.clearedAt is map
+                        && (
+                          !('clearedAt' in resource.data)
+                          ? request.resource.data.clearedAt.keys()
+                              .hasOnly([request.auth.uid])
+                          : request.resource.data.clearedAt.diff(
+                              resource.data.clearedAt
+                            ).affectedKeys().hasOnly([request.auth.uid])
+                        )
+                        && request.resource.data.clearedAt.get(
+                             request.auth.uid, null
+                           ) == request.time
+                      )
+                    )
+                    && (
+                      !request.resource.data.diff(resource.data)
+                         .affectedKeys().hasAny(['lastReadBy'])
+                      || (
+                        'lastReadBy' in request.resource.data
+                        && request.resource.data.lastReadBy is map
+                        && (
+                          !('lastReadBy' in resource.data)
+                          ? request.resource.data.lastReadBy.keys()
+                              .hasOnly([request.auth.uid])
+                          : request.resource.data.lastReadBy.diff(
+                              resource.data.lastReadBy
+                            ).affectedKeys().hasOnly([request.auth.uid])
+                        )
+                        && request.resource.data.lastReadBy.get(
+                             request.auth.uid, null
+                           ) == request.time
+                      )
+                    );
 
-      allow delete: if request.auth != null
-                && request.auth.uid in resource.data.participants;
+      allow delete: if false;
 
       match /messages/{messageId} {
 
@@ -431,7 +479,8 @@ service cloud.firestore {
                       && request.auth.uid in
                          get(
                            /databases/$(database)/documents/chats/$(chatId)
-                         ).data.participants;
+                         ).data.participants
+                      && resource.data.senderId == request.auth.uid;
       }
     }
   }

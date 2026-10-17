@@ -729,18 +729,57 @@ class ChatService {
   }
 
   Stream<List<Map<String, dynamic>>> watchMessages(String chatId) {
-    if (chatId.isEmpty) {
+    final user = _auth.currentUser;
+    if (chatId.isEmpty || user == null) {
       return Stream.value(const <Map<String, dynamic>>[]);
     }
 
-    return _messagesCollection(chatId)
-        .orderBy('createdAt')
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs
-              .map((document) => {'id': document.id, ...document.data()})
-              .toList();
-        });
+    final chatReference = _firestore.collection('chats').doc(chatId);
+
+    // Re-evaluate visible messages whenever either the chat cutoff or
+    // the underlying message collection changes, without extra packages.
+    return Stream<List<Map<String, dynamic>>>.multi((controller) {
+      List<QueryDocumentSnapshot<Map<String, dynamic>>>? latestMessages;
+      Map<String, dynamic>? latestChat;
+      var closed = false;
+
+      void emitVisibleMessages() {
+        if (closed || latestMessages == null || latestChat == null) return;
+
+        final clearedAtMap = latestChat!['clearedAt'];
+        final cutoff = clearedAtMap is Map ? clearedAtMap[user.uid] : null;
+
+        final visible = latestMessages!
+            .where((document) {
+              if (cutoff is! Timestamp) return true;
+              final createdAt = document.data()['createdAt'];
+              return createdAt is Timestamp && createdAt.compareTo(cutoff) > 0;
+            })
+            .map((document) => {'id': document.id, ...document.data()})
+            .toList();
+
+        controller.add(visible);
+      }
+
+      final chatSubscription = chatReference.snapshots().listen((snapshot) {
+        latestChat = snapshot.data() ?? <String, dynamic>{};
+        emitVisibleMessages();
+      }, onError: controller.addError);
+
+      final messagesSubscription = _messagesCollection(chatId)
+          .orderBy('createdAt')
+          .snapshots()
+          .listen((snapshot) {
+            latestMessages = snapshot.docs;
+            emitVisibleMessages();
+          }, onError: controller.addError);
+
+      controller.onCancel = () {
+        closed = true;
+        chatSubscription.cancel();
+        messagesSubscription.cancel();
+      };
+    });
   }
 
   Stream<List<Map<String, dynamic>>> watchMyChats() {
@@ -758,6 +797,18 @@ class ChatService {
         .map((snapshot) {
           return snapshot.docs
               .map((document) => {'id': document.id, ...document.data()})
+              .where((chat) {
+                final clearedAtMap = chat['clearedAt'];
+                final cutoff = clearedAtMap is Map
+                    ? clearedAtMap[user.uid]
+                    : null;
+                final updatedAt = chat['updatedAt'];
+
+                if (cutoff is! Timestamp || updatedAt is! Timestamp) {
+                  return true;
+                }
+                return updatedAt.compareTo(cutoff) > 0;
+              })
               .toList();
         });
   }
@@ -765,7 +816,7 @@ class ChatService {
   Future<void> deleteChat(String chatId) async {
     final user = _auth.currentUser;
     if (user == null || chatId.isEmpty) {
-      throw StateError('You must be signed in to delete a chat.');
+      throw StateError('You must be signed in to clear a chat.');
     }
 
     final chatReference = _firestore.collection('chats').doc(chatId);
@@ -780,22 +831,10 @@ class ChatService {
       throw StateError('You are not a participant in this chat.');
     }
 
-    // Delete messages first, in batches smaller than Firestore's 500-write limit.
-    final messagesReference = chatReference.collection('messages');
-
-    while (true) {
-      final page = await messagesReference.limit(400).get();
-      if (page.docs.isEmpty) break;
-
-      final batch = _firestore.batch();
-      for (final message in page.docs) {
-        batch.delete(message.reference);
-      }
-      await batch.commit();
-    }
-
-    // Delete the shared chat only after its messages have been deleted.
-    await chatReference.delete();
+    // Clear history for this user only; keep shared messages and order data.
+    await chatReference.update({
+      'clearedAt.${user.uid}': FieldValue.serverTimestamp(),
+    });
   }
 
   Future<void> markChatAsRead(String chatId) async {
@@ -806,7 +845,7 @@ class ChatService {
     }
 
     await _firestore.collection('chats').doc(chatId).update({
-      'lastReadBy': {user.uid: FieldValue.serverTimestamp()},
+      'lastReadBy.${user.uid}': FieldValue.serverTimestamp(),
     });
   }
 }
