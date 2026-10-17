@@ -636,6 +636,77 @@ class ChatService {
     }
   }
 
+  Future<void> sendMediaMessage({
+    required String chatId,
+    required String mediaUrl,
+    required String mediaType,
+    String caption = '',
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) throw StateError('User must be signed in.');
+    if (chatId.isEmpty || mediaUrl.trim().isEmpty) {
+      throw StateError('Chat ID and media URL are required.');
+    }
+    if (mediaType != 'image' && mediaType != 'video') {
+      throw ArgumentError.value(mediaType, 'mediaType');
+    }
+
+    final chatRef = _firestore.collection('chats').doc(chatId);
+    final snapshot = await chatRef.get();
+    if (!snapshot.exists) throw StateError('Chat not found.');
+
+    final data = snapshot.data() ?? <String, dynamic>{};
+    final buyerId = data['buyerId'] as String? ?? '';
+    final sellerId = data['sellerId'] as String? ?? '';
+    final productId = data['productId'] as String? ?? '';
+    final productName = data['productName'] as String? ?? 'Product';
+
+    if (buyerId.isEmpty || sellerId.isEmpty) {
+      throw StateError('Chat participants are missing.');
+    }
+    if (user.uid != buyerId && user.uid != sellerId) {
+      throw StateError('You are not a participant in this chat.');
+    }
+
+    final recipientId = user.uid == buyerId ? sellerId : buyerId;
+    final trimmedCaption = caption.trim();
+    final label = mediaType == 'image' ? '📷 صورة' : '🎥 فيديو';
+    final lastMessage = trimmedCaption.isEmpty
+        ? label
+        : '$label: $trimmedCaption';
+
+    await _messagesCollection(chatId).add({
+      'senderId': user.uid,
+      'text': trimmedCaption,
+      'type': mediaType,
+      'mediaUrl': mediaUrl,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    await chatRef.update({
+      'lastMessage': lastMessage,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    await _notificationService.addNotification(
+      userId: recipientId,
+      title: 'رسالة جديدة',
+      message: '$productName: $lastMessage',
+      productId: productId,
+      chatId: chatId,
+    );
+
+    try {
+      await _workerPushService.sendPush(
+        userId: recipientId,
+        title: 'رسالة جديدة',
+        message: '$productName: $lastMessage',
+      );
+    } catch (_) {
+      // Push failure must not prevent the message from being saved.
+    }
+  }
+
   Future<void> deleteMessage({
     required String chatId,
     required String messageId,

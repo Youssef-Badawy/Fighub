@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:video_player/video_player.dart';
 
 import 'app_localizations.dart';
 import 'chat_service.dart';
+import 'cloudinary_service.dart';
 
 class ChatPage extends StatefulWidget {
   final String chatId;
@@ -59,6 +62,75 @@ class _ChatPageState extends State<ChatPage> {
           _isSending = false;
         });
       }
+    }
+  }
+
+  Future<void> _pickAndSendMedia() async {
+    if (_isSending) return;
+
+    final isArabic = AppLocalizations.of(context).isArabic;
+    final selectedType = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo),
+              title: Text(isArabic ? 'إرسال صورة' : 'Send a photo'),
+              onTap: () => Navigator.pop(sheetContext, 'image'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.videocam),
+              title: Text(isArabic ? 'إرسال فيديو' : 'Send a video'),
+              onTap: () => Navigator.pop(sheetContext, 'video'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!mounted || selectedType == null) return;
+
+    try {
+      final picker = ImagePicker();
+      final file = selectedType == 'image'
+          ? await picker.pickImage(source: ImageSource.gallery)
+          : await picker.pickVideo(source: ImageSource.gallery);
+
+      if (!mounted || file == null) return;
+      setState(() => _isSending = true);
+
+      final cloudinary = CloudinaryService();
+      final url = selectedType == 'image'
+          ? await cloudinary.uploadImage(file)
+          : await cloudinary.uploadVideo(file);
+
+      await _chatService.sendMediaMessage(
+        chatId: widget.chatId,
+        mediaUrl: url,
+        mediaType: selectedType,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isArabic ? 'تم إرسال الوسائط بنجاح.' : 'Media sent successfully.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isArabic ? 'تعذر إرسال الوسائط. راجع الاتصال وإعدادات Cloudinary.' : 'Could not send media. Check your connection and Cloudinary settings.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSending = false);
     }
   }
 
@@ -192,6 +264,8 @@ class _ChatPageState extends State<ChatPage> {
     final senderId = message['senderId'] as String? ?? '';
 
     final text = message['text'] as String? ?? '';
+    final type = message['type'] as String? ?? 'text';
+    final mediaUrl = message['mediaUrl'] as String? ?? '';
 
     final currentUserId = _chatService.currentUserId;
 
@@ -213,7 +287,40 @@ class _ChatPageState extends State<ChatPage> {
               : Theme.of(context).colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(16),
         ),
-        child: Text(text, style: const TextStyle(fontSize: 15)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (type == 'image' && mediaUrl.isNotEmpty)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.network(
+                  mediaUrl,
+                  width: 230,
+                  fit: BoxFit.cover,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return const SizedBox(
+                      width: 230,
+                      height: 160,
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) => const SizedBox(
+                    width: 230,
+                    height: 100,
+                    child: Center(child: Icon(Icons.broken_image, size: 36)),
+                  ),
+                ),
+              ),
+            if (type == 'video' && mediaUrl.isNotEmpty)
+              _ChatVideoPlayer(url: mediaUrl),
+            if (text.isNotEmpty) ...[
+              if (type != 'text') const SizedBox(height: 6),
+              Text(text, style: const TextStyle(fontSize: 15)),
+            ],
+          ],
+        ),
       ),
     );
 
@@ -678,6 +785,13 @@ class _ChatPageState extends State<ChatPage> {
                   ),
                   Row(
                     children: [
+                      IconButton(
+                        tooltip: isArabic
+                            ? 'إرفاق صورة أو فيديو'
+                            : 'Attach photo or video',
+                        onPressed: _isSending ? null : _pickAndSendMedia,
+                        icon: const Icon(Icons.attach_file),
+                      ),
                       Expanded(
                         child: TextField(
                           controller: _messageController,
@@ -708,6 +822,88 @@ class _ChatPageState extends State<ChatPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ChatVideoPlayer extends StatefulWidget {
+  final String url;
+
+  const _ChatVideoPlayer({required this.url});
+
+  @override
+  State<_ChatVideoPlayer> createState() => _ChatVideoPlayerState();
+}
+
+class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
+  late final VideoPlayerController _controller;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    _controller
+        .initialize()
+        .then((_) {
+          if (mounted) setState(() {});
+        })
+        .catchError((Object _) {
+          if (mounted) setState(() => _failed = true);
+        });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_failed) {
+      return const SizedBox(
+        width: 230,
+        height: 130,
+        child: Center(child: Icon(Icons.error_outline)),
+      );
+    }
+    if (!_controller.value.isInitialized) {
+      return const SizedBox(
+        width: 230,
+        height: 130,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final ratio = _controller.value.aspectRatio > 0
+        ? _controller.value.aspectRatio
+        : 16 / 9;
+
+    return SizedBox(
+      width: 230,
+      child: AspectRatio(
+        aspectRatio: ratio,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            VideoPlayer(_controller),
+            IconButton.filled(
+              onPressed: () {
+                if (_controller.value.isPlaying) {
+                  _controller.pause();
+                } else {
+                  _controller.play();
+                }
+                setState(() {});
+              },
+              icon: Icon(
+                _controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
