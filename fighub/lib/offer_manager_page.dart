@@ -409,6 +409,8 @@ class OfferManagerPage extends StatelessWidget {
                                                                     item.id!,
                                                                 itemName:
                                                                     item.name,
+                                                                price:
+                                                                    item.price,
                                                                 imagePaths: item
                                                                     .imagePaths,
                                                                 buyerId:

@@ -17,6 +17,7 @@ class Product {
   final List<String> imagePaths;
 
   String status;
+  String? reservedBy;
 
   Product({
     this.id,
@@ -30,19 +31,20 @@ class Product {
     this.imagePath,
     List<String>? imagePaths,
     this.status = 'Available',
+    this.reservedBy,
   }) : imagePaths = List.unmodifiable(
-          imagePaths ??
-              (imagePath != null && imagePath.isNotEmpty
-                  ? [imagePath]
-                  : <String>[]),
-        );
+         imagePaths ??
+             (imagePath != null && imagePath.isNotEmpty
+                 ? [imagePath]
+                 : <String>[]),
+       );
 
   Map<String, dynamic> toFirestore() {
     final images = imagePaths.isNotEmpty
         ? imagePaths
         : (imagePath != null && imagePath!.isNotEmpty
-            ? [imagePath!]
-            : <String>[]);
+              ? [imagePath!]
+              : <String>[]);
 
     return {
       'sellerId': sellerId,
@@ -60,6 +62,7 @@ class Product {
       'imagePaths': images,
 
       'status': status,
+      'reservedBy': reservedBy,
       'createdAt': FieldValue.serverTimestamp(),
     };
   }
@@ -97,14 +100,13 @@ class Product {
       category: data['category'] as String? ?? 'Other',
       condition: data['condition'] as String? ?? 'Used',
       description: data['description'] as String? ?? '',
-      paymentMethod:
-          data['paymentMethod'] as String? ?? 'Cash on Delivery',
-      imagePath: oldImagePath ??
-          (parsedImagePaths.isNotEmpty
-              ? parsedImagePaths.first
-              : null),
+      paymentMethod: data['paymentMethod'] as String? ?? 'Cash on Delivery',
+      imagePath:
+          oldImagePath ??
+          (parsedImagePaths.isNotEmpty ? parsedImagePaths.first : null),
       imagePaths: parsedImagePaths,
       status: data['status'] as String? ?? 'Available',
+      reservedBy: data['reservedBy'] as String?,
     );
   }
 }

@@ -22,16 +22,13 @@ class ProductDetailsPage extends StatefulWidget {
   });
 
   @override
-  State<ProductDetailsPage> createState() =>
-      _ProductDetailsPageState();
+  State<ProductDetailsPage> createState() => _ProductDetailsPageState();
 }
 
-class _ProductDetailsPageState
-    extends State<ProductDetailsPage> {
+class _ProductDetailsPageState extends State<ProductDetailsPage> {
   final ProductService _productService = ProductService();
   final ChatService _chatService = ChatService();
-  final SellerProfileService _sellerProfileService =
-      SellerProfileService();
+  final SellerProfileService _sellerProfileService = SellerProfileService();
 
   late String _productStatus;
   bool _isUpdatingStatus = false;
@@ -60,8 +57,7 @@ class _ProductDetailsPageState
     }
 
     try {
-      final profile =
-          await _sellerProfileService.getSellerProfile(
+      final profile = await _sellerProfileService.getSellerProfile(
         widget.product.sellerId,
       );
 
@@ -92,9 +88,7 @@ class _ProductDetailsPageState
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => SellerProfilePage(
-          sellerId: widget.product.sellerId,
-        ),
+        builder: (_) => SellerProfilePage(sellerId: widget.product.sellerId),
       ),
     );
   }
@@ -124,11 +118,10 @@ class _ProductDetailsPageState
         imagePath: widget.product.imagePath,
         imagePaths: widget.product.imagePaths,
         status: status,
+        reservedBy: status == 'Available' ? null : widget.product.reservedBy,
       );
 
-      await _productService.updateProduct(
-        updatedProduct,
-      );
+      await _productService.updateProduct(updatedProduct);
 
       widget.product.status = status;
       widget.onStatusChanged(status);
@@ -143,11 +136,8 @@ class _ProductDetailsPageState
           ? 'تم تغيير حالة المنتج إلى ${_statusLabel(status, localization)}'
           : 'Status changed to ${_statusLabel(status, localization)}';
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     } catch (_) {
       if (!mounted) {
         return;
@@ -178,28 +168,96 @@ class _ProductDetailsPageState
   }
 
   Future<void> _reserveProduct() async {
-    if (_productStatus != 'Available' ||
-        _isUpdatingStatus) {
+    if (_productStatus != 'Available' || _isUpdatingStatus) {
       return;
     }
 
-    await _setStatus('Reserved');
-
-    if (!mounted) {
+    final productId = widget.product.id;
+    if (productId == null || productId.isEmpty) {
       return;
     }
 
-    final localization = AppLocalizations.of(context);
+    setState(() {
+      _isUpdatingStatus = true;
+    });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          localization.isArabic
-              ? 'تم حجز المنتج بنجاح'
-              : 'Product reserved successfully.',
+    try {
+      await _productService.reserveProduct(productId);
+
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+      widget.product.status = 'Reserved';
+      widget.product.reservedBy = userId;
+
+      if (userId != null && widget.product.sellerId != userId) {
+        try {
+          await _chatService.addReservedProductToChat(
+            productId: productId,
+            productName: widget.product.name,
+            price: widget.product.price,
+            imagePaths: widget.product.imagePaths.isNotEmpty
+                ? widget.product.imagePaths
+                : (widget.product.imagePath == null ||
+                          widget.product.imagePath!.isEmpty
+                      ? <String>[]
+                      : <String>[widget.product.imagePath!]),
+            sellerId: widget.product.sellerId,
+          );
+        } catch (chatError, chatStackTrace) {
+          debugPrint('CREATE RESERVED PRODUCT CHAT ERROR: $chatError');
+          debugPrintStack(
+            label: 'CREATE RESERVED PRODUCT CHAT STACK TRACE',
+            stackTrace: chatStackTrace,
+          );
+        }
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _productStatus = 'Reserved';
+      });
+
+      widget.onStatusChanged('Reserved');
+
+      final localization = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            localization.isArabic
+                ? 'تم حجز المنتج بنجاح'
+                : 'Product reserved successfully.',
+          ),
         ),
-      ),
-    );
+      );
+    } catch (error, stackTrace) {
+      debugPrint('RESERVE PRODUCT ERROR: $error');
+      debugPrintStack(
+        label: 'RESERVE PRODUCT STACK TRACE',
+        stackTrace: stackTrace,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      final localization = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${localization.isArabic ? 'فشل الحجز' : 'Reservation failed'}: $error',
+          ),
+          duration: const Duration(seconds: 8),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdatingStatus = false;
+        });
+      }
+    }
   }
 
   Future<void> _openChat() async {
@@ -290,10 +348,8 @@ class _ProductDetailsPageState
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => ChatPage(
-            chatId: chatId,
-            productName: widget.product.name,
-          ),
+          builder: (_) =>
+              ChatPage(chatId: chatId, productName: widget.product.name),
         ),
       );
     } catch (error) {
@@ -324,10 +380,7 @@ class _ProductDetailsPageState
     }
   }
 
-  String _statusLabel(
-    String status,
-    AppLocalizations localization,
-  ) {
+  String _statusLabel(String status, AppLocalizations localization) {
     if (!localization.isArabic) {
       return status;
     }
@@ -344,9 +397,7 @@ class _ProductDetailsPageState
     }
   }
 
-  String _conditionLabel(
-    AppLocalizations localization,
-  ) {
+  String _conditionLabel(AppLocalizations localization) {
     if (!localization.isArabic) {
       return widget.product.condition;
     }
@@ -363,9 +414,7 @@ class _ProductDetailsPageState
     }
   }
 
-  String _categoryLabel(
-    AppLocalizations localization,
-  ) {
+  String _categoryLabel(AppLocalizations localization) {
     if (!localization.isArabic) {
       return widget.product.category;
     }
@@ -388,9 +437,7 @@ class _ProductDetailsPageState
     }
   }
 
-  String _paymentLabel(
-    AppLocalizations localization,
-  ) {
+  String _paymentLabel(AppLocalizations localization) {
     if (!localization.isArabic) {
       return widget.product.paymentMethod;
     }
@@ -418,19 +465,14 @@ class _ProductDetailsPageState
     return [];
   }
 
-  Widget _buildSellerCard(
-    BuildContext context,
-    AppLocalizations localization,
-  ) {
-    final sellerName =
-        _sellerProfile?.name.isNotEmpty == true
-            ? _sellerProfile!.name
-            : localization.isArabic
-                ? 'البائع'
-                : 'Seller';
+  Widget _buildSellerCard(BuildContext context, AppLocalizations localization) {
+    final sellerName = _sellerProfile?.name.isNotEmpty == true
+        ? _sellerProfile!.name
+        : localization.isArabic
+        ? 'البائع'
+        : 'Seller';
 
-    final sellerPhoto =
-        _sellerProfile?.photoUrl ?? '';
+    final sellerPhoto = _sellerProfile?.photoUrl ?? '';
 
     final viewProfileText = localization.isArabic
         ? 'عرض صفحة البائع'
@@ -444,9 +486,7 @@ class _ProductDetailsPageState
         child: const SizedBox(
           width: 22,
           height: 22,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-          ),
+          child: CircularProgressIndicator(strokeWidth: 2),
         ),
       );
     } else if (sellerPhoto.isNotEmpty &&
@@ -460,26 +500,19 @@ class _ProductDetailsPageState
     } else if (sellerPhoto.isNotEmpty) {
       sellerImage = CircleAvatar(
         radius: 28,
-        backgroundImage: FileImage(
-          File(sellerPhoto),
-        ),
+        backgroundImage: FileImage(File(sellerPhoto)),
       );
     } else {
       sellerImage = const CircleAvatar(
         radius: 28,
-        child: Icon(
-          Icons.person,
-          size: 30,
-        ),
+        child: Icon(Icons.person, size: 30),
       );
     }
 
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: _isLoadingSeller
-            ? null
-            : _openSellerProfile,
+        onTap: _isLoadingSeller ? null : _openSellerProfile,
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Row(
@@ -488,26 +521,20 @@ class _ProductDetailsPageState
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      localization.isArabic
-                          ? 'البائع'
-                          : 'Seller',
+                      localization.isArabic ? 'البائع' : 'Seller',
                       style: TextStyle(
                         fontSize: 13,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurfaceVariant,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       sellerName,
                       maxLines: 1,
-                      overflow:
-                          TextOverflow.ellipsis,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.bold,
@@ -519,9 +546,7 @@ class _ProductDetailsPageState
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .primary,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
                   ],
@@ -530,9 +555,7 @@ class _ProductDetailsPageState
               Icon(
                 Icons.arrow_forward_ios,
                 size: 17,
-                color: Theme.of(context)
-                    .colorScheme
-                    .primary,
+                color: Theme.of(context).colorScheme.primary,
               ),
             ],
           ),
@@ -541,13 +564,9 @@ class _ProductDetailsPageState
     );
   }
 
-  Widget _buildImageItem(
-    String imagePath,
-    String noImage,
-  ) {
+  Widget _buildImageItem(String imagePath, String noImage) {
     final isNetworkImage =
-        imagePath.startsWith('http://') ||
-        imagePath.startsWith('https://');
+        imagePath.startsWith('http://') || imagePath.startsWith('https://');
 
     if (isNetworkImage) {
       return Image.network(
@@ -555,18 +574,10 @@ class _ProductDetailsPageState
         width: double.infinity,
         height: 300,
         fit: BoxFit.cover,
-        errorBuilder: (
-          context,
-          error,
-          stackTrace,
-        ) {
+        errorBuilder: (context, error, stackTrace) {
           return _buildImagePlaceholder(noImage);
         },
-        loadingBuilder: (
-          context,
-          child,
-          loadingProgress,
-        ) {
+        loadingBuilder: (context, child, loadingProgress) {
           if (loadingProgress == null) {
             return child;
           }
@@ -575,9 +586,7 @@ class _ProductDetailsPageState
             width: double.infinity,
             height: 300,
             color: Colors.grey.shade200,
-            child: const Center(
-              child: CircularProgressIndicator(),
-            ),
+            child: const Center(child: CircularProgressIndicator()),
           );
         },
       );
@@ -594,11 +603,7 @@ class _ProductDetailsPageState
       width: double.infinity,
       height: 300,
       fit: BoxFit.cover,
-      errorBuilder: (
-        context,
-        error,
-        stackTrace,
-      ) {
+      errorBuilder: (context, error, stackTrace) {
         return _buildImagePlaceholder(noImage);
       },
     );
@@ -610,14 +615,9 @@ class _ProductDetailsPageState
       height: 300,
       color: Colors.grey.shade200,
       child: Column(
-        mainAxisAlignment:
-            MainAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
-            Icons.image_outlined,
-            size: 70,
-            color: Colors.grey,
-          ),
+          const Icon(Icons.image_outlined, size: 70, color: Colors.grey),
           const SizedBox(height: 10),
           Text(noImage),
         ],
@@ -652,15 +652,9 @@ class _ProductDetailsPageState
               itemBuilder: (context, index) {
                 return GestureDetector(
                   onTap: () {
-                    _openFullScreenGallery(
-                      images,
-                      index,
-                    );
+                    _openFullScreenGallery(images, index);
                   },
-                  child: _buildImageItem(
-                    images[index],
-                    noImage,
-                  ),
+                  child: _buildImageItem(images[index], noImage),
                 );
               },
             ),
@@ -673,8 +667,7 @@ class _ProductDetailsPageState
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: images.length,
-              separatorBuilder: (_, _) =>
-                  const SizedBox(width: 8),
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
               itemBuilder: (context, index) {
                 final imagePath = images[index];
 
@@ -685,34 +678,24 @@ class _ProductDetailsPageState
                     });
                   },
                   child: AnimatedContainer(
-                    duration:
-                        const Duration(milliseconds: 200),
+                    duration: const Duration(milliseconds: 200),
                     width: 72,
                     height: 72,
                     padding: EdgeInsets.all(
-                      _currentImageIndex == index
-                          ? 3
-                          : 0,
+                      _currentImageIndex == index ? 3 : 0,
                     ),
                     decoration: BoxDecoration(
-                      borderRadius:
-                          BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                        color:
-                            _currentImageIndex == index
-                                ? Theme.of(context)
-                                    .colorScheme
-                                    .primary
-                                : Colors.transparent,
+                        color: _currentImageIndex == index
+                            ? Theme.of(context).colorScheme.primary
+                            : Colors.transparent,
                         width: 2,
                       ),
                     ),
                     child: ClipRRect(
-                      borderRadius:
-                          BorderRadius.circular(8),
-                      child: _buildThumbnail(
-                        imagePath,
-                      ),
+                      borderRadius: BorderRadius.circular(8),
+                      child: _buildThumbnail(imagePath),
                     ),
                   ),
                 );
@@ -733,40 +716,27 @@ class _ProductDetailsPageState
     );
   }
 
-  void _openFullScreenGallery(
-    List<String> images,
-    int initialIndex,
-  ) {
+  void _openFullScreenGallery(List<String> images, int initialIndex) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => _FullScreenImageGallery(
-          images: images,
-          initialIndex: initialIndex,
-        ),
+        builder: (_) =>
+            _FullScreenImageGallery(images: images, initialIndex: initialIndex),
       ),
     );
   }
 
   Widget _buildThumbnail(String imagePath) {
     final isNetworkImage =
-        imagePath.startsWith('http://') ||
-        imagePath.startsWith('https://');
+        imagePath.startsWith('http://') || imagePath.startsWith('https://');
 
     if (isNetworkImage) {
       return Image.network(
         imagePath,
         fit: BoxFit.cover,
-        errorBuilder: (
-          context,
-          error,
-          stackTrace,
-        ) {
+        errorBuilder: (context, error, stackTrace) {
           return Container(
             color: Colors.grey.shade200,
-            child: const Icon(
-              Icons.broken_image_outlined,
-              color: Colors.grey,
-            ),
+            child: const Icon(Icons.broken_image_outlined, color: Colors.grey),
           );
         },
       );
@@ -777,27 +747,17 @@ class _ProductDetailsPageState
     if (!localFile.existsSync()) {
       return Container(
         color: Colors.grey.shade200,
-        child: const Icon(
-          Icons.image_outlined,
-          color: Colors.grey,
-        ),
+        child: const Icon(Icons.image_outlined, color: Colors.grey),
       );
     }
 
     return Image.file(
       localFile,
       fit: BoxFit.cover,
-      errorBuilder: (
-        context,
-        error,
-        stackTrace,
-      ) {
+      errorBuilder: (context, error, stackTrace) {
         return Container(
           color: Colors.grey.shade200,
-          child: const Icon(
-            Icons.broken_image_outlined,
-            color: Colors.grey,
-          ),
+          child: const Icon(Icons.broken_image_outlined, color: Colors.grey),
         );
       },
     );
@@ -808,43 +768,30 @@ class _ProductDetailsPageState
     final localization = AppLocalizations.of(context);
     final isArabic = localization.isArabic;
 
-    final title = isArabic
-        ? 'تفاصيل المنتج'
-        : 'Product Details';
+    final title = isArabic ? 'تفاصيل المنتج' : 'Product Details';
 
-    final descriptionTitle =
-        isArabic ? 'الوصف' : 'Description';
+    final descriptionTitle = isArabic ? 'الوصف' : 'Description';
 
-    final categoryTitle =
-        isArabic ? 'الفئة' : 'Category';
+    final categoryTitle = isArabic ? 'الفئة' : 'Category';
 
-    final conditionTitle =
-        isArabic ? 'الحالة' : 'Condition';
+    final conditionTitle = isArabic ? 'الحالة' : 'Condition';
 
-    final paymentTitle =
-        isArabic ? 'طريقة الدفع' : 'Payment Method';
+    final paymentTitle = isArabic ? 'طريقة الدفع' : 'Payment Method';
 
-    final statusTitle =
-        isArabic ? 'حالة المنتج' : 'Product Status';
+    final statusTitle = isArabic ? 'حالة المنتج' : 'Product Status';
 
-    final reserveText =
-        isArabic ? 'حجز المنتج' : 'Reserve Product';
+    final reserveText = isArabic ? 'حجز المنتج' : 'Reserve Product';
 
-    final chatText =
-        isArabic ? 'محادثة مع البائع' : 'Chat Seller';
+    final chatText = isArabic ? 'محادثة مع البائع' : 'Chat Seller';
 
     final noDescription = isArabic
         ? 'لا يوجد وصف للمنتج.'
         : 'No description available.';
 
-    final noImage = isArabic
-        ? 'لا توجد صورة'
-        : 'No Image';
+    final noImage = isArabic ? 'لا توجد صورة' : 'No Image';
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-      ),
+      appBar: AppBar(title: Text(title)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -852,10 +799,7 @@ class _ProductDetailsPageState
           const SizedBox(height: 18),
           Text(
             widget.product.name,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Text(
@@ -863,16 +807,11 @@ class _ProductDetailsPageState
             style: TextStyle(
               fontSize: 21,
               fontWeight: FontWeight.bold,
-              color: Theme.of(context)
-                  .colorScheme
-                  .primary,
+              color: Theme.of(context).colorScheme.primary,
             ),
           ),
           const SizedBox(height: 18),
-          _buildSellerCard(
-            context,
-            localization,
-          ),
+          _buildSellerCard(context, localization),
           const SizedBox(height: 18),
           Card(
             child: Padding(
@@ -900,28 +839,19 @@ class _ProductDetailsPageState
           const SizedBox(height: 18),
           Text(
             descriptionTitle,
-            style: const TextStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Text(
             widget.product.description.trim().isEmpty
                 ? noDescription
                 : widget.product.description,
-            style: const TextStyle(
-              fontSize: 15,
-              height: 1.5,
-            ),
+            style: const TextStyle(fontSize: 15, height: 1.5),
           ),
           const SizedBox(height: 22),
           Text(
             statusTitle,
-            style: const TextStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 10),
           Wrap(
@@ -929,14 +859,8 @@ class _ProductDetailsPageState
             runSpacing: 8,
             children: [
               ChoiceChip(
-                label: Text(
-                  _statusLabel(
-                    'Available',
-                    localization,
-                  ),
-                ),
-                selected:
-                    _productStatus == 'Available',
+                label: Text(_statusLabel('Available', localization)),
+                selected: _productStatus == 'Available',
                 onSelected: _isUpdatingStatus
                     ? null
                     : (_) {
@@ -944,14 +868,8 @@ class _ProductDetailsPageState
                       },
               ),
               ChoiceChip(
-                label: Text(
-                  _statusLabel(
-                    'Reserved',
-                    localization,
-                  ),
-                ),
-                selected:
-                    _productStatus == 'Reserved',
+                label: Text(_statusLabel('Reserved', localization)),
+                selected: _productStatus == 'Reserved',
                 onSelected: _isUpdatingStatus
                     ? null
                     : (_) {
@@ -959,14 +877,8 @@ class _ProductDetailsPageState
                       },
               ),
               ChoiceChip(
-                label: Text(
-                  _statusLabel(
-                    'Sold',
-                    localization,
-                  ),
-                ),
-                selected:
-                    _productStatus == 'Sold',
+                label: Text(_statusLabel('Sold', localization)),
+                selected: _productStatus == 'Sold',
                 onSelected: _isUpdatingStatus
                     ? null
                     : (_) {
@@ -977,21 +889,15 @@ class _ProductDetailsPageState
           ),
           if (_isUpdatingStatus) ...[
             const SizedBox(height: 12),
-            const Center(
-              child: CircularProgressIndicator(),
-            ),
+            const Center(child: CircularProgressIndicator()),
           ],
           const SizedBox(height: 22),
           if (_productStatus == 'Available')
             SizedBox(
               height: 52,
               child: ElevatedButton.icon(
-                onPressed: _isUpdatingStatus
-                    ? null
-                    : _reserveProduct,
-                icon: const Icon(
-                  Icons.bookmark_add_outlined,
-                ),
+                onPressed: _isUpdatingStatus ? null : _reserveProduct,
+                icon: const Icon(Icons.bookmark_add_outlined),
                 label: Text(
                   reserveText,
                   style: const TextStyle(
@@ -1005,25 +911,17 @@ class _ProductDetailsPageState
           SizedBox(
             height: 52,
             child: OutlinedButton.icon(
-              onPressed: _isOpeningChat
-                  ? null
-                  : _openChat,
+              onPressed: _isOpeningChat ? null : _openChat,
               icon: _isOpeningChat
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                      ),
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(
-                      Icons.chat_bubble_outline,
-                    ),
+                  : const Icon(Icons.chat_bubble_outline),
               label: Text(
                 _isOpeningChat
-                    ? (isArabic
-                        ? 'جاري فتح المحادثة...'
-                        : 'Opening chat...')
+                    ? (isArabic ? 'جاري فتح المحادثة...' : 'Opening chat...')
                     : chatText,
                 style: const TextStyle(
                   fontSize: 16,
@@ -1042,10 +940,7 @@ class _InfoRow extends StatelessWidget {
   final String title;
   final String value;
 
-  const _InfoRow({
-    required this.title,
-    required this.value,
-  });
+  const _InfoRow({required this.title, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -1054,22 +949,16 @@ class _InfoRow extends StatelessWidget {
         Expanded(
           child: Text(
             title,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.bold),
           ),
         ),
         const SizedBox(width: 12),
-        Flexible(
-          child: Text(
-            value,
-            textAlign: TextAlign.end,
-          ),
-        ),
+        Flexible(child: Text(value, textAlign: TextAlign.end)),
       ],
     );
   }
 }
+
 class _FullScreenImageGallery extends StatefulWidget {
   final List<String> images;
   final int initialIndex;
@@ -1084,8 +973,7 @@ class _FullScreenImageGallery extends StatefulWidget {
       _FullScreenImageGalleryState();
 }
 
-class _FullScreenImageGalleryState
-    extends State<_FullScreenImageGallery> {
+class _FullScreenImageGalleryState extends State<_FullScreenImageGallery> {
   late final PageController _pageController;
   late int _currentIndex;
 
@@ -1095,9 +983,7 @@ class _FullScreenImageGalleryState
 
     _currentIndex = widget.initialIndex;
 
-    _pageController = PageController(
-      initialPage: widget.initialIndex,
-    );
+    _pageController = PageController(initialPage: widget.initialIndex);
   }
 
   @override
@@ -1108,8 +994,7 @@ class _FullScreenImageGalleryState
 
   Widget _buildImage(String imagePath) {
     final isNetworkImage =
-        imagePath.startsWith('http://') ||
-        imagePath.startsWith('https://');
+        imagePath.startsWith('http://') || imagePath.startsWith('https://');
 
     if (isNetworkImage) {
       return InteractiveViewer(
@@ -1118,11 +1003,7 @@ class _FullScreenImageGalleryState
         child: Image.network(
           imagePath,
           fit: BoxFit.contain,
-          errorBuilder: (
-            context,
-            error,
-            stackTrace,
-          ) {
+          errorBuilder: (context, error, stackTrace) {
             return const Center(
               child: Icon(
                 Icons.broken_image_outlined,
@@ -1131,18 +1012,12 @@ class _FullScreenImageGalleryState
               ),
             );
           },
-          loadingBuilder: (
-            context,
-            child,
-            loadingProgress,
-          ) {
+          loadingBuilder: (context, child, loadingProgress) {
             if (loadingProgress == null) {
               return child;
             }
 
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
+            return const Center(child: CircularProgressIndicator());
           },
         ),
       );
@@ -1166,11 +1041,7 @@ class _FullScreenImageGalleryState
       child: Image.file(
         file,
         fit: BoxFit.contain,
-        errorBuilder: (
-          context,
-          error,
-          stackTrace,
-        ) {
+        errorBuilder: (context, error, stackTrace) {
           return const Center(
             child: Icon(
               Icons.broken_image_outlined,
@@ -1190,9 +1061,7 @@ class _FullScreenImageGalleryState
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: Text(
-          '${_currentIndex + 1} / ${widget.images.length}',
-        ),
+        title: Text('${_currentIndex + 1} / ${widget.images.length}'),
       ),
       body: PageView.builder(
         controller: _pageController,
@@ -1203,11 +1072,7 @@ class _FullScreenImageGalleryState
           });
         },
         itemBuilder: (context, index) {
-          return Center(
-            child: _buildImage(
-              widget.images[index],
-            ),
-          );
+          return Center(child: _buildImage(widget.images[index]));
         },
       ),
     );

@@ -11,9 +11,31 @@ service cloud.firestore {
                     && request.resource.data.sellerId == request.auth.uid;
 
       allow update: if request.auth != null
-                    && resource.data.sellerId == request.auth.uid
-                    && request.resource.data.sellerId
-                       == resource.data.sellerId;
+                    && (
+                      (
+                        resource.data.sellerId == request.auth.uid
+                        && request.resource.data.sellerId
+                           == resource.data.sellerId
+                      )
+                      ||
+                      (
+                        request.auth.uid != resource.data.sellerId
+                        && resource.data.status == 'Available'
+                        && (
+                          !resource.data.keys().hasAny(['reservedBy'])
+                          || resource.data.reservedBy == null
+                          || resource.data.reservedBy == ''
+                        )
+                        && request.resource.data.status == 'Reserved'
+                        && request.resource.data.reservedBy
+                           == request.auth.uid
+                        && request.resource.data.sellerId
+                           == resource.data.sellerId
+                        && request.resource.data.diff(resource.data)
+                           .affectedKeys()
+                           .hasOnly(['status', 'reservedBy', 'reservedAt'])
+                      )
+                    );
 
       allow delete: if request.auth != null
                     && resource.data.sellerId == request.auth.uid;

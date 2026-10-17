@@ -90,6 +90,42 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
+  Future<void> _confirmOrderSettlement() async {
+    try {
+      final completed = await _chatService.confirmSettlement(
+        chatId: widget.chatId,
+      );
+      if (!mounted) return;
+
+      final isArabic = AppLocalizations.of(context).isArabic;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            completed
+                ? (isArabic
+                      ? 'تم تأكيد الطرفين وإغلاق الحساب.'
+                      : 'Both parties confirmed. The order is settled.')
+                : (isArabic
+                      ? 'تم تسجيل تأكيدك. ننتظر تأكيد الطرف الآخر.'
+                      : 'Your confirmation was saved. Waiting for the other party.'),
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final isArabic = AppLocalizations.of(context).isArabic;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isArabic
+                ? 'تعذر تأكيد الحساب. تأكد من وجود قطع محجوزة.'
+                : 'Could not confirm settlement. Check active reservations.',
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _deleteMessage(String messageId) async {
     try {
       await _chatService.deleteMessage(
@@ -262,6 +298,11 @@ class _ChatPageState extends State<ChatPage> {
                   ? rawOfferItems
                         .whereType<Map>()
                         .map((item) => Map<String, dynamic>.from(item))
+                        .where(
+                          (item) =>
+                              item['status'] != 'Cancelled' &&
+                              item['status'] != 'Settled',
+                        )
                         .toList()
                   : <Map<String, dynamic>>[];
 
@@ -376,22 +417,136 @@ class _ChatPageState extends State<ChatPage> {
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
-                                  child: Text(
-                                    name.isEmpty
-                                        ? (isArabic ? 'قطعة' : 'Item')
-                                        : name,
-                                    maxLines: 3,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                    ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        name.isEmpty
+                                            ? (isArabic ? 'قطعة' : 'Item')
+                                            : name,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 5),
+                                      Text(
+                                        '${item['price'] ?? '0'} ${isArabic ? 'جنيه' : 'EGP'}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
                             ),
                           );
                         },
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          StreamBuilder<Map<String, dynamic>?>(
+            stream: _chatService.watchChat(widget.chatId),
+            builder: (context, snapshot) {
+              final data = snapshot.data;
+              if (data == null) return const SizedBox.shrink();
+
+              final rawItems = data['offerItems'];
+              final items = rawItems is List
+                  ? rawItems
+                        .whereType<Map>()
+                        .map((item) => Map<String, dynamic>.from(item))
+                        .where(
+                          (item) =>
+                              item['status'] != 'Cancelled' &&
+                              item['status'] != 'Settled',
+                        )
+                        .toList()
+                  : <Map<String, dynamic>>[];
+
+              if (items.isEmpty) return const SizedBox.shrink();
+
+              double total = 0;
+              for (final item in items) {
+                final rawPrice = (item['price'] ?? '0').toString();
+                final cleaned = rawPrice.replaceAll(RegExp(r'[^0-9.]'), '');
+                total += double.tryParse(cleaned) ?? 0;
+              }
+
+              final uid = _chatService.currentUserId;
+              final buyerId = data['buyerId'] as String? ?? '';
+              final sellerId = data['sellerId'] as String? ?? '';
+              final buyerConfirmed = data['settlementBuyerConfirmed'] == true;
+              final sellerConfirmed = data['settlementSellerConfirmed'] == true;
+              final isBuyer = uid != null && uid == buyerId;
+              final isSeller = uid != null && uid == sellerId;
+              final alreadyConfirmed = isBuyer
+                  ? buyerConfirmed
+                  : isSeller
+                  ? sellerConfirmed
+                  : true;
+
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                color: Theme.of(context).colorScheme.surface,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${isArabic ? 'إجمالي الحساب' : 'Order total'}: '
+                      '${total.toStringAsFixed(total == total.roundToDouble() ? 0 : 2)} '
+                      '${isArabic ? 'جنيه' : 'EGP'}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${isArabic ? 'تأكيد المشتري' : 'Buyer'}: '
+                      '${buyerConfirmed ? (isArabic ? 'تم' : 'Confirmed') : (isArabic ? 'منتظر' : 'Pending')}'
+                      '  •  '
+                      '${isArabic ? 'تأكيد البائع' : 'Seller'}: '
+                      '${sellerConfirmed ? (isArabic ? 'تم' : 'Confirmed') : (isArabic ? 'منتظر' : 'Pending')}',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: alreadyConfirmed
+                            ? null
+                            : _confirmOrderSettlement,
+                        icon: const Icon(Icons.handshake_outlined),
+                        label: Text(
+                          alreadyConfirmed
+                              ? (isArabic
+                                    ? 'تم تسجيل تأكيدك'
+                                    : 'Your confirmation is recorded')
+                              : (isArabic
+                                    ? 'تأكيد تسوية الحساب'
+                                    : 'Confirm order settlement'),
+                        ),
                       ),
                     ),
                   ],

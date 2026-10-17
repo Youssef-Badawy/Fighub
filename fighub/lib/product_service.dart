@@ -4,13 +4,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'product_model.dart';
 
 class ProductService {
-  final FirebaseFirestore _firestore =
-      FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  CollectionReference<Map<String, dynamic>>
-      get _productsCollection {
+  CollectionReference<Map<String, dynamic>> get _productsCollection {
     return _firestore.collection('products');
   }
 
@@ -22,14 +20,10 @@ class ProductService {
     }
 
     if (product.sellerId != user.uid) {
-      throw StateError(
-        'You can only add products for your own account.',
-      );
+      throw StateError('You can only add products for your own account.');
     }
 
-    final document = await _productsCollection.add(
-      product.toFirestore(),
-    );
+    final document = await _productsCollection.add(product.toFirestore());
 
     return document.id;
   }
@@ -44,20 +38,14 @@ class ProductService {
     final productId = product.id;
 
     if (productId == null || productId.isEmpty) {
-      throw ArgumentError(
-        'Product ID is required to update a product.',
-      );
+      throw ArgumentError('Product ID is required to update a product.');
     }
 
     if (product.sellerId != user.uid) {
-      throw StateError(
-        'You can only update your own products.',
-      );
+      throw StateError('You can only update your own products.');
     }
 
-    final document = await _productsCollection
-        .doc(productId)
-        .get();
+    final document = await _productsCollection.doc(productId).get();
 
     if (!document.exists) {
       throw StateError('Product not found.');
@@ -68,14 +56,52 @@ class ProductService {
     final ownerId = data?['sellerId'] as String?;
 
     if (ownerId != user.uid) {
-      throw StateError(
-        'You can only update your own products.',
-      );
+      throw StateError('You can only update your own products.');
     }
 
-    await _productsCollection
-        .doc(productId)
-        .update(product.toFirestore());
+    await _productsCollection.doc(productId).update(product.toFirestore());
+  }
+
+  Future<void> reserveProduct(String productId) async {
+    final user = _auth.currentUser;
+
+    if (user == null) {
+      throw StateError('User must be signed in.');
+    }
+
+    if (productId.isEmpty) {
+      throw ArgumentError('Product ID is required.');
+    }
+
+    final reference = _productsCollection.doc(productId);
+
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(reference);
+
+      if (!snapshot.exists) {
+        throw StateError('Product not found.');
+      }
+
+      final data = snapshot.data()!;
+      final sellerId = data['sellerId'] as String? ?? '';
+      final status = data['status'] as String? ?? 'Available';
+      final reservedBy = data['reservedBy'] as String?;
+
+      if (sellerId == user.uid) {
+        throw StateError('You cannot reserve your own product.');
+      }
+
+      if (status != 'Available' ||
+          (reservedBy != null && reservedBy.isNotEmpty)) {
+        throw StateError('Product is no longer available.');
+      }
+
+      transaction.update(reference, {
+        'status': 'Reserved',
+        'reservedBy': user.uid,
+        'reservedAt': FieldValue.serverTimestamp(),
+      });
+    });
   }
 
   Future<void> deleteProduct(String productId) async {
@@ -86,14 +112,10 @@ class ProductService {
     }
 
     if (productId.isEmpty) {
-      throw ArgumentError(
-        'Product ID is required to delete a product.',
-      );
+      throw ArgumentError('Product ID is required to delete a product.');
     }
 
-    final document = await _productsCollection
-        .doc(productId)
-        .get();
+    final document = await _productsCollection.doc(productId).get();
 
     if (!document.exists) {
       throw StateError('Product not found.');
@@ -104,14 +126,10 @@ class ProductService {
     final ownerId = data?['sellerId'] as String?;
 
     if (ownerId != user.uid) {
-      throw StateError(
-        'You can only delete your own products.',
-      );
+      throw StateError('You can only delete your own products.');
     }
 
-    await _productsCollection
-        .doc(productId)
-        .delete();
+    await _productsCollection.doc(productId).delete();
   }
 
   Future<Product?> getProduct(String productId) async {
@@ -119,8 +137,7 @@ class ProductService {
       return null;
     }
 
-    final document =
-        await _productsCollection.doc(productId).get();
+    final document = await _productsCollection.doc(productId).get();
 
     if (!document.exists) {
       return null;
@@ -133,18 +150,12 @@ class ProductService {
     return _productsCollection
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map(
-          (snapshot) {
-            return snapshot.docs
-                .map(Product.fromFirestore)
-                .toList();
-          },
-        );
+        .map((snapshot) {
+          return snapshot.docs.map(Product.fromFirestore).toList();
+        });
   }
 
-  Stream<List<Product>> watchRecommendedProducts(
-    List<String> interests,
-  ) {
+  Stream<List<Product>> watchRecommendedProducts(List<String> interests) {
     final normalizedInterests = interests
         .map((interest) => interest.trim().toLowerCase())
         .where((interest) => interest.isNotEmpty)
@@ -159,8 +170,7 @@ class ProductService {
       final others = <Product>[];
 
       for (final product in products) {
-        final category =
-            product.category.trim().toLowerCase();
+        final category = product.category.trim().toLowerCase();
 
         if (normalizedInterests.contains(category)) {
           recommended.add(product);
@@ -169,39 +179,25 @@ class ProductService {
         }
       }
 
-      return [
-        ...recommended,
-        ...others,
-      ];
+      return [...recommended, ...others];
     });
   }
 
-  Stream<List<Product>> watchSellerProducts(
-    String sellerId,
-  ) {
+  Stream<List<Product>> watchSellerProducts(String sellerId) {
     return _productsCollection
-        .where(
-          'sellerId',
-          isEqualTo: sellerId,
-        )
+        .where('sellerId', isEqualTo: sellerId)
         .snapshots()
-        .map(
-          (snapshot) {
-            final products = snapshot.docs
-                .map(Product.fromFirestore)
-                .toList();
+        .map((snapshot) {
+          final products = snapshot.docs.map(Product.fromFirestore).toList();
 
-            products.sort(
-              (a, b) {
-                final aId = a.id ?? '';
-                final bId = b.id ?? '';
+          products.sort((a, b) {
+            final aId = a.id ?? '';
+            final bId = b.id ?? '';
 
-                return bId.compareTo(aId);
-              },
-            );
+            return bId.compareTo(aId);
+          });
 
-            return products;
-          },
-        );
+          return products;
+        });
   }
 }
