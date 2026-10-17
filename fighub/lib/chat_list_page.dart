@@ -169,6 +169,74 @@ class ChatListPage extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                      onLongPress: chatId.isEmpty
+                          ? null
+                          : () async {
+                              final confirmed = await showDialog<bool>(
+                                context: context,
+                                builder: (dialogContext) => AlertDialog(
+                                  title: Text(
+                                    localization.isArabic
+                                        ? 'حذف المحادثة بالكامل؟'
+                                        : 'Delete entire conversation?',
+                                  ),
+                                  content: Text(
+                                    localization.isArabic
+                                        ? 'سيتم حذف المحادثة وكل رسائلها عند الطرفين. لا يمكن التراجع عن هذا الإجراء.'
+                                        : 'This deletes the conversation and all its messages for both participants. This cannot be undone.',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(dialogContext, false),
+                                      child: Text(
+                                        localization.isArabic
+                                            ? 'إلغاء'
+                                            : 'Cancel',
+                                      ),
+                                    ),
+                                    FilledButton(
+                                      onPressed: () =>
+                                          Navigator.pop(dialogContext, true),
+                                      child: Text(
+                                        localization.isArabic
+                                            ? 'حذف'
+                                            : 'Delete',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+
+                              if (confirmed != true || !context.mounted) {
+                                return;
+                              }
+
+                              try {
+                                await chatService.deleteChat(chatId);
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      localization.isArabic
+                                          ? 'تم حذف المحادثة بالكامل'
+                                          : 'Conversation deleted',
+                                    ),
+                                  ),
+                                );
+                              } catch (error) {
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      localization.isArabic
+                                          ? 'تعذر حذف المحادثة: $error'
+                                          : 'Could not delete conversation: $error',
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
                       onTap: chatId.isEmpty
                           ? null
                           : () {

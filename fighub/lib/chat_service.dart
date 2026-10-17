@@ -764,27 +764,37 @@ class ChatService {
 
   Future<void> deleteChat(String chatId) async {
     final user = _auth.currentUser;
-
     if (user == null || chatId.isEmpty) {
-      return;
+      throw StateError('You must be signed in to delete a chat.');
     }
 
     final chatReference = _firestore.collection('chats').doc(chatId);
-
     final chatSnapshot = await chatReference.get();
 
-    if (!chatSnapshot.exists) {
-      return;
-    }
+    if (!chatSnapshot.exists) return;
 
     final chatData = chatSnapshot.data() ?? {};
-
     final participants = chatData['participants'];
 
     if (participants is! List || !participants.contains(user.uid)) {
       throw StateError('You are not a participant in this chat.');
     }
 
+    // Delete messages first, in batches smaller than Firestore's 500-write limit.
+    final messagesReference = chatReference.collection('messages');
+
+    while (true) {
+      final page = await messagesReference.limit(400).get();
+      if (page.docs.isEmpty) break;
+
+      final batch = _firestore.batch();
+      for (final message in page.docs) {
+        batch.delete(message.reference);
+      }
+      await batch.commit();
+    }
+
+    // Delete the shared chat only after its messages have been deleted.
     await chatReference.delete();
   }
 
