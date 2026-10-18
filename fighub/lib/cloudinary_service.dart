@@ -52,6 +52,37 @@ class CloudinaryService {
     return secureUrl;
   }
 
+  Future<String> uploadAudio(String audioPath) async {
+    final uri = Uri.parse(
+      'https://api.cloudinary.com/v1_1/$_cloudName/video/upload',
+    );
+    final request = http.MultipartRequest('POST', uri);
+    request.fields['upload_preset'] = _uploadPreset;
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'file',
+        audioPath,
+        filename: 'voice_message.m4a',
+      ),
+    );
+
+    final response = await request.send();
+    final body = await response.stream.bytesToString();
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        'Cloudinary audio upload failed: ${response.statusCode} $body',
+      );
+    }
+
+    final decoded = jsonDecode(body) as Map<String, dynamic>;
+    final url = decoded['secure_url'] as String?;
+    if (url == null || url.isEmpty) {
+      throw StateError('Cloudinary did not return an audio URL.');
+    }
+    return url;
+  }
+
   Future<String> uploadVideo(XFile videoFile) async {
     final uri = Uri.parse(
       'https://api.cloudinary.com/v1_1/$_cloudName/video/upload',

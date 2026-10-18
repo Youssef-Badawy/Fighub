@@ -647,7 +647,7 @@ class ChatService {
     if (chatId.isEmpty || mediaUrl.trim().isEmpty) {
       throw StateError('Chat ID and media URL are required.');
     }
-    if (mediaType != 'image' && mediaType != 'video') {
+    if (mediaType != 'image' && mediaType != 'video' && mediaType != 'audio') {
       throw ArgumentError.value(mediaType, 'mediaType');
     }
 
@@ -670,7 +670,11 @@ class ChatService {
 
     final recipientId = user.uid == buyerId ? sellerId : buyerId;
     final trimmedCaption = caption.trim();
-    final label = mediaType == 'image' ? '📷 صورة' : '🎥 فيديو';
+    final label = mediaType == 'image'
+        ? '📷 صورة'
+        : mediaType == 'video'
+        ? '🎥 فيديو'
+        : '🎙️ رسالة صوتية';
     final lastMessage = trimmedCaption.isEmpty
         ? label
         : '$label: $trimmedCaption';

@@ -1,4 +1,9 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:record/record.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 
@@ -22,11 +27,129 @@ class _ChatPageState extends State<ChatPage> {
   final ChatService _chatService = ChatService();
 
   bool _isSending = false;
+  bool _isRecording = false;
+  final AudioRecorder _audioRecorder = AudioRecorder();
 
   @override
   void dispose() {
     _messageController.dispose();
+    unawaited(_audioRecorder.dispose());
     super.dispose();
+  }
+
+  Future<void> _startVoiceRecording() async {
+    if (_isSending || _isRecording) return;
+
+    final isArabic = AppLocalizations.of(context).isArabic;
+
+    try {
+      final hasPermission = await _audioRecorder.hasPermission();
+      if (!hasPermission) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isArabic ? 'لازم تسمح باستخدام الميكروفون لتسجيل رسالة صوتية.' : 'Microphone permission is required to record a voice message.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      final path =
+          '${Directory.systemTemp.path}/fighub_voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+
+      await _audioRecorder.start(
+        const RecordConfig(encoder: AudioEncoder.aacLc, numChannels: 1),
+        path: path,
+      );
+
+      if (!mounted) {
+        await _audioRecorder.stop();
+        return;
+      }
+
+      setState(() => _isRecording = true);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isArabic ? 'تعذر بدء تسجيل الصوت.' : 'Could not start recording.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _cancelVoiceRecording() async {
+    try {
+      final path = await _audioRecorder.stop();
+      if (path != null) {
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+      }
+    } catch (_) {
+      // Best effort cleanup when cancelling a recording.
+    } finally {
+      if (mounted) setState(() => _isRecording = false);
+    }
+  }
+
+  Future<void> _stopAndSendVoiceMessage() async {
+    if (!_isRecording || _isSending) return;
+
+    final isArabic = AppLocalizations.of(context).isArabic;
+    String? path;
+
+    setState(() {
+      _isRecording = false;
+      _isSending = true;
+    });
+
+    try {
+      path = await _audioRecorder.stop();
+      if (path == null || path.isEmpty) {
+        throw StateError('Recording did not produce a file.');
+      }
+
+      final url = await CloudinaryService().uploadAudio(path);
+      await _chatService.sendMediaMessage(
+        chatId: widget.chatId,
+        mediaUrl: url,
+        mediaType: 'audio',
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isArabic ? 'تم إرسال الرسالة الصوتية.' : 'Voice message sent.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isArabic ? 'تعذر إرسال الصوت. راجع الاتصال وإعدادات Cloudinary.' : 'Could not send audio. Check your connection and Cloudinary settings.',
+          ),
+        ),
+      );
+    } finally {
+      if (path != null) {
+        try {
+          final file = File(path);
+          if (await file.exists()) await file.delete();
+        } catch (_) {
+          // A leftover temporary file does not affect the sent message.
+        }
+      }
+      if (mounted) {
+        setState(() => _isSending = false);
+      }
+    }
   }
 
   Future<void> _sendMessage() async {
@@ -315,6 +438,11 @@ class _ChatPageState extends State<ChatPage> {
               ),
             if (type == 'video' && mediaUrl.isNotEmpty)
               _ChatVideoPlayer(url: mediaUrl),
+            if (type == 'audio' && mediaUrl.isNotEmpty)
+              _ChatAudioPlayer(
+                url: mediaUrl,
+                isArabic: AppLocalizations.of(context).isArabic,
+              ),
             if (text.isNotEmpty) ...[
               if (type != 'text') const SizedBox(height: 6),
               Text(text, style: const TextStyle(fontSize: 15)),
@@ -809,16 +937,127 @@ class _ChatPageState extends State<ChatPage> {
                           ),
                         ),
                       ),
+                      if (_isRecording) ...[
+                        IconButton(
+                          tooltip: isArabic
+                              ? 'إلغاء التسجيل'
+                              : 'Cancel recording',
+                          onPressed: _isSending ? null : _cancelVoiceRecording,
+                          icon: const Icon(Icons.close, color: Colors.red),
+                        ),
+                        IconButton(
+                          tooltip: isArabic
+                              ? 'إيقاف وإرسال الصوت'
+                              : 'Stop and send voice',
+                          onPressed: _isSending
+                              ? null
+                              : _stopAndSendVoiceMessage,
+                          icon: const Icon(
+                            Icons.stop_circle,
+                            color: Colors.red,
+                          ),
+                        ),
+                      ] else
+                        IconButton(
+                          tooltip: isArabic
+                              ? 'تسجيل رسالة صوتية'
+                              : 'Record a voice message',
+                          onPressed: _isSending ? null : _startVoiceRecording,
+                          icon: const Icon(Icons.mic),
+                        ),
                       const SizedBox(width: 8),
                       FloatingActionButton(
                         mini: true,
-                        onPressed: _isSending ? null : _sendMessage,
+                        onPressed: _isSending || _isRecording
+                            ? null
+                            : _sendMessage,
                         child: const Icon(Icons.send),
                       ),
                     ],
                   ),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChatAudioPlayer extends StatefulWidget {
+  final String url;
+  final bool isArabic;
+
+  const _ChatAudioPlayer({required this.url, required this.isArabic});
+
+  @override
+  State<_ChatAudioPlayer> createState() => _ChatAudioPlayerState();
+}
+
+class _ChatAudioPlayerState extends State<_ChatAudioPlayer> {
+  final AudioPlayer _player = AudioPlayer();
+  StreamSubscription<PlayerState>? _stateSubscription;
+  bool _isPlaying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _stateSubscription = _player.onPlayerStateChanged.listen((state) {
+      if (mounted) {
+        setState(() => _isPlaying = state == PlayerState.playing);
+      }
+    });
+  }
+
+  Future<void> _togglePlayback() async {
+    try {
+      if (_isPlaying) {
+        await _player.pause();
+      } else {
+        await _player.play(UrlSource(widget.url));
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.isArabic
+                ? 'تعذر تشغيل الرسالة الصوتية.'
+                : 'Could not play the voice message.',
+          ),
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_stateSubscription?.cancel());
+    unawaited(_player.dispose());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 220,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: _isPlaying
+                ? (widget.isArabic ? 'إيقاف مؤقت' : 'Pause')
+                : (widget.isArabic ? 'تشغيل الصوت' : 'Play voice message'),
+            onPressed: _togglePlayback,
+            icon: Icon(_isPlaying ? Icons.pause_circle : Icons.play_circle),
+            iconSize: 34,
+          ),
+          Expanded(
+            child: Text(
+              widget.isArabic ? 'رسالة صوتية' : 'Voice message',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
