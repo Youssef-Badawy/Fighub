@@ -272,6 +272,10 @@ class OfferService {
           ? rawWaitingUsers.whereType<String>().toList()
           : <String>[];
 
+      if (currentStatus == 'Sold') {
+        throw StateError('This item has already been sold.');
+      }
+
       if (currentStatus != 'Available' ||
           (currentReservedBy != null && currentReservedBy.isNotEmpty)) {
         if (waitingUsers.contains(uid)) {
@@ -457,6 +461,10 @@ class OfferService {
       final itemData = itemSnapshot.data() ?? {};
 
       final reservationData = reservationSnapshot.data() ?? {};
+
+      if (itemData['status'] == 'Sold') {
+        throw StateError('A sold item cannot be cancelled.');
+      }
 
       if (itemData['reservedBy'] != uid) {
         throw StateError('You do not own the current reservation.');

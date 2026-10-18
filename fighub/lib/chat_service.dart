@@ -257,14 +257,29 @@ class ChatService {
                 .toList()
           : <Map<String, dynamic>>[];
 
+      // Never restore an item that already belongs to a completed sale.
+      final rawSettledOrders = data['settledOrders'];
+      final wasSettled =
+          rawSettledOrders is List &&
+          rawSettledOrders.whereType<Map>().any((order) {
+            final orderItems = order['items'];
+            return orderItems is List &&
+                orderItems.whereType<Map>().any(
+                  (settledItem) =>
+                      settledItem['offerId'] == offerId &&
+                      settledItem['itemId'] == itemId,
+                );
+          });
+
+      if (wasSettled) return;
+
       final index = items.indexWhere(
         (item) => item['offerId'] == offerId && item['itemId'] == itemId,
       );
 
       if (index >= 0) {
         final existing = items[index];
-        if (existing['status'] != 'Cancelled' &&
-            existing['status'] != 'Settled') {
+        if (existing['status'] != 'Cancelled') {
           return;
         }
         items[index] = newItem;
@@ -348,7 +363,7 @@ class ChatService {
     if (chatId.isEmpty) throw ArgumentError('Chat ID is required.');
 
     final ref = _firestore.collection('chats').doc(chatId);
-    var completed = false;
+    var bothConfirmed = false;
 
     await _firestore.runTransaction((transaction) async {
       final snapshot = await transaction.get(ref);
@@ -383,46 +398,156 @@ class ChatService {
       var sellerConfirmed = data['settlementSellerConfirmed'] == true;
 
       if (user.uid == buyerId) {
+        if (buyerConfirmed) throw StateError('Buyer already confirmed.');
         buyerConfirmed = true;
       } else {
+        if (sellerConfirmed) throw StateError('Seller already confirmed.');
         sellerConfirmed = true;
       }
 
-      final updates = <String, dynamic>{
-        'settlementBuyerConfirmed': buyerConfirmed,
-        'settlementSellerConfirmed': sellerConfirmed,
+      bothConfirmed = buyerConfirmed && sellerConfirmed;
+
+      // Each participant may update only their own confirmation.
+      transaction.update(ref, {
+        if (user.uid == buyerId)
+          'settlementBuyerConfirmed': true
+        else
+          'settlementSellerConfirmed': true,
         'updatedAt': FieldValue.serverTimestamp(),
-      };
+      });
+    });
 
-      if (buyerConfirmed && sellerConfirmed) {
-        final rawHistory = data['settledOrders'];
-        final history = rawHistory is List
-            ? List<dynamic>.from(rawHistory)
-            : <dynamic>[];
+    return bothConfirmed;
+  }
 
-        history.add({
-          'items': activeItems,
-          'settledAt': Timestamp.now(),
-          'buyerId': buyerId,
-          'sellerId': sellerId,
+  Future<void> finalizeSettlement({required String chatId}) async {
+    final user = _auth.currentUser;
+    if (user == null) throw StateError('User must be signed in.');
+    if (chatId.isEmpty) throw ArgumentError('Chat ID is required.');
+
+    final chatRef = _firestore.collection('chats').doc(chatId);
+
+    await _firestore.runTransaction((transaction) async {
+      final chatSnapshot = await transaction.get(chatRef);
+      if (!chatSnapshot.exists) throw StateError('Chat not found.');
+
+      final data = chatSnapshot.data()!;
+      final buyerId = data['buyerId'] as String? ?? '';
+      final sellerId = data['sellerId'] as String? ?? '';
+
+      if (user.uid != sellerId) {
+        throw StateError('Only the seller can finalize the sale.');
+      }
+      if (buyerId.isEmpty ||
+          data['settlementBuyerConfirmed'] != true ||
+          data['settlementSellerConfirmed'] != true) {
+        throw StateError('Both parties must confirm before finalization.');
+      }
+
+      final rawItems = data['offerItems'];
+      final items = rawItems is List
+          ? rawItems
+                .whereType<Map>()
+                .map((item) => Map<String, dynamic>.from(item))
+                .toList()
+          : <Map<String, dynamic>>[];
+      final activeItems = items
+          .where(
+            (item) =>
+                item['status'] != 'Cancelled' && item['status'] != 'Settled',
+          )
+          .toList();
+
+      if (activeItems.isEmpty) {
+        throw StateError('There are no active reserved items to settle.');
+      }
+
+      final itemRefs = <DocumentReference<Map<String, dynamic>>>[];
+      final reservationRefs = <DocumentReference<Map<String, dynamic>>>[];
+
+      for (final item in activeItems) {
+        final offerId = item['offerId'] as String? ?? '';
+        final itemId = item['itemId'] as String? ?? '';
+        if (offerId.isEmpty || itemId.isEmpty || item['source'] != 'offer') {
+          throw StateError('Invalid offer item in settlement.');
+        }
+
+        final itemRef = _firestore
+            .collection('offers')
+            .doc(offerId)
+            .collection('items')
+            .doc(itemId);
+        itemRefs.add(itemRef);
+        reservationRefs.add(itemRef.collection('reservations').doc(buyerId));
+      }
+
+      // Read every document before writing anything in the transaction.
+      final itemSnapshots = <DocumentSnapshot<Map<String, dynamic>>>[];
+      final reservationSnapshots = <DocumentSnapshot<Map<String, dynamic>>>[];
+
+      for (final ref in itemRefs) {
+        itemSnapshots.add(await transaction.get(ref));
+      }
+      for (final ref in reservationRefs) {
+        reservationSnapshots.add(await transaction.get(ref));
+      }
+
+      for (var i = 0; i < activeItems.length; i++) {
+        final itemSnapshot = itemSnapshots[i];
+        final reservationSnapshot = reservationSnapshots[i];
+
+        if (!itemSnapshot.exists || !reservationSnapshot.exists) {
+          throw StateError('A reserved item or reservation no longer exists.');
+        }
+
+        final itemData = itemSnapshot.data()!;
+        final reservationData = reservationSnapshot.data()!;
+
+        if (itemData['status'] != 'Reserved' ||
+            itemData['reservedBy'] != buyerId ||
+            reservationData['status'] != 'Active' ||
+            reservationData['userId'] != buyerId) {
+          throw StateError('A reservation is no longer active.');
+        }
+      }
+
+      final historyRaw = data['settledOrders'];
+      final history = historyRaw is List
+          ? List<dynamic>.from(historyRaw)
+          : <dynamic>[];
+      history.add({
+        'items': activeItems,
+        'settledAt': Timestamp.now(),
+        'buyerId': buyerId,
+        'sellerId': sellerId,
+      });
+
+      for (var i = 0; i < activeItems.length; i++) {
+        transaction.update(itemRefs[i], {
+          'status': 'Sold',
+          'soldTo': buyerId,
+          'soldAt': FieldValue.serverTimestamp(),
         });
+        transaction.update(reservationRefs[i], {
+          'status': 'Settled',
+          'settledAt': FieldValue.serverTimestamp(),
+        });
+      }
 
-        updates['settledOrders'] = history;
-        updates['offerItems'] = items
+      transaction.update(chatRef, {
+        'settledOrders': history,
+        'offerItems': items
             .where(
               (item) =>
                   item['status'] == 'Cancelled' || item['status'] == 'Settled',
             )
-            .toList();
-        updates['settlementBuyerConfirmed'] = false;
-        updates['settlementSellerConfirmed'] = false;
-        completed = true;
-      }
-
-      transaction.update(ref, updates);
+            .toList(),
+        'settlementBuyerConfirmed': false,
+        'settlementSellerConfirmed': false,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'lastMessage': 'تم إتمام تسوية الحساب',
+      });
     });
-
-    return completed;
   }
 
   Future<String> getOrCreateOfferChat({
@@ -511,13 +636,38 @@ class ChatService {
       );
 
       if (index < 0) {
-        items.add(item);
-        newlyAdded = true;
+        // Do not restore an item from a previously settled order
+        // just because the seller opened the chat again.
+        final rawSettledOrders = data['settledOrders'];
+        final wasSettled =
+            rawSettledOrders is List &&
+            rawSettledOrders.whereType<Map>().any((order) {
+              final orderItems = order['items'];
+              return orderItems is List &&
+                  orderItems.whereType<Map>().any(
+                    (settledItem) =>
+                        settledItem['offerId'] == offerId &&
+                        settledItem['itemId'] == itemId,
+                  );
+            });
+
+        if (!wasSettled) {
+          items.add(item);
+          newlyAdded = true;
+        }
       } else {
-        // Refresh missing/old item details without duplicating the reservation.
-        items[index] = {...items[index], ...item};
-        if (items[index]['status'] == 'Cancelled' ||
-            items[index]['status'] == 'Settled') {
+        // Keep settled items out of the active total when opening the chat.
+        final previousStatus = items[index]['status'];
+
+        items[index] = {
+          ...items[index],
+          ...item,
+          if (previousStatus == 'Settled') 'status': 'Settled',
+        };
+
+        // A cancelled item can be reactivated only when the manager
+        // passes it again as an actually reserved offer item.
+        if (previousStatus == 'Cancelled') {
           newlyAdded = true;
         }
       }

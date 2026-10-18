@@ -287,7 +287,7 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _confirmOrderSettlement() async {
     try {
-      final completed = await _chatService.confirmSettlement(
+      final bothConfirmed = await _chatService.confirmSettlement(
         chatId: widget.chatId,
       );
       if (!mounted) return;
@@ -296,13 +296,13 @@ class _ChatPageState extends State<ChatPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            completed
+            bothConfirmed
                 ? (isArabic
-                      ? 'تم تأكيد الطرفين وإغلاق الحساب.'
-                      : 'Both parties confirmed. The order is settled.')
+                    ? 'تم تأكيد الطرفين. البائع يقدر الآن يتمم البيع.'
+                    : 'Both parties confirmed. The seller can now finalize the sale.')
                 : (isArabic
-                      ? 'تم تسجيل تأكيدك. ننتظر تأكيد الطرف الآخر.'
-                      : 'Your confirmation was saved. Waiting for the other party.'),
+                    ? 'تم تسجيل تأكيدك. ننتظر تأكيد الطرف الآخر.'
+                    : 'Your confirmation was saved. Waiting for the other party.'),
           ),
         ),
       );
@@ -315,6 +315,35 @@ class _ChatPageState extends State<ChatPage> {
             isArabic
                 ? 'تعذر تأكيد الحساب. تأكد من وجود قطع محجوزة.'
                 : 'Could not confirm settlement. Check active reservations.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _finalizeOrderSettlement() async {
+    try {
+      await _chatService.finalizeSettlement(chatId: widget.chatId);
+      if (!mounted) return;
+      final isArabic = AppLocalizations.of(context).isArabic;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isArabic
+                ? 'تم إتمام البيع وحفظ سجل الحساب.'
+                : 'Sale finalized and order history saved.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final isArabic = AppLocalizations.of(context).isArabic;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isArabic
+                ? 'تعذر إتمام البيع. راجع الحجوزات وقواعد Firestore.'
+                : 'Could not finalize the sale. Check reservations and Firestore rules.',
           ),
         ),
       );
@@ -617,37 +646,43 @@ class _ChatPageState extends State<ChatPage> {
                             ),
                             child: Row(
                               children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: SizedBox(
-                                    width: 70,
-                                    height: 85,
-                                    child: image.isEmpty
-                                        ? Container(
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .surfaceContainerHighest,
-                                            child: const Icon(
-                                              Icons
-                                                  .image_not_supported_outlined,
+                                GestureDetector(
+                                  onTap: image.isEmpty
+                                      ? null
+                                      : () =>
+                                            _showFullChatImage(context, image),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: SizedBox(
+                                      width: 70,
+                                      height: 85,
+                                      child: image.isEmpty
+                                          ? Container(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .surfaceContainerHighest,
+                                              child: const Icon(
+                                                Icons
+                                                    .image_not_supported_outlined,
+                                              ),
+                                            )
+                                          : Image.network(
+                                              image,
+                                              fit: BoxFit.cover,
+                                              errorBuilder:
+                                                  (context, error, stackTrace) {
+                                                    return Container(
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .surfaceContainerHighest,
+                                                      child: const Icon(
+                                                        Icons
+                                                            .broken_image_outlined,
+                                                      ),
+                                                    );
+                                                  },
                                             ),
-                                          )
-                                        : Image.network(
-                                            image,
-                                            fit: BoxFit.cover,
-                                            errorBuilder:
-                                                (context, error, stackTrace) {
-                                                  return Container(
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .surfaceContainerHighest,
-                                                    child: const Icon(
-                                                      Icons
-                                                          .broken_image_outlined,
-                                                    ),
-                                                  );
-                                                },
-                                          ),
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
@@ -766,24 +801,44 @@ class _ChatPageState extends State<ChatPage> {
                       style: const TextStyle(fontSize: 12),
                     ),
                     const SizedBox(height: 6),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: alreadyConfirmed
-                            ? null
-                            : _confirmOrderSettlement,
-                        icon: const Icon(Icons.handshake_outlined),
-                        label: Text(
-                          alreadyConfirmed
-                              ? (isArabic
+                    if (buyerConfirmed && sellerConfirmed && isSeller)
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: _finalizeOrderSettlement,
+                          icon: const Icon(Icons.check_circle_outline),
+                          label: Text(
+                            isArabic
+                                ? 'إتمام البيع وتسجيل القطع كمباعة'
+                                : 'Finalize sale and mark items sold',
+                          ),
+                        ),
+                      )
+                    else if (buyerConfirmed && sellerConfirmed && isBuyer)
+                      Text(
+                        isArabic
+                            ? 'تم تأكيد الطرفين. ننتظر البائع لإتمام البيع.'
+                            : 'Both confirmed. Waiting for the seller to finalize.',
+                      )
+                    else
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: alreadyConfirmed
+                              ? null
+                              : _confirmOrderSettlement,
+                          icon: const Icon(Icons.handshake_outlined),
+                          label: Text(
+                            alreadyConfirmed
+                                ? (isArabic
                                     ? 'تم تسجيل تأكيدك'
                                     : 'Your confirmation is recorded')
-                              : (isArabic
+                                : (isArabic
                                     ? 'تأكيد تسوية الحساب'
                                     : 'Confirm order settlement'),
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               );
@@ -1146,4 +1201,34 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
       ),
     );
   }
+}
+
+void _showFullChatImage(BuildContext context, String imageUrl) {
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) => Dialog(
+      insetPadding: const EdgeInsets.all(12),
+      child: Stack(
+        alignment: Alignment.topRight,
+        children: [
+          InteractiveViewer(
+            minScale: 0.5,
+            maxScale: 4,
+            child: Image.network(
+              imageUrl,
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => const Padding(
+                padding: EdgeInsets.all(32),
+                child: Icon(Icons.broken_image_outlined, size: 48),
+              ),
+            ),
+          ),
+          IconButton.filledTonal(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            icon: const Icon(Icons.close),
+          ),
+        ],
+      ),
+    ),
+  );
 }

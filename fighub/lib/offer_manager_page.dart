@@ -173,6 +173,16 @@ class OfferManagerPage extends StatelessWidget {
                   final canDelete =
                       items.isNotEmpty && reservedCount == items.length;
 
+                  final buyerGroups = <String, List<OfferItem>>{};
+                  for (final item in items) {
+                    final buyerId = item.reservedBy;
+                    if (item.status == 'Reserved' &&
+                        buyerId != null &&
+                        buyerId.isNotEmpty) {
+                      buyerGroups.putIfAbsent(buyerId, () => []).add(item);
+                    }
+                  }
+
                   return Column(
                     children: [
                       Card(
@@ -263,6 +273,154 @@ class OfferManagerPage extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (buyerGroups.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                          child: Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'المشترون والحجوزات',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  ...buyerGroups.entries.map((entry) {
+                                    final buyerId = entry.key;
+                                    final buyerItems = entry.value;
+                                    final total = buyerItems.fold<double>(0, (
+                                      sum,
+                                      item,
+                                    ) {
+                                      final price = item.price.replaceAll(
+                                        RegExp(r'[^0-9.]'),
+                                        '',
+                                      );
+                                      return sum +
+                                          (double.tryParse(price) ?? 0);
+                                    });
+
+                                    return StreamBuilder<SellerProfile?>(
+                                      stream: SellerProfileService()
+                                          .watchSellerProfile(buyerId),
+                                      builder: (context, profileSnapshot) {
+                                        final buyerProfile =
+                                            profileSnapshot.data;
+                                        final buyerName =
+                                            buyerProfile?.name
+                                                    .trim()
+                                                    .isNotEmpty ==
+                                                true
+                                            ? buyerProfile!.name
+                                            : 'مستخدم FigHub';
+
+                                        return ListTile(
+                                          contentPadding: EdgeInsets.zero,
+                                          leading: CircleAvatar(
+                                            backgroundImage:
+                                                buyerProfile
+                                                        ?.photoUrl
+                                                        .isNotEmpty ==
+                                                    true
+                                                ? NetworkImage(
+                                                    buyerProfile!.photoUrl,
+                                                  )
+                                                : null,
+                                            child:
+                                                buyerProfile
+                                                        ?.photoUrl
+                                                        .isNotEmpty ==
+                                                    true
+                                                ? null
+                                                : const Icon(
+                                                    Icons.person_outline,
+                                                  ),
+                                          ),
+                                          title: Text(buyerName),
+                                          subtitle: Text(
+                                            '${buyerItems.length} قطعة • '
+                                            'الإجمالي: '
+                                            '${total.toStringAsFixed(total == total.roundToDouble() ? 0 : 2)} جنيه',
+                                          ),
+                                          trailing: const Icon(
+                                            Icons.chat_bubble_outline,
+                                          ),
+                                          onTap: () async {
+                                            try {
+                                              final chatService = ChatService();
+                                              String? chatId;
+
+                                              for (final reservedItem
+                                                  in buyerItems) {
+                                                final itemId = reservedItem.id;
+                                                if (itemId == null ||
+                                                    itemId.isEmpty) {
+                                                  continue;
+                                                }
+
+                                                chatId = await chatService
+                                                    .getOrCreateOfferChat(
+                                                      offerId: offerId,
+                                                      itemId: itemId,
+                                                      itemName:
+                                                          reservedItem.name,
+                                                      price: reservedItem.price,
+                                                      imagePaths: reservedItem
+                                                          .imagePaths,
+                                                      buyerId: buyerId,
+                                                      sellerId: offer.sellerId,
+                                                    );
+                                              }
+
+                                              if (!context.mounted) return;
+                                              if (chatId == null) {
+                                                ScaffoldMessenger.of(context)
+                                                    .showSnackBar(
+                                                      const SnackBar(
+                                                        content: Text(
+                                                          'لم يتم العثور على قطع محجوزة صالحة لفتح المحادثة.',
+                                                        ),
+                                                      ),
+                                                    );
+                                                return;
+                                              }
+
+                                              await Navigator.of(context).push(
+                                                MaterialPageRoute(
+                                                  builder: (_) => ChatPage(
+                                                    chatId: chatId!,
+                                                    productName:
+                                                        'حساب المشتريات',
+                                                  ),
+                                                ),
+                                              );
+                                            } catch (error) {
+                                              if (!context.mounted) return;
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    'تعذر فتح المحادثة: $error',
+                                                  ),
+                                                ),
+                                              );
+                                            }
+                                          },
+                                        );
+                                      },
+                                    );
+                                  }),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       Expanded(
                         child: items.isEmpty
                             ? const Center(
@@ -291,24 +449,29 @@ class OfferManagerPage extends StatelessWidget {
                                   return Card(
                                     child: ListTile(
                                       leading: item.imagePaths.isNotEmpty
-                                          ? ClipRRect(
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                              child: Image.network(
+                                          ? GestureDetector(
+                                              onTap: () => _showFullOfferImage(
+                                                context,
                                                 item.imagePaths.first,
-                                                width: 64,
-                                                height: 64,
-                                                fit: BoxFit.cover,
-                                                errorBuilder: (_, _, _) {
-                                                  return const SizedBox(
-                                                    width: 64,
-                                                    height: 64,
-                                                    child: Icon(
-                                                      Icons
-                                                          .broken_image_outlined,
-                                                    ),
-                                                  );
-                                                },
+                                              ),
+                                              child: ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                child: Image.network(
+                                                  item.imagePaths.first,
+                                                  width: 64,
+                                                  height: 64,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (_, _, _) =>
+                                                      const SizedBox(
+                                                        width: 64,
+                                                        height: 64,
+                                                        child: Icon(
+                                                          Icons
+                                                              .broken_image_outlined,
+                                                        ),
+                                                      ),
+                                                ),
                                               ),
                                             )
                                           : const SizedBox(
@@ -317,176 +480,8 @@ class OfferManagerPage extends StatelessWidget {
                                               child: Icon(Icons.image_outlined),
                                             ),
                                       title: Text(item.name),
-                                      subtitle: StreamBuilder<List<Map<String, dynamic>>>(
-                                        stream: offerService
-                                            .watchItemReservations(
-                                              offerId: offerId,
-                                              itemId: item.id!,
-                                            ),
-                                        builder: (context, reservationSnapshot) {
-                                          final reservations =
-                                              reservationSnapshot.data ?? [];
-
-                                          final activeReservation = reservations
-                                              .cast<Map<String, dynamic>?>()
-                                              .firstWhere(
-                                                (reservation) =>
-                                                    reservation?['status'] ==
-                                                    'Active',
-                                                orElse: () => null,
-                                              );
-
-                                          final reservedBy =
-                                              activeReservation?['userId']
-                                                  as String?;
-
-                                          if (reservedBy == null) {
-                                            return Text(
-                                              '${item.price} جنيه • '
-                                              '${item.status}',
-                                            );
-                                          }
-
-                                          return StreamBuilder<SellerProfile?>(
-                                            stream: SellerProfileService()
-                                                .watchSellerProfile(reservedBy),
-                                            builder: (context, profileSnapshot) {
-                                              final profile =
-                                                  profileSnapshot.data;
-
-                                              final name =
-                                                  profile?.name
-                                                          .trim()
-                                                          .isNotEmpty ==
-                                                      true
-                                                  ? profile!.name
-                                                  : 'مستخدم FigHub';
-
-                                              return Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    '${item.price} جنيه • '
-                                                    '${item.status}',
-                                                  ),
-                                                  const SizedBox(height: 6),
-                                                  Row(
-                                                    children: [
-                                                      CircleAvatar(
-                                                        radius: 16,
-                                                        backgroundImage:
-                                                            profile
-                                                                    ?.photoUrl
-                                                                    .isNotEmpty ==
-                                                                true
-                                                            ? NetworkImage(
-                                                                profile!
-                                                                    .photoUrl,
-                                                              )
-                                                            : null,
-                                                        child:
-                                                            profile
-                                                                    ?.photoUrl
-                                                                    .isNotEmpty ==
-                                                                true
-                                                            ? null
-                                                            : const Icon(
-                                                                Icons
-                                                                    .person_outline,
-                                                                size: 18,
-                                                              ),
-                                                      ),
-                                                      const SizedBox(width: 8),
-                                                      Expanded(
-                                                        child: InkWell(
-                                                          onTap: () async {
-                                                            try {
-                                                              final chatId = await ChatService().getOrCreateOfferChat(
-                                                                offerId:
-                                                                    offerId,
-                                                                itemId:
-                                                                    item.id!,
-                                                                itemName:
-                                                                    item.name,
-                                                                price:
-                                                                    item.price,
-                                                                imagePaths: item
-                                                                    .imagePaths,
-                                                                buyerId:
-                                                                    reservedBy,
-                                                                sellerId: offer
-                                                                    .sellerId,
-                                                              );
-
-                                                              if (!context
-                                                                  .mounted) {
-                                                                return;
-                                                              }
-
-                                                              await Navigator.of(
-                                                                context,
-                                                              ).push(
-                                                                MaterialPageRoute(
-                                                                  builder: (_) => ChatPage(
-                                                                    chatId:
-                                                                        chatId,
-                                                                    productName:
-                                                                        item.name,
-                                                                  ),
-                                                                ),
-                                                              );
-                                                            } catch (e) {
-                                                              if (!context
-                                                                  .mounted) {
-                                                                return;
-                                                              }
-
-                                                              ScaffoldMessenger.of(
-                                                                context,
-                                                              ).showSnackBar(
-                                                                SnackBar(
-                                                                  content: Text(
-                                                                    'تعذر فتح المحادثة: $e',
-                                                                  ),
-                                                                ),
-                                                              );
-                                                            }
-                                                          },
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                8,
-                                                              ),
-                                                          child: Padding(
-                                                            padding:
-                                                                const EdgeInsets.symmetric(
-                                                                  vertical: 4,
-                                                                ),
-                                                            child: Text(
-                                                              'محجوز بواسطة: '
-                                                              '$name',
-                                                              overflow:
-                                                                  TextOverflow
-                                                                      .ellipsis,
-                                                              style: TextStyle(
-                                                                color: Theme.of(
-                                                                  context,
-                                                                ).colorScheme.primary,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ],
-                                              );
-                                            },
-                                          );
-                                        },
+                                      subtitle: Text(
+                                        '${item.price} جنيه • ${item.status}',
                                       ),
                                       trailing: Text(item.condition),
                                     ),
@@ -515,4 +510,34 @@ class OfferManagerPage extends StatelessWidget {
       ),
     );
   }
+}
+
+void _showFullOfferImage(BuildContext context, String imageUrl) {
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) => Dialog(
+      insetPadding: const EdgeInsets.all(12),
+      child: Stack(
+        alignment: Alignment.topRight,
+        children: [
+          InteractiveViewer(
+            minScale: 0.5,
+            maxScale: 4,
+            child: Image.network(
+              imageUrl,
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => const Padding(
+                padding: EdgeInsets.all(32),
+                child: Icon(Icons.broken_image_outlined, size: 48),
+              ),
+            ),
+          ),
+          IconButton.filledTonal(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            icon: const Icon(Icons.close),
+          ),
+        ],
+      ),
+    ),
+  );
 }

@@ -279,9 +279,24 @@ service cloud.firestore {
                         );
 
           allow update: if request.auth != null
-                        && request.auth.uid == reservationId
-                        && request.resource.data.userId
-                           == request.auth.uid;
+                        && (
+                          (
+                            request.auth.uid == reservationId
+                            && request.resource.data.userId
+                               == request.auth.uid
+                          )
+                          ||
+                          (
+                            get(
+                              /databases/$(database)/documents/offers/$(offerId)
+                            ).data.sellerId == request.auth.uid
+                            && resource.data.status == 'Active'
+                            && request.resource.data.status == 'Settled'
+                            && request.resource.data.userId == resource.data.userId
+                            && request.resource.data.diff(resource.data)
+                               .affectedKeys().hasOnly(['status', 'settledAt'])
+                          )
+                        );
 
           allow delete: if request.auth != null
                         && get(
