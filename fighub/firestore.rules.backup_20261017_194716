@@ -1,0 +1,438 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /products/{productId} {
+
+      allow read: if request.auth != null;
+
+      allow create: if request.auth != null
+                    && request.resource.data.sellerId == request.auth.uid;
+
+      allow update: if request.auth != null
+                    && (
+                      (
+                        resource.data.sellerId == request.auth.uid
+                        && request.resource.data.sellerId
+                           == resource.data.sellerId
+                      )
+                      ||
+                      (
+                        request.auth.uid != resource.data.sellerId
+                        && resource.data.status == 'Available'
+                        && (
+                          !resource.data.keys().hasAny(['reservedBy'])
+                          || resource.data.reservedBy == null
+                          || resource.data.reservedBy == ''
+                        )
+                        && request.resource.data.status == 'Reserved'
+                        && request.resource.data.reservedBy
+                           == request.auth.uid
+                        && request.resource.data.sellerId
+                           == resource.data.sellerId
+                        && request.resource.data.diff(resource.data)
+                           .affectedKeys()
+                           .hasOnly(['status', 'reservedBy', 'reservedAt'])
+                      )
+                    );
+
+      allow delete: if request.auth != null
+                    && resource.data.sellerId == request.auth.uid;
+    }
+
+    match /users/{userId} {
+
+      allow read: if request.auth != null
+                    && request.auth.uid == userId;
+
+      allow create: if request.auth != null
+                      && request.auth.uid == userId;
+
+      allow update: if request.auth != null
+                      && request.auth.uid == userId;
+
+      allow delete: if false;
+
+      match /favorites/{favoriteId} {
+
+        allow read: if request.auth != null
+                      && request.auth.uid == userId;
+
+        allow create: if request.auth != null
+                      && request.auth.uid == userId
+                      && request.resource.data.productId == favoriteId;
+
+        allow update: if request.auth != null
+                      && request.auth.uid == userId
+                      && request.resource.data.productId == favoriteId;
+
+        allow delete: if request.auth != null
+                      && request.auth.uid == userId;
+      }
+
+      match /notifications/{notificationId} {
+
+        allow read: if request.auth != null
+                    && request.auth.uid == userId;
+
+        allow create: if request.auth != null
+                      && request.resource.data.title is string
+                      && request.resource.data.message is string
+                      && request.resource.data.isRead == false;
+
+        allow update: if request.auth != null
+                      && request.auth.uid == userId
+                      && request.resource.data.diff(resource.data)
+                         .affectedKeys()
+                         .hasOnly(['isRead']);
+
+        allow delete: if request.auth != null
+                      && request.auth.uid == userId;
+      }
+
+      match /following/{followingUserId} {
+
+        allow read: if request.auth != null;
+
+        allow create: if request.auth != null
+                      && request.auth.uid == userId
+                      && request.resource.data.userId
+                         == followingUserId;
+
+        allow delete: if request.auth != null
+                      && request.auth.uid == userId;
+
+        allow update: if false;
+      }
+
+      match /followers/{followerUserId} {
+
+        allow read: if request.auth != null;
+
+        allow create: if request.auth != null
+                      && request.auth.uid == followerUserId
+                      && request.resource.data.userId
+                         == followerUserId;
+
+        allow delete: if request.auth != null
+                      && request.auth.uid == followerUserId;
+
+        allow update: if false;
+      }
+    }
+
+
+    match /seller_profiles/{sellerId} {
+
+      allow read: if request.auth != null;
+
+      allow create: if request.auth != null
+                    && request.auth.uid == sellerId;
+
+      allow update: if request.auth != null
+                    && request.auth.uid == sellerId;
+
+      allow delete: if false;
+    }
+
+    match /offers/{offerId} {
+
+      allow read: if request.auth != null;
+
+      allow create: if request.auth != null
+                    && request.resource.data.sellerId
+                       == request.auth.uid;
+
+      allow update: if request.auth != null
+                    && resource.data.sellerId
+                       == request.auth.uid
+                    && request.resource.data.sellerId
+                       == resource.data.sellerId;
+
+      allow delete: if request.auth != null
+                    && resource.data.sellerId
+                       == request.auth.uid;
+
+      match /items/{itemId} {
+
+        allow read: if request.auth != null;
+
+        allow create: if request.auth != null
+                      && get(
+                        /databases/$(database)/documents/offers/$(offerId)
+                      ).data.sellerId
+                         == request.auth.uid;
+
+        allow update: if request.auth != null
+                      && (
+                        (
+                          get(
+                            /databases/$(database)/documents/offers/$(offerId)
+                          ).data.sellerId
+                             == request.auth.uid
+                        )
+                        ||
+                        (
+                          resource.data.reservedBy
+                             == request.auth.uid
+                          && request.resource.data.reservedBy
+                             == null
+                          && request.resource.data.status
+                             == 'Available'
+                          && request.resource.data.diff(resource.data)
+                             .affectedKeys()
+                             .hasOnly([
+                               'status',
+                               'reservedBy',
+                               'reservedAt',
+                               'waitingUsers'
+                             ])
+                        )
+                        ||
+                        (
+                          resource.data.status
+                             == 'Available'
+                          && resource.data.reservedBy
+                             == null
+                          && request.resource.data.status
+                             == 'Reserved'
+                          && request.resource.data.reservedBy
+                             == request.auth.uid
+                          && getAfter(
+                               /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)/reservations/$(request.auth.uid)
+                             ).data.userId
+                             == request.auth.uid
+                          && getAfter(
+                               /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)/reservations/$(request.auth.uid)
+                             ).data.status
+                             == 'Active'
+                          && request.resource.data.diff(resource.data)
+                             .affectedKeys()
+                             .hasOnly([
+                               'status',
+                               'reservedBy',
+                               'reservedAt',
+                               'waitingUsers'
+                             ])
+                        )
+                        ||
+                        (
+                          resource.data.status
+                             == 'Reserved'
+                          && resource.data.reservedBy
+                             != null
+                          && request.resource.data.status
+                             == 'Reserved'
+                          && request.resource.data.reservedBy
+                             == resource.data.reservedBy
+                          && request.resource.data.waitingUsers.size()
+                             == resource.data.waitingUsers.size() + 1
+                          && request.resource.data.waitingUsers[
+                               resource.data.waitingUsers.size()
+                             ]
+                             == request.auth.uid
+                          && getAfter(
+                               /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)/reservations/$(request.auth.uid)
+                             ).data.userId
+                             == request.auth.uid
+                          && getAfter(
+                               /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)/reservations/$(request.auth.uid)
+                             ).data.status
+                             == 'Waiting'
+                          && request.resource.data.diff(resource.data)
+                             .affectedKeys()
+                             .hasOnly([
+                               'waitingUsers'
+                             ])
+                        )
+                      );
+
+        allow delete: if request.auth != null
+                      && get(
+                        /databases/$(database)/documents/offers/$(offerId)
+                      ).data.sellerId
+                         == request.auth.uid;
+
+        match /reservations/{reservationId} {
+
+          allow read: if request.auth != null
+                      && (
+                        request.auth.uid == reservationId
+                        ||
+                        get(
+                          /databases/$(database)/documents/offers/$(offerId)
+                        ).data.sellerId
+                           == request.auth.uid
+                      );
+
+          allow create: if request.auth != null
+                        && request.auth.uid == reservationId
+                        && request.resource.data.userId
+                           == request.auth.uid
+                        && (
+                          request.resource.data.status
+                             == 'Active'
+                          ||
+                          request.resource.data.status
+                             == 'Waiting'
+                        );
+
+          allow update: if request.auth != null
+                        && request.auth.uid == reservationId
+                        && request.resource.data.userId
+                           == request.auth.uid;
+
+          allow delete: if request.auth != null
+                        && get(
+                          /databases/$(database)/documents/offers/$(offerId)
+                        ).data.sellerId
+                           == request.auth.uid;
+        }
+      }
+    }
+
+    match /verification_requests/{requestId} {
+
+      allow read: if request.auth != null
+                  && (
+                    resource.data.userId == request.auth.uid
+                    ||
+                    get(
+                      /databases/$(database)/documents/users/$(request.auth.uid)
+                    ).data.role == 'admin'
+                  );
+
+      allow create: if request.auth != null
+                    && request.resource.data.userId
+                       == request.auth.uid
+                    && request.resource.data.planId is string
+                    && (
+                      request.resource.data.planId
+                        == 'monthly'
+                      ||
+                      request.resource.data.planId
+                        == 'three_months'
+                    )
+                    && request.resource.data.amount is int
+                    && (
+                      (
+                        request.resource.data.planId
+                          == 'monthly'
+                        &&
+                        request.resource.data.amount
+                          == 100
+                      )
+                      ||
+                      (
+                        request.resource.data.planId
+                          == 'three_months'
+                        &&
+                        request.resource.data.amount
+                          == 200
+                      )
+                    )
+                    && request.resource.data.durationMonths
+                       is int
+                    && (
+                      (
+                        request.resource.data.planId
+                          == 'monthly'
+                        &&
+                        request.resource.data.durationMonths
+                          == 1
+                      )
+                      ||
+                      (
+                        request.resource.data.planId
+                          == 'three_months'
+                        &&
+                        request.resource.data.durationMonths
+                          == 3
+                      )
+                    )
+                    && request.resource.data.status
+                       == 'Pending'
+                    && request.resource.data.paymentProofUrl
+                       is string
+                    && request.resource.data.paymentProofUrl
+                       != ''
+                    && request.resource.data.rejectionReason
+                       == ''
+                    && request.resource.data.reviewedAt
+                       == null
+                    && request.resource.data.startsAt
+                       == null
+                    && request.resource.data.expiresAt
+                       == null;
+
+      allow update: if request.auth != null
+                    && get(
+                      /databases/$(database)/documents/users/$(request.auth.uid)
+                    ).data.role == 'admin'
+                    && request.resource.data.userId
+                       == resource.data.userId;
+
+      allow delete: if false;
+    }
+
+    match /chats/{chatId} {
+
+      allow get: if request.auth != null
+                 && (
+                   !exists(
+                     /databases/$(database)/documents/chats/$(chatId)
+                   )
+                   || request.auth.uid in resource.data.participants
+                 );
+
+      allow list: if request.auth != null
+                  && request.auth.uid in resource.data.participants;
+
+      allow create: if request.auth != null
+                    && request.resource.data.buyerId is string
+                    && request.resource.data.sellerId is string
+                    && request.resource.data.buyerId
+                       != request.resource.data.sellerId
+                    && request.resource.data.participants is list
+                    && request.resource.data.participants.size() == 2
+                    && request.auth.uid
+                       in request.resource.data.participants
+                    && request.resource.data.participants.hasAll([
+                      request.resource.data.buyerId,
+                      request.resource.data.sellerId
+                    ]);
+
+      allow update: if request.auth != null
+                    && request.auth.uid in resource.data.participants;
+
+      allow delete: if request.auth != null
+                && request.auth.uid in resource.data.participants;
+
+      match /messages/{messageId} {
+
+        allow read: if request.auth != null
+                    && request.auth.uid in
+                       get(
+                         /databases/$(database)/documents/chats/$(chatId)
+                       ).data.participants;
+
+        allow create: if request.auth != null
+                      && request.auth.uid in
+                         get(
+                           /databases/$(database)/documents/chats/$(chatId)
+                         ).data.participants
+                      && request.resource.data.senderId
+                         == request.auth.uid;
+
+        allow update: if false;
+
+        allow delete: if request.auth != null
+                      && request.auth.uid in
+                         get(
+                           /databases/$(database)/documents/chats/$(chatId)
+                         ).data.participants;
+      }
+    }
+  }
+}

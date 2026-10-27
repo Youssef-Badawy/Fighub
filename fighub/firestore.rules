@@ -169,8 +169,25 @@ service cloud.firestore {
                         (
                           get(
                             /databases/$(database)/documents/offers/$(offerId)
-                          ).data.sellerId
-                             == request.auth.uid
+                          ).data.sellerId == request.auth.uid
+                          && resource.data.status == 'Reserved'
+                          && resource.data.reservedBy is string
+                          && request.resource.data.status == 'Sold'
+                          && request.resource.data.soldTo
+                             == resource.data.reservedBy
+                          && request.resource.data.soldAt == request.time
+                          && getAfter(
+                            /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)/reservations/$(resource.data.reservedBy)
+                          ).data.userId == resource.data.reservedBy
+                          && getAfter(
+                            /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)/reservations/$(resource.data.reservedBy)
+                          ).data.status == 'Settled'
+                          && getAfter(
+                            /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)/reservations/$(resource.data.reservedBy)
+                          ).data.settledAt == request.time
+                          && request.resource.data.diff(resource.data)
+                             .affectedKeys()
+                             .hasOnly(['status', 'soldTo', 'soldAt'])
                         )
                         ||
                         (
@@ -249,6 +266,7 @@ service cloud.firestore {
                       );
 
         allow delete: if request.auth != null
+                      && resource.data.status != 'Sold'
                       && get(
                         /databases/$(database)/documents/offers/$(offerId)
                       ).data.sellerId
@@ -282,8 +300,37 @@ service cloud.firestore {
                         && (
                           (
                             request.auth.uid == reservationId
-                            && request.resource.data.userId
-                               == request.auth.uid
+                            && resource.data.userId == request.auth.uid
+                            && request.resource.data.userId == request.auth.uid
+                            && (
+                              (
+                                resource.data.status == 'Waiting'
+                                && request.resource.data.status == 'Active'
+                                && request.resource.data.cancelledAt == null
+                                && getAfter(
+                                  /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)
+                                ).data.status == 'Reserved'
+                                && getAfter(
+                                  /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)
+                                ).data.reservedBy == request.auth.uid
+                                && request.resource.data.diff(resource.data)
+                                   .affectedKeys().hasOnly(['status', 'cancelledAt'])
+                              )
+                              ||
+                              (
+                                resource.data.status == 'Active'
+                                && request.resource.data.status == 'Cancelled'
+                                && request.resource.data.cancelledAt == request.time
+                                && getAfter(
+                                  /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)
+                                ).data.status == 'Available'
+                                && getAfter(
+                                  /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)
+                                ).data.reservedBy == null
+                                && request.resource.data.diff(resource.data)
+                                   .affectedKeys().hasOnly(['status', 'cancelledAt'])
+                              )
+                            )
                           )
                           ||
                           (
@@ -293,6 +340,16 @@ service cloud.firestore {
                             && resource.data.status == 'Active'
                             && request.resource.data.status == 'Settled'
                             && request.resource.data.userId == resource.data.userId
+                            && request.resource.data.settledAt == request.time
+                            && getAfter(
+                              /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)
+                            ).data.status == 'Sold'
+                            && getAfter(
+                              /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)
+                            ).data.soldTo == resource.data.userId
+                            && getAfter(
+                              /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)
+                            ).data.soldAt == request.time
                             && request.resource.data.diff(resource.data)
                                .affectedKeys().hasOnly(['status', 'settledAt'])
                           )
@@ -431,6 +488,16 @@ service cloud.firestore {
                            'clearedAt',
                            'lastReadBy'
                          ])
+                    && (
+                      !request.resource.data.diff(resource.data)
+                         .affectedKeys().hasAny(['settledOrders'])
+                      || (
+                        request.auth.uid == resource.data.sellerId
+                        && request.resource.data.settledOrders is list
+                        && request.resource.data.settledOrders.size()
+                           == resource.data.get('settledOrders', []).size() + 1
+                      )
+                    )
                     && (
                       !request.resource.data.diff(resource.data)
                          .affectedKeys().hasAny(['clearedAt'])

@@ -385,8 +385,7 @@ class ChatService {
           : <Map<String, dynamic>>[];
       final activeItems = items
           .where(
-            (item) =>
-                item['status'] != 'Cancelled' && item['status'] != 'Settled',
+            (item) => item['source'] == 'offer' && item['status'] == 'Reserved',
           )
           .toList();
 
@@ -418,6 +417,120 @@ class ChatService {
     });
 
     return bothConfirmed;
+  }
+
+  Future<void> markOfferItemSold({
+    required String chatId,
+    required String itemId,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) throw StateError('User must be signed in.');
+    if (chatId.isEmpty || itemId.isEmpty) {
+      throw ArgumentError('Chat ID and item ID are required.');
+    }
+
+    final chatRef = _firestore.collection('chats').doc(chatId);
+
+    await _firestore.runTransaction((transaction) async {
+      final chatSnapshot = await transaction.get(chatRef);
+      if (!chatSnapshot.exists) throw StateError('Chat not found.');
+
+      final chat = chatSnapshot.data()!;
+      final buyerId = chat['buyerId'] as String? ?? '';
+      final sellerId = chat['sellerId'] as String? ?? '';
+
+      if (user.uid != sellerId) {
+        throw StateError('Only the seller can mark an item as sold.');
+      }
+      if (buyerId.isEmpty || buyerId == sellerId) {
+        throw StateError('Invalid buyer or seller.');
+      }
+
+      final rawItems = chat['offerItems'];
+      final items = rawItems is List
+          ? rawItems
+                .whereType<Map>()
+                .map((item) => Map<String, dynamic>.from(item))
+                .toList()
+          : <Map<String, dynamic>>[];
+
+      final index = items.indexWhere(
+        (item) =>
+            item['itemId'] == itemId &&
+            item['source'] == 'offer' &&
+            item['status'] == 'Reserved',
+      );
+
+      if (index == -1) {
+        throw StateError('This item is not actively reserved in this chat.');
+      }
+
+      final selected = Map<String, dynamic>.from(items[index]);
+      final offerId = selected['offerId'] as String? ?? '';
+      if (offerId.isEmpty || selected['reservedBy'] != buyerId) {
+        throw StateError('Invalid item reservation details.');
+      }
+
+      final itemRef = _firestore
+          .collection('offers')
+          .doc(offerId)
+          .collection('items')
+          .doc(itemId);
+      final reservationRef = itemRef.collection('reservations').doc(buyerId);
+
+      // Read all documents before writing within the transaction.
+      final itemSnapshot = await transaction.get(itemRef);
+      final reservationSnapshot = await transaction.get(reservationRef);
+
+      if (!itemSnapshot.exists || !reservationSnapshot.exists) {
+        throw StateError('Item or reservation no longer exists.');
+      }
+
+      final sourceItem = itemSnapshot.data()!;
+      final reservation = reservationSnapshot.data()!;
+
+      if (sourceItem['status'] != 'Reserved' ||
+          sourceItem['reservedBy'] != buyerId ||
+          reservation['userId'] != buyerId ||
+          reservation['status'] != 'Active') {
+        throw StateError('The reservation is no longer active.');
+      }
+
+      selected['status'] = 'Settled';
+      selected['soldTo'] = buyerId;
+      selected['soldAt'] = Timestamp.now();
+      items[index] = selected;
+
+      final rawHistory = chat['settledOrders'];
+      final history = rawHistory is List
+          ? List<dynamic>.from(rawHistory)
+          : <dynamic>[];
+
+      history.add({
+        'items': [selected],
+        'settledAt': FieldValue.serverTimestamp(),
+        'buyerId': buyerId,
+        'sellerId': sellerId,
+      });
+
+      transaction.update(itemRef, {
+        'status': 'Sold',
+        'soldTo': buyerId,
+        'soldAt': FieldValue.serverTimestamp(),
+      });
+
+      transaction.update(reservationRef, {
+        'status': 'Settled',
+        'settledAt': FieldValue.serverTimestamp(),
+      });
+
+      transaction.update(chatRef, {
+        'offerItems': items,
+        'settledOrders': history,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'lastMessage': 'تم بيع قطعة واحدة',
+      });
+    });
   }
 
   Future<void> finalizeSettlement({required String chatId}) async {
@@ -453,8 +566,7 @@ class ChatService {
           : <Map<String, dynamic>>[];
       final activeItems = items
           .where(
-            (item) =>
-                item['status'] != 'Cancelled' && item['status'] != 'Settled',
+            (item) => item['source'] == 'offer' && item['status'] == 'Reserved',
           )
           .toList();
 
@@ -511,12 +623,20 @@ class ChatService {
         }
       }
 
+      for (final item in activeItems) {
+        item['status'] = 'Settled';
+        item['soldTo'] = buyerId;
+        item['soldAt'] = Timestamp.now();
+      }
+
       final historyRaw = data['settledOrders'];
       final history = historyRaw is List
           ? List<dynamic>.from(historyRaw)
           : <dynamic>[];
       history.add({
-        'items': activeItems,
+        'items': activeItems
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList(),
         'settledAt': Timestamp.now(),
         'buyerId': buyerId,
         'sellerId': sellerId,
@@ -536,12 +656,7 @@ class ChatService {
 
       transaction.update(chatRef, {
         'settledOrders': history,
-        'offerItems': items
-            .where(
-              (item) =>
-                  item['status'] == 'Cancelled' || item['status'] == 'Settled',
-            )
-            .toList(),
+        'offerItems': items,
         'settlementBuyerConfirmed': false,
         'settlementSellerConfirmed': false,
         'updatedAt': FieldValue.serverTimestamp(),

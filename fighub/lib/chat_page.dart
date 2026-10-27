@@ -285,65 +285,44 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  Future<void> _confirmOrderSettlement() async {
-    try {
-      final bothConfirmed = await _chatService.confirmSettlement(
-        chatId: widget.chatId,
-      );
-      if (!mounted) return;
+  Future<void> _sellReservedOfferItem(Map<String, dynamic> item) async {
+    final offerId = item['offerId'] as String? ?? '';
+    final itemId = item['itemId'] as String? ?? '';
 
-      final isArabic = AppLocalizations.of(context).isArabic;
+    if (offerId.isEmpty || itemId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            bothConfirmed
-                ? (isArabic
-                    ? 'تم تأكيد الطرفين. البائع يقدر الآن يتمم البيع.'
-                    : 'Both parties confirmed. The seller can now finalize the sale.')
-                : (isArabic
-                    ? 'تم تسجيل تأكيدك. ننتظر تأكيد الطرف الآخر.'
-                    : 'Your confirmation was saved. Waiting for the other party.'),
+            AppLocalizations.of(context).isArabic
+                ? 'بيانات القطعة غير مكتملة.'
+                : 'Item information is incomplete.',
           ),
         ),
       );
-    } catch (error) {
-      if (!mounted) return;
-      final isArabic = AppLocalizations.of(context).isArabic;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            isArabic
-                ? 'تعذر تأكيد الحساب. تأكد من وجود قطع محجوزة.'
-                : 'Could not confirm settlement. Check active reservations.',
-          ),
-        ),
-      );
+      return;
     }
-  }
 
-  Future<void> _finalizeOrderSettlement() async {
     try {
-      await _chatService.finalizeSettlement(chatId: widget.chatId);
+      await _chatService.markOfferItemSold(
+        chatId: widget.chatId,
+        itemId: itemId,
+      );
       if (!mounted) return;
-      final isArabic = AppLocalizations.of(context).isArabic;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            isArabic
-                ? 'تم إتمام البيع وحفظ سجل الحساب.'
-                : 'Sale finalized and order history saved.',
+            AppLocalizations.of(context).isArabic
+                ? 'تم تسجيل بيع القطعة.'
+                : 'Item sale recorded.',
           ),
         ),
       );
     } catch (error) {
       if (!mounted) return;
-      final isArabic = AppLocalizations.of(context).isArabic;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            isArabic
-                ? 'تعذر إتمام البيع. راجع الحجوزات وقواعد Firestore.'
-                : 'Could not finalize the sale. Check reservations and Firestore rules.',
+            '${AppLocalizations.of(context).isArabic ? 'تعذر تسجيل البيع' : 'Could not record sale'}: $error',
           ),
         ),
       );
@@ -562,11 +541,7 @@ class _ChatPageState extends State<ChatPage> {
                   ? rawOfferItems
                         .whereType<Map>()
                         .map((item) => Map<String, dynamic>.from(item))
-                        .where(
-                          (item) =>
-                              item['status'] != 'Cancelled' &&
-                              item['status'] != 'Settled',
-                        )
+                        .where((item) => item['status'] != 'Cancelled')
                         .toList()
                   : <Map<String, dynamic>>[];
 
@@ -613,7 +588,7 @@ class _ChatPageState extends State<ChatPage> {
                     ),
                     const SizedBox(height: 10),
                     SizedBox(
-                      height: 105,
+                      height: 151,
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         itemCount: offerItems.length,
@@ -634,8 +609,14 @@ class _ChatPageState extends State<ChatPage> {
 
                           final image = images.isNotEmpty ? images.first : '';
 
+                          final isSold = item['status'] == 'Settled';
+                          final isSeller =
+                              _chatService.currentUserId != null &&
+                              _chatService.currentUserId ==
+                                  (chatData['sellerId'] as String? ?? '');
+
                           return Container(
-                            width: 185,
+                            width: 215,
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
                               color: Theme.of(context).colorScheme.surface,
@@ -644,81 +625,134 @@ class _ChatPageState extends State<ChatPage> {
                                 color: Theme.of(context).dividerColor,
                               ),
                             ),
-                            child: Row(
+                            child: Column(
                               children: [
-                                GestureDetector(
-                                  onTap: image.isEmpty
-                                      ? null
-                                      : () =>
-                                            _showFullChatImage(context, image),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: SizedBox(
-                                      width: 70,
-                                      height: 85,
-                                      child: image.isEmpty
-                                          ? Container(
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .surfaceContainerHighest,
-                                              child: const Icon(
-                                                Icons
-                                                    .image_not_supported_outlined,
-                                              ),
-                                            )
-                                          : Image.network(
-                                              image,
-                                              fit: BoxFit.cover,
-                                              errorBuilder:
-                                                  (context, error, stackTrace) {
-                                                    return Container(
-                                                      color: Theme.of(context)
-                                                          .colorScheme
-                                                          .surfaceContainerHighest,
-                                                      child: const Icon(
-                                                        Icons
-                                                            .broken_image_outlined,
-                                                      ),
-                                                    );
-                                                  },
-                                            ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
                                 Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.center,
+                                  child: Row(
                                     children: [
-                                      Text(
-                                        name.isEmpty
-                                            ? (isArabic ? 'قطعة' : 'Item')
-                                            : name,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 13,
+                                      GestureDetector(
+                                        onTap: image.isEmpty
+                                            ? null
+                                            : () => _showFullChatImage(
+                                                context,
+                                                image,
+                                              ),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                          child: SizedBox(
+                                            width: 70,
+                                            height: 85,
+                                            child: image.isEmpty
+                                                ? Container(
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .surfaceContainerHighest,
+                                                    child: const Icon(
+                                                      Icons
+                                                          .image_not_supported_outlined,
+                                                    ),
+                                                  )
+                                                : Image.network(
+                                                    image,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder:
+                                                        (
+                                                          context,
+                                                          error,
+                                                          stackTrace,
+                                                        ) {
+                                                          return Container(
+                                                            color: Theme.of(context)
+                                                                .colorScheme
+                                                                .surfaceContainerHighest,
+                                                            child: const Icon(
+                                                              Icons
+                                                                  .broken_image_outlined,
+                                                            ),
+                                                          );
+                                                        },
+                                                  ),
+                                          ),
                                         ),
                                       ),
-                                      const SizedBox(height: 5),
-                                      Text(
-                                        '${item['price'] ?? '0'} ${isArabic ? 'جنيه' : 'EGP'}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
-                                          fontWeight: FontWeight.bold,
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Text(
+                                              name.isEmpty
+                                                  ? (isArabic ? 'قطعة' : 'Item')
+                                                  : name,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 5),
+                                            Text(
+                                              '${item['price'] ?? '0'} ${isArabic ? 'جنيه' : 'EGP'}',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .primary,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
+                                if (isSold)
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      isArabic ? 'تم البيع' : 'Sold',
+                                      style: TextStyle(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  )
+                                else if (isSeller &&
+                                    item['status'] == 'Reserved')
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 32,
+                                    child: FilledButton.tonalIcon(
+                                      onPressed: () =>
+                                          _sellReservedOfferItem(item),
+                                      icon: const Icon(
+                                        Icons.check_circle_outline,
+                                        size: 16,
+                                      ),
+                                      label: Text(
+                                        isArabic ? 'تم البيع' : 'Mark sold',
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                      style: FilledButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                        ),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                    ),
+                                  ),
                               ],
                             ),
                           );
@@ -749,8 +783,6 @@ class _ChatPageState extends State<ChatPage> {
                         .toList()
                   : <Map<String, dynamic>>[];
 
-              if (items.isEmpty) return const SizedBox.shrink();
-
               double total = 0;
               for (final item in items) {
                 final rawPrice = (item['price'] ?? '0').toString();
@@ -758,18 +790,24 @@ class _ChatPageState extends State<ChatPage> {
                 total += double.tryParse(cleaned) ?? 0;
               }
 
-              final uid = _chatService.currentUserId;
-              final buyerId = data['buyerId'] as String? ?? '';
-              final sellerId = data['sellerId'] as String? ?? '';
-              final buyerConfirmed = data['settlementBuyerConfirmed'] == true;
-              final sellerConfirmed = data['settlementSellerConfirmed'] == true;
-              final isBuyer = uid != null && uid == buyerId;
-              final isSeller = uid != null && uid == sellerId;
-              final alreadyConfirmed = isBuyer
-                  ? buyerConfirmed
-                  : isSeller
-                  ? sellerConfirmed
-                  : true;
+              final rawHistory = data['settledOrders'];
+              final history = rawHistory is List
+                  ? rawHistory.whereType<Map>().toList()
+                  : <Map>[];
+
+              final soldItems = <Map<String, dynamic>>[];
+              for (final order in history) {
+                final orderItems = order['items'];
+                if (orderItems is List) {
+                  for (final rawItem in orderItems.whereType<Map>()) {
+                    soldItems.add(Map<String, dynamic>.from(rawItem));
+                  }
+                }
+              }
+
+              if (items.isEmpty && soldItems.isEmpty) {
+                return const SizedBox.shrink();
+              }
 
               return Container(
                 width: double.infinity,
@@ -782,63 +820,50 @@ class _ChatPageState extends State<ChatPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      '${isArabic ? 'إجمالي الحساب' : 'Order total'}: '
-                      '${total.toStringAsFixed(total == total.roundToDouble() ? 0 : 2)} '
-                      '${isArabic ? 'جنيه' : 'EGP'}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${isArabic ? 'تأكيد المشتري' : 'Buyer'}: '
-                      '${buyerConfirmed ? (isArabic ? 'تم' : 'Confirmed') : (isArabic ? 'منتظر' : 'Pending')}'
-                      '  •  '
-                      '${isArabic ? 'تأكيد البائع' : 'Seller'}: '
-                      '${sellerConfirmed ? (isArabic ? 'تم' : 'Confirmed') : (isArabic ? 'منتظر' : 'Pending')}',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    const SizedBox(height: 6),
-                    if (buyerConfirmed && sellerConfirmed && isSeller)
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: _finalizeOrderSettlement,
-                          icon: const Icon(Icons.check_circle_outline),
-                          label: Text(
-                            isArabic
-                                ? 'إتمام البيع وتسجيل القطع كمباعة'
-                                : 'Finalize sale and mark items sold',
-                          ),
-                        ),
-                      )
-                    else if (buyerConfirmed && sellerConfirmed && isBuyer)
+                    if (items.isNotEmpty)
                       Text(
-                        isArabic
-                            ? 'تم تأكيد الطرفين. ننتظر البائع لإتمام البيع.'
-                            : 'Both confirmed. Waiting for the seller to finalize.',
-                      )
-                    else
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: alreadyConfirmed
-                              ? null
-                              : _confirmOrderSettlement,
-                          icon: const Icon(Icons.handshake_outlined),
-                          label: Text(
-                            alreadyConfirmed
-                                ? (isArabic
-                                    ? 'تم تسجيل تأكيدك'
-                                    : 'Your confirmation is recorded')
-                                : (isArabic
-                                    ? 'تأكيد تسوية الحساب'
-                                    : 'Confirm order settlement'),
-                          ),
+                        '${isArabic ? 'إجمالي القطع المحجوزة' : 'Active reserved total'}: '
+                        '${total.toStringAsFixed(total == total.roundToDouble() ? 0 : 2)} '
+                        '${isArabic ? 'جنيه' : 'EGP'}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
                         ),
                       ),
+                    if (soldItems.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        '${isArabic ? 'سجل المبيعات' : 'Sales history'} (${soldItems.length})',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      ...soldItems.map((item) {
+                        final name =
+                            item['itemName'] as String? ??
+                            (isArabic ? 'قطعة' : 'Item');
+                        final price = item['price'] ?? '0';
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.check_circle_outline, size: 16),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Text('$price ${isArabic ? 'جنيه' : 'EGP'}'),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
                   ],
                 ),
               );
