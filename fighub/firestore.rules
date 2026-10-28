@@ -41,16 +41,37 @@ service cloud.firestore {
                     && resource.data.sellerId == request.auth.uid;
     }
 
+    match /app_config/{configId} {
+      allow get: if request.auth != null && configId == 'shipping';
+      allow list: if false;
+
+      allow create, update: if request.auth != null
+                            && configId == 'shipping'
+                            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+                            && request.resource.data.keys().hasOnly(['whatsappNumber'])
+                            && request.resource.data.whatsappNumber is string
+                            && request.resource.data.whatsappNumber.matches('^[0-9]{10,15}$');
+
+      allow delete: if false;
+    }
+
     match /users/{userId} {
 
       allow read: if request.auth != null
                     && request.auth.uid == userId;
 
       allow create: if request.auth != null
-                      && request.auth.uid == userId;
+                      && request.auth.uid == userId
+                      && (
+                        !request.resource.data.keys().hasAny(['role'])
+                        || request.resource.data.role == 'user'
+                      );
 
       allow update: if request.auth != null
-                      && request.auth.uid == userId;
+                      && request.auth.uid == userId
+                      && !request.resource.data.diff(resource.data)
+                         .affectedKeys()
+                         .hasAny(['role']);
 
       allow delete: if false;
 

@@ -3,9 +3,11 @@ import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:record/record.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'app_localizations.dart';
 import 'chat_service.dart';
@@ -281,6 +283,281 @@ class _ChatPageState extends State<ChatPage> {
         setState(() {
           _isSending = false;
         });
+      }
+    }
+  }
+
+  Future<void> _showShippingForm(Map<String, dynamic> chatData) async {
+    final currentUserId = _chatService.currentUserId;
+    if (currentUserId == null || currentUserId != chatData['sellerId']) {
+      return;
+    }
+
+    final rawItems = chatData['offerItems'];
+    final reservedItems = <Map<String, dynamic>>[];
+    final seenItemKeys = <String>{};
+
+    if (rawItems is List) {
+      for (final rawItem in rawItems.whereType<Map>()) {
+        final item = Map<String, dynamic>.from(rawItem);
+        if (item['status'] != 'Reserved') continue;
+
+        final offerId = (item['offerId'] ?? '').toString();
+        final itemId = (item['itemId'] ?? '').toString();
+        final productId = (item['productId'] ?? '').toString();
+
+        final String? itemKey = offerId.isNotEmpty && itemId.isNotEmpty
+            ? 'offer:$offerId:$itemId'
+            : productId.isNotEmpty
+            ? 'product:$productId'
+            : null;
+
+        if (itemKey != null && !seenItemKeys.add(itemKey)) continue;
+        reservedItems.add(item);
+      }
+    }
+
+    if (reservedItems.isEmpty) return;
+
+    final isArabic = AppLocalizations.of(context).isArabic;
+
+    try {
+      final config = await FirebaseFirestore.instance
+          .collection('app_config')
+          .doc('shipping')
+          .get();
+      if (!mounted) return;
+
+      final recipient = (config.data()?['whatsappNumber'] ?? '')
+          .toString()
+          .replaceAll(RegExp(r'\D'), '');
+
+      if (recipient.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isArabic
+                  ? 'الأدمن لم يضبط رقم واتساب الشحن بعد'
+                  : 'The shipping WhatsApp number has not been configured',
+            ),
+          ),
+        );
+        return;
+      }
+
+      final formKey = GlobalKey<FormState>();
+
+      final controllers = <String, TextEditingController>{
+        'sellerName': TextEditingController(),
+        'sellerAddress': TextEditingController(),
+        'sellerGovernorate': TextEditingController(),
+        'sellerPhone': TextEditingController(),
+        'sellerSecondPhone': TextEditingController(),
+        'buyerName': TextEditingController(),
+        'buyerAddress': TextEditingController(),
+        'buyerGovernorate': TextEditingController(),
+        'buyerPhone': TextEditingController(),
+        'buyerSecondPhone': TextEditingController(),
+      };
+
+      String? requiredValue(String? value) =>
+          value == null || value.trim().isEmpty
+          ? (isArabic ? 'الحقل مطلوب' : 'Required field')
+          : null;
+
+      Widget input(
+        String key,
+        String label, {
+        bool isPhone = false,
+        bool optional = false,
+      }) {
+        return TextFormField(
+          controller: controllers[key],
+          keyboardType: isPhone
+              ? TextInputType.phone
+              : TextInputType.streetAddress,
+          decoration: InputDecoration(labelText: label),
+          validator: optional ? null : requiredValue,
+        );
+      }
+
+      String label(String ar, String en) => isArabic ? ar : en;
+
+      Map<String, String>? details;
+      try {
+        details = await showDialog<Map<String, String>>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(label('بيانات الشحن', 'Shipping details')),
+            content: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      label(
+                        'أولًا: بيانات استلام الشحنة من البائع',
+                        '1. Pickup from seller',
+                      ),
+                      style: Theme.of(dialogContext).textTheme.titleMedium,
+                    ),
+                    input('sellerName', label('اسم البائع', 'Seller name')),
+                    input(
+                      'sellerAddress',
+                      label('عنوان الاستلام', 'Pickup address'),
+                    ),
+                    input(
+                      'sellerGovernorate',
+                      label('محافظة الاستلام', 'Pickup governorate'),
+                    ),
+                    input(
+                      'sellerPhone',
+                      label('موبايل البائع', 'Seller phone'),
+                      isPhone: true,
+                    ),
+                    input(
+                      'sellerSecondPhone',
+                      label(
+                        'موبايل إضافي (اختياري)',
+                        'Second phone (optional)',
+                      ),
+                      isPhone: true,
+                      optional: true,
+                    ),
+                    const SizedBox(height: 20),
+                    const Divider(),
+                    const SizedBox(height: 12),
+                    Text(
+                      label(
+                        'ثانيًا: بيانات تسليم الشحنة للمشتري',
+                        '2. Delivery to buyer',
+                      ),
+                      style: Theme.of(dialogContext).textTheme.titleMedium,
+                    ),
+                    input('buyerName', label('اسم المشتري', 'Buyer name')),
+                    input(
+                      'buyerAddress',
+                      label('عنوان التسليم', 'Delivery address'),
+                    ),
+                    input(
+                      'buyerGovernorate',
+                      label('محافظة التسليم', 'Delivery governorate'),
+                    ),
+                    input(
+                      'buyerPhone',
+                      label('موبايل المشتري', 'Buyer phone'),
+                      isPhone: true,
+                    ),
+                    input(
+                      'buyerSecondPhone',
+                      label(
+                        'موبايل إضافي (اختياري)',
+                        'Second phone (optional)',
+                      ),
+                      isPhone: true,
+                      optional: true,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(label('إلغاء', 'Cancel')),
+              ),
+              FilledButton(
+                onPressed: () {
+                  if (!formKey.currentState!.validate()) return;
+                  Navigator.pop(
+                    dialogContext,
+                    controllers.map(
+                      (key, controller) =>
+                          MapEntry(key, controller.text.trim()),
+                    ),
+                  );
+                },
+                child: Text(
+                  label('إرسال البيانات للشحن', 'Send shipping details'),
+                ),
+              ),
+            ],
+          ),
+        );
+      } finally {
+        for (final controller in controllers.values) {
+          controller.dispose();
+        }
+      }
+
+      if (!mounted || details == null) return;
+
+      final itemLines = <String>[];
+      var total = 0.0;
+
+      for (final item in reservedItems) {
+        final itemName = (item['itemName'] ?? item['productName'] ?? 'قطعة')
+            .toString();
+        final rawPrice = (item['price'] ?? '0').toString().replaceAll(',', '');
+        final price = double.tryParse(rawPrice) ?? 0.0;
+        total += price;
+        itemLines.add('- $itemName: ${price.toStringAsFixed(2)} جنيه');
+      }
+
+      final message = [
+        'بيانات شحنة FigHub',
+        '',
+        '===== استلام الشحنة من البائع =====',
+        'اسم البائع: ${details['sellerName']}',
+        'عنوان الاستلام: ${details['sellerAddress']}',
+        'محافظة الاستلام: ${details['sellerGovernorate']}',
+        'موبايل البائع: ${details['sellerPhone']}',
+        if ((details['sellerSecondPhone'] ?? '').isNotEmpty)
+          'موبايل البائع الإضافي: ${details['sellerSecondPhone']}',
+        '',
+        '===== تسليم الشحنة للمشتري =====',
+        'اسم المشتري: ${details['buyerName']}',
+        'عنوان التسليم: ${details['buyerAddress']}',
+        'محافظة التسليم: ${details['buyerGovernorate']}',
+        'موبايل المشتري: ${details['buyerPhone']}',
+        if ((details['buyerSecondPhone'] ?? '').isNotEmpty)
+          'موبايل المشتري الإضافي: ${details['buyerSecondPhone']}',
+        '',
+        '===== القطع المحجوزة =====',
+        ...itemLines,
+        '',
+        'الإجمالي: ${total.toStringAsFixed(2)} جنيه',
+      ].join('\n');
+
+      final uri = Uri.https('wa.me', '/$recipient', {'text': message});
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isArabic ? 'تعذّر فتح واتساب' : 'Could not open WhatsApp',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isArabic
+                  ? 'تعذّر تجهيز الشحنة. راجع رقم واتساب وصلاحيات Firestore.'
+                  : 'Could not prepare shipment. Check WhatsApp number and Firestore permissions.',
+            ),
+          ),
+        );
       }
     }
   }
@@ -587,6 +864,22 @@ class _ChatPageState extends State<ChatPage> {
                       ),
                     ),
                     const SizedBox(height: 10),
+                    if (_chatService.currentUserId != null &&
+                        _chatService.currentUserId == chatData['sellerId'] &&
+                        offerItems.any((item) => item['status'] == 'Reserved'))
+                      Align(
+                        alignment: isArabic
+                            ? Alignment.centerRight
+                            : Alignment.centerLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: FilledButton.icon(
+                            onPressed: () => _showShippingForm(chatData),
+                            icon: const Icon(Icons.local_shipping_outlined),
+                            label: Text(isArabic ? 'الشحن' : 'Shipping'),
+                          ),
+                        ),
+                      ),
                     SizedBox(
                       height: 151,
                       child: ListView.separated(
