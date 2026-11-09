@@ -339,6 +339,23 @@ service cloud.firestore {
                               )
                               ||
                               (
+                                resource.data.status == 'Cancelled'
+                                && request.resource.data.status == 'Active'
+                                && resource.data.userId == request.auth.uid
+                                && request.resource.data.userId == request.auth.uid
+                                && request.resource.data.cancelledAt == null
+                                && getAfter(
+                                  /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)
+                                ).data.status == 'Reserved'
+                                && getAfter(
+                                  /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)
+                                ).data.reservedBy == request.auth.uid
+                                && request.resource.data.diff(resource.data)
+                                   .affectedKeys()
+                                   .hasOnly(['status', 'cancelledAt', 'createdAt'])
+                              )
+                              ||
+                              (
                                 resource.data.status == 'Active'
                                 && request.resource.data.status == 'Cancelled'
                                 && request.resource.data.cancelledAt == request.time
