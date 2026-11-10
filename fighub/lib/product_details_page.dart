@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'app_localizations.dart';
@@ -189,25 +190,52 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
       widget.product.reservedBy = userId;
 
       if (userId != null && widget.product.sellerId != userId) {
-        try {
-          await _chatService.addReservedProductToChat(
-            productId: productId,
-            productName: widget.product.name,
-            price: widget.product.price,
-            imagePaths: widget.product.imagePaths.isNotEmpty
-                ? widget.product.imagePaths
-                : (widget.product.imagePath == null ||
-                          widget.product.imagePath!.isEmpty
-                      ? <String>[]
-                      : <String>[widget.product.imagePath!]),
-            sellerId: widget.product.sellerId,
-          );
-        } catch (chatError, chatStackTrace) {
-          debugPrint('CREATE RESERVED PRODUCT CHAT ERROR: $chatError');
-          debugPrintStack(
-            label: 'CREATE RESERVED PRODUCT CHAT STACK TRACE',
-            stackTrace: chatStackTrace,
-          );
+        const retryableCodes = {
+          'aborted',
+          'deadline-exceeded',
+          'internal',
+          'resource-exhausted',
+          'unavailable',
+        };
+
+        for (var attempt = 0; attempt < 3; attempt++) {
+          try {
+            await _chatService.addReservedProductToChat(
+              productId: productId,
+              productName: widget.product.name,
+              price: widget.product.price,
+              imagePaths: widget.product.imagePaths.isNotEmpty
+                  ? widget.product.imagePaths
+                  : (widget.product.imagePath == null ||
+                            widget.product.imagePath!.isEmpty
+                        ? <String>[]
+                        : <String>[widget.product.imagePath!]),
+              sellerId: widget.product.sellerId,
+            );
+            break;
+          } on FirebaseException catch (chatError, chatStackTrace) {
+            final shouldRetry =
+                retryableCodes.contains(chatError.code) && attempt < 2;
+            if (!shouldRetry) {
+              debugPrint('CREATE RESERVED PRODUCT CHAT ERROR: $chatError');
+              debugPrintStack(
+                label: 'CREATE RESERVED PRODUCT CHAT STACK TRACE',
+                stackTrace: chatStackTrace,
+              );
+              break;
+            }
+
+            await Future<void>.delayed(
+              Duration(milliseconds: 300 * (1 << attempt)),
+            );
+          } catch (chatError, chatStackTrace) {
+            debugPrint('CREATE RESERVED PRODUCT CHAT ERROR: $chatError');
+            debugPrintStack(
+              label: 'CREATE RESERVED PRODUCT CHAT STACK TRACE',
+              stackTrace: chatStackTrace,
+            );
+            break;
+          }
         }
       }
 
