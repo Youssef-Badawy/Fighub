@@ -67,11 +67,12 @@ export default {
       const {
         userId,
         chatId,
+        messageId,
         title,
         message,
       } = body;
 
-      if (!userId || !chatId || !title || !message) {
+      if (!userId || !chatId || !messageId || !title || !message) {
         return new Response(
           JSON.stringify({
             error:
@@ -116,10 +117,45 @@ export default {
 
       if (
         !participants.includes(payload.sub) ||
-        !participants.includes(userId)
+        !participants.includes(userId) ||
+        userId === payload.sub
       ) {
         return new Response(
           JSON.stringify({ error: 'Recipient is not a chat participant' }),
+          {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      }
+
+      // Only deliver a push for a message that actually exists in this chat
+      // and was created by the authenticated caller.
+      const messageResponse = await fetch(
+        `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+          },
+        },
+      );
+
+      if (!messageResponse.ok) {
+        return new Response(
+          JSON.stringify({ error: 'Message access denied' }),
+          {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      }
+
+      const messageDocument = await messageResponse.json();
+      const senderId = messageDocument.fields?.senderId?.stringValue;
+
+      if (senderId !== payload.sub) {
+        return new Response(
+          JSON.stringify({ error: 'Message sender does not match caller' }),
           {
             status: 403,
             headers: { 'Content-Type': 'application/json' },
