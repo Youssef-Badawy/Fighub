@@ -950,7 +950,11 @@ class _FigHubHomeState extends State<FigHubHome> {
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
                   final product = products[index];
-                  _loadSellerProfiles(products.skip(index).take(20).toList());
+                  if (index % 20 == 0) {
+                    _loadSellerProfiles(
+                      products.skip(index).take(20).toList(),
+                    );
+                  }
                   return RepaintBoundary(
                     child: Padding(
                       padding: const EdgeInsets.only(bottom: 12),
