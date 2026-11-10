@@ -315,10 +315,10 @@ class OfferDetailsPage extends StatelessWidget {
                                     waitingIndex == 0;
 
                                 if (isSold) {
-                                  return const OutlinedButton.icon(
+                                  return OutlinedButton.icon(
                                     onPressed: null,
-                                    icon: Icon(Icons.check_circle_outline),
-                                    label: Text('تم البيع'),
+                                    icon: const Icon(Icons.check_circle_outline),
+                                    label: const Text('تم البيع'),
                                   );
                                 }
 
