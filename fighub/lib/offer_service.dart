@@ -98,6 +98,9 @@ class OfferService {
           .collection('reservations')
           .get();
 
+      final rawWaitingUsers = itemData['waitingUsers'];
+      final hasWaitingBuyers =
+          rawWaitingUsers is List && rawWaitingUsers.isNotEmpty;
       final hasActiveReservation =
           itemData['status'] == 'Reserved' ||
           reservationsSnapshot.docs.any(
@@ -111,6 +114,15 @@ class OfferService {
       if (hasActiveReservation) {
         throw StateError(
           'This offer has an active reservation and cannot be deleted.',
+        );
+      }
+
+      if (hasWaitingBuyers ||
+          reservationsSnapshot.docs.any(
+            (reservation) => reservation.data()['status'] == 'Waiting',
+          )) {
+        throw StateError(
+          'This offer has buyers in the waiting list and cannot be deleted.',
         );
       }
 
