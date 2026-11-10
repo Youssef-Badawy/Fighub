@@ -263,16 +263,25 @@ class OfferService {
       }
 
       final itemSnapshot = await transaction.get(itemReference);
+      final reservationSnapshot = await transaction.get(reservationReference);
 
       if (!itemSnapshot.exists) {
         throw StateError('Offer item not found.');
       }
 
       final itemData = itemSnapshot.data() ?? {};
+      final reservationData = reservationSnapshot.data() ?? {};
 
       final currentStatus = itemData['status'] as String? ?? 'Available';
-
       final currentReservedBy = itemData['reservedBy'] as String?;
+
+      if (currentReservedBy == uid || reservationData['status'] == 'Active') {
+        throw StateError('You already have an active reservation.');
+      }
+
+      if (reservationData['status'] == 'Waiting') {
+        throw StateError('You are already in the waiting list.');
+      }
 
       final rawWaitingUsers = itemData['waitingUsers'];
 
