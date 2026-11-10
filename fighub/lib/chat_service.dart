@@ -522,8 +522,7 @@ class ChatService {
           : <Map<String, dynamic>>[];
 
       final index = items.indexWhere(
-        (item) =>
-            item['itemId'] == itemId && item['status'] == 'Reserved',
+        (item) => item['itemId'] == itemId && item['status'] == 'Reserved',
       );
 
       if (index == -1) {
