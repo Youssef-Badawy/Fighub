@@ -875,7 +875,7 @@ class _ChatPageState extends State<ChatPage> {
                           child: FilledButton.icon(
                             onPressed: () => _showShippingForm(chatData),
                             icon: const Icon(Icons.local_shipping_outlined),
-                            label: Text(isArabic ? 'الشحن' : 'Shipping'),
+                            label: Text(isArabic ? 'إرسال البيانات للشحن' : 'Send shipping details'),
                           ),
                         ),
                       ),
