@@ -935,8 +935,8 @@ class _ChatPageState extends State<ChatPage> {
                   children: [
                     Text(
                       isArabic
-                          ? 'القطع المحجوزة في هذه المحادثة'
-                          : 'Reserved items in this chat',
+                          ? 'القطع في هذه المحادثة'
+                          : 'Items in this chat',
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
