@@ -287,6 +287,64 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
     }
   }
 
+  Future<void> _cancelProductReservation() async {
+    final productId = widget.product.id;
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (productId == null ||
+        productId.isEmpty ||
+        userId == null ||
+        widget.product.reservedBy != userId ||
+        _isUpdatingStatus) {
+      return;
+    }
+
+    setState(() => _isUpdatingStatus = true);
+    try {
+      await _productService.cancelReservation(productId);
+
+      try {
+        await _chatService.removeReservedProductFromChat(
+          productId: productId,
+          sellerId: widget.product.sellerId,
+        );
+      } catch (error, stackTrace) {
+        debugPrint('CANCEL PRODUCT CHAT SYNC ERROR: $error');
+        debugPrintStack(stackTrace: stackTrace);
+      }
+
+      widget.product.status = 'Available';
+      widget.product.reservedBy = null;
+      widget.onStatusChanged('Available');
+      if (!mounted) return;
+
+      setState(() => _productStatus = 'Available');
+      final localization = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            localization.isArabic
+                ? 'تم إلغاء حجز المنتج بنجاح'
+                : 'Product reservation cancelled.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final localization = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            localization.isArabic
+                ? 'تعذر إلغاء الحجز: $error'
+                : 'Could not cancel reservation: $error',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isUpdatingStatus = false);
+    }
+  }
+
   Future<void> _openChat() async {
     if (_isOpeningChat) {
       return;
@@ -934,6 +992,21 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                 ),
               ),
             ),
+          if (_productStatus == 'Reserved' &&
+              widget.product.reservedBy ==
+                  FirebaseAuth.instance.currentUser?.uid) ...[
+            SizedBox(
+              height: 52,
+              child: OutlinedButton.icon(
+                onPressed:
+                    _isUpdatingStatus ? null : _cancelProductReservation,
+                icon: const Icon(Icons.bookmark_remove_outlined),
+                label: Text(
+                  isArabic ? 'إلغاء الحجز' : 'Cancel reservation',
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           SizedBox(
             height: 52,
