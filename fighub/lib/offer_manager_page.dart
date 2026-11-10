@@ -178,9 +178,9 @@ class OfferManagerPage extends StatelessWidget {
 
                   final hasProtectedItems = items.any(
                     (item) =>
-                    item.status == 'Reserved' ||
-                    item.status == 'Sold' ||
-                    item.waitingUsers.isNotEmpty,
+                        item.status == 'Reserved' ||
+                        item.status == 'Sold' ||
+                        item.waitingUsers.isNotEmpty,
                   );
                   final canDelete = items.isNotEmpty && !hasProtectedItems;
 
