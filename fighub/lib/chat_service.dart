@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 import 'notification_service.dart';
 import 'worker_push_service.dart';
@@ -12,6 +13,27 @@ class ChatService {
   final NotificationService _notificationService = NotificationService();
 
   final WorkerPushService _workerPushService = WorkerPushService();
+
+  Future<void> _notifySafely({
+    required String userId,
+    required String title,
+    required String message,
+    String? productId,
+    String? chatId,
+  }) async {
+    try {
+      await _notificationService.addNotification(
+        userId: userId,
+        title: title,
+        message: message,
+        productId: productId,
+        chatId: chatId,
+      );
+    } catch (error, stackTrace) {
+      debugPrint('FIGHUB CHAT NOTIFICATION ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
 
   String? get currentUserId {
     return _auth.currentUser?.uid;
@@ -114,7 +136,7 @@ class ChatService {
         'lastMessage': '',
       });
 
-      await _notificationService.addNotification(
+      await _notifySafely(
         userId: sellerId,
         title: 'محادثة جديدة',
         message: 'بدأ مشتري محادثة بخصوص $productName.',
@@ -212,7 +234,7 @@ class ChatService {
     });
 
     if (addedNewItem) {
-      await _notificationService.addNotification(
+      await _notifySafely(
         userId: sellerId,
         title: 'حجز منتج جديد',
         message: 'تم حجز $productName بواسطة مشتري.',
@@ -340,7 +362,7 @@ class ChatService {
     });
 
     if (added) {
-      await _notificationService.addNotification(
+      await _notifySafely(
         userId: sellerId,
         title: 'حجز قطعة جديدة',
         message: 'تم حجز $itemName من العرض.',
@@ -847,7 +869,7 @@ class ChatService {
     });
 
     if (newlyAdded) {
-      await _notificationService.addNotification(
+      await _notifySafely(
         userId: buyerId,
         title: 'محادثة العرض',
         message: 'تم تحديث تفاصيل القطعة: $itemName.',
@@ -926,7 +948,7 @@ class ChatService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    await _notificationService.addNotification(
+    await _notifySafely(
       userId: recipientId,
       title: 'رسالة جديدة',
       message: '$productName: $message',
@@ -1003,7 +1025,7 @@ class ChatService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    await _notificationService.addNotification(
+    await _notifySafely(
       userId: recipientId,
       title: 'رسالة جديدة',
       message: '$productName: $lastMessage',
