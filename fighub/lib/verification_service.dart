@@ -173,10 +173,20 @@ class VerificationService {
 
     final now = DateTime.now();
 
-    final expiresAt = DateTime(
+    final targetMonth = DateTime(
       now.year,
       now.month + request.durationMonths,
-      now.day,
+      1,
+    );
+    final lastDayOfTargetMonth = DateTime(
+      targetMonth.year,
+      targetMonth.month + 1,
+      0,
+    ).day;
+    final expiresAt = DateTime(
+      targetMonth.year,
+      targetMonth.month,
+      now.day < lastDayOfTargetMonth ? now.day : lastDayOfTargetMonth,
       now.hour,
       now.minute,
       now.second,
