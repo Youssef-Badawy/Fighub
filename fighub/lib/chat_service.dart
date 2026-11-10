@@ -181,8 +181,7 @@ class ChatService {
 
     final matchingChats = existingChats.docs.where((document) {
       final chatParticipants = document.data()['participants'];
-      return chatParticipants is List &&
-          chatParticipants.contains(otherUserId);
+      return chatParticipants is List && chatParticipants.contains(otherUserId);
     }).toList();
 
     // Prefer the most recently active legacy conversation for this pair.
