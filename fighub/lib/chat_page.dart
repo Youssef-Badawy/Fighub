@@ -305,7 +305,9 @@ class _ChatPageState extends State<ChatPage> {
     if (rawItems is List) {
       for (final rawItem in rawItems.whereType<Map>()) {
         final item = Map<String, dynamic>.from(rawItem);
-        if (item['status'] != 'Reserved') continue;
+        if (item['status'] != 'Reserved' && item['status'] != 'Settled') {
+          continue;
+        }
 
         final offerId = (item['offerId'] ?? '').toString();
         final itemId = (item['itemId'] ?? '').toString();
@@ -335,9 +337,11 @@ class _ChatPageState extends State<ChatPage> {
             .doc(legacyProductId)
             .get();
         final data = product.data();
-        if (product.exists &&
-            data?['status'] == 'Reserved' &&
-            data?['reservedBy'] == buyerId) {
+        final isReservedForBuyer =
+            data?['status'] == 'Reserved' && data?['reservedBy'] == buyerId;
+        final isSoldToBuyer =
+            data?['status'] == 'Sold' && data?['soldTo'] == buyerId;
+        if (product.exists && (isReservedForBuyer || isSoldToBuyer)) {
           reservedItems.add({
             'source': 'product',
             'productId': legacyProductId,
@@ -941,7 +945,11 @@ class _ChatPageState extends State<ChatPage> {
                     const SizedBox(height: 10),
                     if (_chatService.currentUserId != null &&
                         _chatService.currentUserId == chatData['sellerId'] &&
-                        offerItems.any((item) => item['status'] == 'Reserved'))
+                        offerItems.any(
+                          (item) =>
+                              item['status'] == 'Reserved' ||
+                              item['status'] == 'Settled',
+                        ))
                       Align(
                         alignment: isArabic
                             ? Alignment.centerRight
