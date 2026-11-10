@@ -63,7 +63,7 @@ class ChatService {
     if (hasBothParticipants &&
         data['buyerId'] == sellerId &&
         data['sellerId'] == buyerId) {
-      return '${legacyChatId}_buyer_${buyerId}';
+      return '${legacyChatId}_buyer_$buyerId';
     }
 
     throw StateError('Existing chat participants do not match this order.');
