@@ -227,6 +227,8 @@ class ChatService {
       items.add(newItem);
       transaction.update(ref, {
         'offerItems': items,
+        'settlementBuyerConfirmed': false,
+        'settlementSellerConfirmed': false,
         'updatedAt': FieldValue.serverTimestamp(),
         'lastMessage': 'تم حجز $productName',
       });
