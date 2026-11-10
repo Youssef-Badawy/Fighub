@@ -66,11 +66,12 @@ export default {
 
       const {
         userId,
+        chatId,
         title,
         message,
       } = body;
 
-      if (!userId || !title || !message) {
+      if (!userId || !chatId || !title || !message) {
         return new Response(
           JSON.stringify({
             error:
@@ -81,6 +82,47 @@ export default {
             headers: {
               'Content-Type': 'application/json',
             },
+          },
+        );
+      }
+
+      // A valid Firebase token alone must not let a user push
+      // arbitrary recipients. Read the chat using the caller's token so
+      // Firestore security rules verify membership before sending.
+      const chatResponse = await fetch(
+        `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/chats/${encodeURIComponent(chatId)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+          },
+        },
+      );
+
+      if (!chatResponse.ok) {
+        return new Response(
+          JSON.stringify({ error: 'Chat access denied' }),
+          {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      }
+
+      const chatDocument = await chatResponse.json();
+      const participants =
+        chatDocument.fields?.participants?.arrayValue?.values
+          ?.map((value) => value.stringValue)
+          .filter(Boolean) ?? [];
+
+      if (
+        !participants.includes(payload.sub) ||
+        !participants.includes(userId)
+      ) {
+        return new Response(
+          JSON.stringify({ error: 'Recipient is not a chat participant' }),
+          {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' },
           },
         );
       }
