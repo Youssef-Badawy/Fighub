@@ -345,6 +345,8 @@ class OfferService {
     required String offerId,
     required String itemId,
   }) async {
+    // A hidden offer blocks new reservations, but existing waitlist entries
+    // keep their place and can still claim an item that becomes available.
     final uid = _uid;
 
     if (offerId.isEmpty || itemId.isEmpty) {
