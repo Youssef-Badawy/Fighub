@@ -44,6 +44,18 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Inspect formatted sold-item method
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("lib/chat_service.dart").read_text()
+          start = source.index("  Future<void> markOfferItemSold({")
+          end = source.index("  Future<void> finalizeSettlement(", start)
+          Path("/tmp/sold_item_method.dart").write_text(source[start:end])
+          PY
+          dart format /tmp/sold_item_method.dart
+          cat /tmp/sold_item_method.dart
+
       - name: Check chat service formatting
         run: dart format --output=none --set-exit-if-changed lib/chat_service.dart
 
