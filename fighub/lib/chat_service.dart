@@ -521,9 +521,7 @@ class ChatService {
 
       final index = items.indexWhere(
         (item) =>
-            item['itemId'] == itemId &&
-            item['source'] == 'offer' &&
-            item['status'] == 'Reserved',
+            item['itemId'] == itemId && item['status'] == 'Reserved',
       );
 
       if (index == -1) {
@@ -531,34 +529,58 @@ class ChatService {
       }
 
       final selected = Map<String, dynamic>.from(items[index]);
-      final offerId = selected['offerId'] as String? ?? '';
-      if (offerId.isEmpty || selected['reservedBy'] != buyerId) {
+      if (selected['reservedBy'] != buyerId) {
         throw StateError('Invalid item reservation details.');
       }
 
-      final itemRef = _firestore
-          .collection('offers')
-          .doc(offerId)
-          .collection('items')
-          .doc(itemId);
-      final reservationRef = itemRef.collection('reservations').doc(buyerId);
+      final source = selected['source'];
+      DocumentReference<Map<String, dynamic>>? offerItemRef;
+      DocumentReference<Map<String, dynamic>>? reservationRef;
+      DocumentReference<Map<String, dynamic>>? productRef;
+      DocumentSnapshot<Map<String, dynamic>>? sourceSnapshot;
+      DocumentSnapshot<Map<String, dynamic>>? reservationSnapshot;
 
-      // Read all documents before writing within the transaction.
-      final itemSnapshot = await transaction.get(itemRef);
-      final reservationSnapshot = await transaction.get(reservationRef);
-
-      if (!itemSnapshot.exists || !reservationSnapshot.exists) {
-        throw StateError('Item or reservation no longer exists.');
+      if (source == 'offer') {
+        final offerId = selected['offerId'] as String? ?? '';
+        if (offerId.isEmpty) {
+          throw StateError('Offer item information is incomplete.');
+        }
+        offerItemRef = _firestore
+            .collection('offers')
+            .doc(offerId)
+            .collection('items')
+            .doc(itemId);
+        reservationRef = offerItemRef.collection('reservations').doc(buyerId);
+        sourceSnapshot = await transaction.get(offerItemRef);
+        reservationSnapshot = await transaction.get(reservationRef);
+      } else if (source == 'product') {
+        final productId = selected['productId'] as String? ?? itemId;
+        if (productId.isEmpty) {
+          throw StateError('Product information is incomplete.');
+        }
+        productRef = _firestore.collection('products').doc(productId);
+        sourceSnapshot = await transaction.get(productRef);
+      } else {
+        throw StateError('Unsupported reserved item type.');
       }
 
-      final sourceItem = itemSnapshot.data()!;
-      final reservation = reservationSnapshot.data()!;
+      if (!sourceSnapshot.exists) {
+        throw StateError('Reserved item no longer exists.');
+      }
 
-      if (sourceItem['status'] != 'Reserved' ||
-          sourceItem['reservedBy'] != buyerId ||
-          reservation['userId'] != buyerId ||
-          reservation['status'] != 'Active') {
+      final sourceData = sourceSnapshot.data()!;
+      if (sourceData['status'] != 'Reserved' ||
+          sourceData['reservedBy'] != buyerId) {
         throw StateError('The reservation is no longer active.');
+      }
+
+      if (source == 'offer') {
+        final reservation = reservationSnapshot?.data();
+        if (reservation == null ||
+            reservation['userId'] != buyerId ||
+            reservation['status'] != 'Active') {
+          throw StateError('The offer reservation is no longer active.');
+        }
       }
 
       selected['status'] = 'Settled';
@@ -578,16 +600,23 @@ class ChatService {
         'sellerId': sellerId,
       });
 
-      transaction.update(itemRef, {
-        'status': 'Sold',
-        'soldTo': buyerId,
-        'soldAt': FieldValue.serverTimestamp(),
-      });
-
-      transaction.update(reservationRef, {
-        'status': 'Settled',
-        'settledAt': FieldValue.serverTimestamp(),
-      });
+      if (source == 'offer') {
+        transaction.update(offerItemRef!, {
+          'status': 'Sold',
+          'soldTo': buyerId,
+          'soldAt': FieldValue.serverTimestamp(),
+        });
+        transaction.update(reservationRef!, {
+          'status': 'Settled',
+          'settledAt': FieldValue.serverTimestamp(),
+        });
+      } else {
+        transaction.update(productRef!, {
+          'status': 'Sold',
+          'soldTo': buyerId,
+          'soldAt': FieldValue.serverTimestamp(),
+        });
+      }
 
       transaction.update(chatRef, {
         'offerItems': items,
