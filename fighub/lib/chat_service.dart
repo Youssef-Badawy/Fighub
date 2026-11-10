@@ -259,13 +259,21 @@ class ChatService {
                 .toList()
           : <Map<String, dynamic>>[];
 
-      if (items.any(
-        (item) => item['source'] == 'product' && item['productId'] == productId,
-      )) {
-        return;
+      final existingIndex = items.indexWhere(
+        (item) =>
+            item['source'] == 'product' &&
+            item['productId'] == productId,
+      );
+
+      if (existingIndex >= 0) {
+        if (items[existingIndex]['status'] != 'Cancelled') {
+          return;
+        }
+        items[existingIndex] = newItem;
+      } else {
+        items.add(newItem);
       }
 
-      items.add(newItem);
       transaction.update(ref, {
         'offerItems': items,
         'settlementBuyerConfirmed': false,
