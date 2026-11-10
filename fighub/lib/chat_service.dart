@@ -158,55 +158,38 @@ class ChatService {
       throw ArgumentError('A different user is required.');
     }
 
-    final participants = [user.uid, otherUserId]..sort();
-    final chatId = 'offer_${participants[0]}_${participants[1]}';
+    // Direct messages and marketplace reservations must share the same
+    // role-consistent conversation for this buyer/seller pair.
+    final chatId = await _resolveCombinedChatId(
+      buyerId: user.uid,
+      sellerId: otherUserId,
+    );
     final reference = _firestore.collection('chats').doc(chatId);
+    final snapshot = await reference.get();
 
-    // Most existing offer and product chats already use this deterministic ID.
-    // Check it first so users with many conversations do not need a full query.
-    final directChat = await reference.get();
-    final directParticipants = directChat.data()?['participants'];
-    if (directChat.exists &&
-        directParticipants is List &&
-        directParticipants.contains(user.uid) &&
-        directParticipants.contains(otherUserId)) {
+    if (snapshot.exists) {
+      final data = snapshot.data() ?? {};
+      final participants = data['participants'];
+      if (participants is! List ||
+          !participants.contains(user.uid) ||
+          !participants.contains(otherUserId) ||
+          data['buyerId'] != user.uid ||
+          data['sellerId'] != otherUserId) {
+        throw StateError('Chat participants do not match this conversation.');
+      }
       return chatId;
     }
 
-    // Fall back to legacy chat IDs to preserve older message history.
-    final existingChats = await _firestore
-        .collection('chats')
-        .where('participants', arrayContains: user.uid)
-        .get();
-
-    final matchingChats = existingChats.docs.where((document) {
-      final chatParticipants = document.data()['participants'];
-      return chatParticipants is List && chatParticipants.contains(otherUserId);
-    }).toList();
-
-    // Prefer the most recently active legacy conversation for this pair.
-    matchingChats.sort((first, second) {
-      final firstUpdatedAt = first.data()['updatedAt'];
-      final secondUpdatedAt = second.data()['updatedAt'];
-      final firstTime = firstUpdatedAt is Timestamp
-          ? firstUpdatedAt.millisecondsSinceEpoch
-          : 0;
-      final secondTime = secondUpdatedAt is Timestamp
-          ? secondUpdatedAt.millisecondsSinceEpoch
-          : 0;
-      return secondTime.compareTo(firstTime);
-    });
-
-    if (matchingChats.isNotEmpty) {
-      return matchingChats.first.id;
-    }
-
     await reference.set({
-      'productId': chatId,
-      'productName': 'محادثة مباشرة',
+      'productId': 'combined_$chatId',
+      'productName': 'حساب المشتريات',
       'buyerId': user.uid,
       'sellerId': otherUserId,
       'participants': [user.uid, otherUserId],
+      'offerItems': <Map<String, dynamic>>[],
+      'settlementBuyerConfirmed': false,
+      'settlementSellerConfirmed': false,
+      'settledOrders': <Map<String, dynamic>>[],
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
       'lastMessage': '',
