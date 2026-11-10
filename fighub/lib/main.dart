@@ -17,12 +17,10 @@ import 'chat_list_page.dart';
 import 'favorite_service.dart';
 import 'favorites_page.dart';
 import 'firebase_options.dart';
-import 'follow_service.dart';
 import 'interests.dart';
 import 'notification_service.dart';
 import 'notifications_page.dart';
 import 'offer_model.dart';
-import 'offer_service.dart';
 import 'product_details_page.dart';
 import 'product_model.dart';
 import 'product_service.dart';
@@ -165,9 +163,6 @@ class _FigHubHomeState extends State<FigHubHome> {
   int _currentIndex = 0;
 
   final List<Product> _products = [];
-  final List<Offer> _recommendedOffers = [];
-  final List<Offer> _offers = [];
-  final List<String> _followingUserIds = [];
   final List<Product> _favorites = [];
   final List<String> _notifications = [];
 
@@ -177,8 +172,6 @@ class _FigHubHomeState extends State<FigHubHome> {
 
   final OneSignalService _oneSignalService =
       OneSignalService();
-  final OfferService _offerService = OfferService();
-  final FollowService _followService = FollowService();
   final FavoriteService _favoriteService = FavoriteService();
   final NotificationService _notificationService =
       NotificationService();
@@ -186,9 +179,6 @@ class _FigHubHomeState extends State<FigHubHome> {
       SellerProfileService();
 
   StreamSubscription<List<Product>>? _productsSubscription;
-  StreamSubscription<List<Offer>>? _offersSubscription;
-  StreamSubscription<List<Offer>>? _recommendedOffersSubscription;
-  StreamSubscription<List<String>>? _followingUsersSubscription;
   StreamSubscription<List<String>>? _favoritesSubscription;
   StreamSubscription<List<Map<String, dynamic>>>?
       _notificationsSubscription;
@@ -214,57 +204,6 @@ class _FigHubHomeState extends State<FigHubHome> {
 
     _initializePushNotifications();
 
-    widget.authManager.addListener(_onAuthManagerChanged);
-
-    final currentUser = FirebaseAuth.instance.currentUser;
-
-    if (currentUser != null) {
-      _followingUsersSubscription = _followService
-          .watchFollowingIds(currentUser.uid)
-          .listen((userIds) {
-        if (!mounted) {
-          return;
-        }
-
-        setState(() {
-          _followingUserIds
-            ..clear()
-            ..addAll(userIds);
-        });
-      });
-    }
-
-    _offersSubscription = _offerService
-        .watchOffers()
-        .listen((offers) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _offers
-          ..clear()
-          ..addAll(offers);
-      });
-    });
-
-    final interests = widget.authManager.interests;
-
-    if (interests.isNotEmpty) {
-      _recommendedOffersSubscription = _offerService
-          .watchRecommendedOffers(interests)
-          .listen((offers) {
-        if (!mounted) {
-          return;
-        }
-
-        setState(() {
-          _recommendedOffers
-            ..clear()
-            ..addAll(offers);
-        });
-      });
-    }
 
     _productsSubscription = _productService
         .watchProducts()
@@ -315,39 +254,6 @@ class _FigHubHomeState extends State<FigHubHome> {
 
       setState(() {
         _unreadNotificationsCount = unreadCount;
-      });
-    });
-  }
-
-  void _onAuthManagerChanged() {
-    final interests = widget.authManager.interests;
-
-    _recommendedOffersSubscription?.cancel();
-    _recommendedOffersSubscription = null;
-
-    if (interests.isEmpty) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _recommendedOffers.clear();
-      });
-
-      return;
-    }
-
-    _recommendedOffersSubscription = _offerService
-        .watchRecommendedOffers(interests)
-        .listen((offers) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _recommendedOffers
-          ..clear()
-          ..addAll(offers);
       });
     });
   }
@@ -413,8 +319,6 @@ class _FigHubHomeState extends State<FigHubHome> {
   void dispose() {
     widget.authManager.removeListener(_onAuthManagerChanged);
     _productsSubscription?.cancel();
-    _offersSubscription?.cancel();
-    _followingUsersSubscription?.cancel();
     _recommendedOffersSubscription?.cancel();
     _favoritesSubscription?.cancel();
     _notificationsSubscription?.cancel();
@@ -498,52 +402,6 @@ class _FigHubHomeState extends State<FigHubHome> {
         ),
       );
     }
-  }
-
-  List<Product> get _followingProducts {
-    if (_followingUserIds.isEmpty) {
-      return const [];
-    }
-
-    final followingIds = _followingUserIds.toSet();
-
-    return _products.where((product) {
-      return followingIds.contains(product.sellerId);
-    }).toList();
-  }
-
-  List<Offer> get _followingOffers {
-    if (_followingUserIds.isEmpty) {
-      return const [];
-    }
-
-    final followingIds = _followingUserIds.toSet();
-
-    return _offers.where((offer) {
-      return followingIds.contains(offer.sellerId);
-    }).toList();
-  }
-
-  List<Product> get _recommendedProducts {
-    final interests = widget.authManager.interests
-        .map((interest) => interest.trim().toLowerCase())
-        .where((interest) => interest.isNotEmpty)
-        .toSet();
-
-    if (interests.isEmpty) {
-      return const [];
-    }
-
-    return _products.where((product) {
-      return interests.any(
-        (interest) {
-          return FigHubInterests.matchesInterest(
-            interest: interest,
-            category: product.category,
-          );
-        },
-      );
-    }).toList();
   }
 
   List<Product> get _filteredProducts {
@@ -701,6 +559,40 @@ class _FigHubHomeState extends State<FigHubHome> {
     );
   }
 
+  Future<void> _openSearch() async {
+    final controller = TextEditingController(text: _searchQuery);
+    final query = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('بحث'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            hintText: AppLocalizations.of(context).search,
+            prefixIcon: const Icon(Icons.search),
+          ),
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('بحث'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (query != null && mounted) {
+      setState(() => _searchQuery = query.trim());
+    }
+  }
+
   Future<void> _openUsers() async {
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -774,6 +666,11 @@ class _FigHubHomeState extends State<FigHubHome> {
           ),
         ),
         actions: [
+          IconButton(
+            onPressed: _openSearch,
+            icon: const Icon(Icons.search),
+            tooltip: 'بحث',
+          ),
           IconButton(
             onPressed: _openUsers,
             icon: const Icon(
@@ -894,19 +791,15 @@ class _FigHubHomeState extends State<FigHubHome> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        TextField(
-          onChanged: (value) {
-            setState(() {
-              _searchQuery = value;
-            });
-          },
-          decoration: InputDecoration(
-            hintText: localization.search,
-            prefixIcon: const Icon(Icons.search),
-            border: const OutlineInputBorder(),
+        if (_searchQuery.isNotEmpty)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              onPressed: () => setState(() => _searchQuery = ''),
+              icon: const Icon(Icons.close),
+              label: Text('مسح البحث: $_searchQuery'),
+            ),
           ),
-        ),
-        const SizedBox(height: 16),
         SizedBox(
           height: 42,
           child: ListView.separated(
@@ -951,387 +844,6 @@ class _FigHubHomeState extends State<FigHubHome> {
           ),
         ),
         const SizedBox(height: 20),
-        if ((_followingProducts.isNotEmpty ||
-                _followingOffers.isNotEmpty) &&
-            _searchQuery.trim().isEmpty &&
-            _selectedCategory == 'All') ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              16,
-              8,
-              16,
-              10,
-            ),
-            child: Text(
-              'From people you follow',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-          ),
-
-          if (_followingProducts.isNotEmpty) ...[
-            SizedBox(
-              height: 190,
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                ),
-                scrollDirection: Axis.horizontal,
-                itemCount: _followingProducts.length,
-                separatorBuilder: (_, _) =>
-                    const SizedBox(width: 12),
-                itemBuilder: (context, index) {
-                  final product =
-                      _followingProducts[index];
-
-                  return SizedBox(
-                    width: 180,
-                    child: _ProductCard(
-                      product: product,
-                      sellerProfile:
-                          _sellerProfiles[product.sellerId],
-                      isFavorite: _favoriteIds.contains(
-                        product.id,
-                      ),
-                      onFavorite: () {
-                        _toggleFavorite(product);
-                      },
-                      onSellerTap: () {
-                        final seller =
-                            _sellerProfiles[product.sellerId];
-
-                        if (seller == null) {
-                          return;
-                        }
-
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                SellerProfilePage(
-                              sellerId: seller.id,
-                            ),
-                          ),
-                        );
-                      },
-                      onTap: () {
-                        _openProductDetails(product);
-                      },
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-
-          if (_followingOffers.isNotEmpty) ...[
-            const SizedBox(height: 14),
-
-            SizedBox(
-              height: 190,
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                ),
-                scrollDirection: Axis.horizontal,
-                itemCount: _followingOffers.length,
-                separatorBuilder: (_, _) =>
-                    const SizedBox(width: 12),
-                itemBuilder: (context, index) {
-                  final offer =
-                      _followingOffers[index];
-
-                  return SizedBox(
-                    width: 220,
-                    child: Card(
-                      clipBehavior: Clip.antiAlias,
-                      child: InkWell(
-                        onTap: () {
-                          if (offer.id == null ||
-                              offer.id!.isEmpty) {
-                            return;
-                          }
-
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  OfferDetailsPage(
-                                offerId: offer.id!,
-                              ),
-                            ),
-                          );
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
-                            children: [
-                              const Icon(
-                                Icons.local_offer_outlined,
-                                size: 30,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                offer.title,
-                                maxLines: 2,
-                                overflow:
-                                    TextOverflow.ellipsis,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      fontWeight:
-                                          FontWeight.bold,
-                                    ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                offer.description,
-                                maxLines: 3,
-                                overflow:
-                                    TextOverflow.ellipsis,
-                              ),
-                              const Spacer(),
-                              Text(
-                                'View offer',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelLarge,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-
-          const SizedBox(height: 8),
-        ],
-
-        if (_offers.isNotEmpty &&
-            _searchQuery.trim().isEmpty &&
-            _selectedCategory == 'All') ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              16,
-              8,
-              16,
-              10,
-            ),
-            child: Text(
-              'New offers',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-          ),
-          SizedBox(
-            height: 190,
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-              ),
-              scrollDirection: Axis.horizontal,
-              itemCount: _offers.length > 10
-                  ? 10
-                  : _offers.length,
-              separatorBuilder: (_, _) =>
-                  const SizedBox(width: 12),
-              itemBuilder: (context, index) {
-                final offer = _offers[index];
-
-                return SizedBox(
-                  width: 220,
-                  child: Card(
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      onTap: () {
-                        if (offer.id == null ||
-                            offer.id!.isEmpty) {
-                          return;
-                        }
-
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                OfferDetailsPage(
-                              offerId: offer.id!,
-                            ),
-                          ),
-                        );
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
-                          children: [
-                            const Icon(
-                              Icons.new_releases_outlined,
-                              size: 30,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              offer.title,
-                              maxLines: 2,
-                              overflow:
-                                  TextOverflow.ellipsis,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
-                                    fontWeight:
-                                        FontWeight.bold,
-                                  ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              offer.description,
-                              maxLines: 3,
-                              overflow:
-                                  TextOverflow.ellipsis,
-                            ),
-                            const Spacer(),
-                            Text(
-                              'View offer',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .labelLarge,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-
-        if (_recommendedProducts.isNotEmpty &&
-            _searchQuery.trim().isEmpty &&
-            _selectedCategory == 'All') ...[
-          Text(
-            'Recommended for you',
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 190,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: _recommendedProducts.length,
-              separatorBuilder: (_, _) =>
-                  const SizedBox(width: 12),
-              itemBuilder: (context, index) {
-                final product =
-                    _recommendedProducts[index];
-
-                return SizedBox(
-                  width: 320,
-                  child: _ProductCard(
-                    product: product,
-                    sellerProfile:
-                        _sellerProfiles[product.sellerId],
-                    isFavorite:
-                        _isFavorite(product),
-                    onFavorite: () {
-                      _toggleFavorite(product);
-                    },
-                    onTap: () {
-                      _openProductDetails(product);
-                    },
-                    onSellerTap: () {
-                      _openSellerProfile(
-                        product.sellerId,
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 24),
-        ],
-        if (_recommendedOffers.isNotEmpty &&
-            _searchQuery.trim().isEmpty &&
-            _selectedCategory == 'All') ...[
-          Text(
-            'Recommended offers',
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          const SizedBox(height: 12),
-          ..._recommendedOffers.map(
-            (offer) => Padding(
-              padding: const EdgeInsets.only(
-                bottom: 12,
-              ),
-              child: Card(
-                child: ListTile(
-                  leading: const CircleAvatar(
-                    child: Icon(
-                      Icons.local_offer_outlined,
-                    ),
-                  ),
-                  title: Text(
-                    offer.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(
-                    offer.description.isEmpty
-                        ? 'عرض جماعي مناسب لاهتماماتك'
-                        : offer.description,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: const Icon(
-                    Icons.arrow_forward_ios,
-                    size: 16,
-                  ),
-                  onTap: () {
-                    if (offer.id == null ||
-                        offer.id!.isEmpty) {
-                      return;
-                    }
-
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => OfferDetailsPage(
-                          offerId: offer.id!,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
         if (products.isEmpty)
           Center(
             child: Padding(
