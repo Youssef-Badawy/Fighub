@@ -90,7 +90,13 @@ class _AuthPageState extends State<AuthPage> {
 
       switch (error.code) {
         case 'email-already-in-use':
-          message = 'هذا البريد الإلكتروني مستخدم بالفعل.';
+          message = 'هذا البريد الإلكتروني مستخدم بالفعل. سجّل الدخول بدل إنشاء حساب جديد.';
+          break;
+        case 'credential-already-in-use':
+          message = 'هذا البريد مرتبط بحساب موجود. سجّل الدخول بهذا البريد وكلمة المرور.';
+          break;
+        case 'operation-not-allowed':
+          message = 'تسجيل الدخول كضيف غير مفعّل في إعدادات التطبيق بعد.';
           break;
         case 'invalid-email':
           message = 'البريد الإلكتروني غير صحيح.';
