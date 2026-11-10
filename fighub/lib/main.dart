@@ -271,6 +271,7 @@ class _FigHubHomeState extends State<FigHubHome> {
     List<Product> products,
   ) async {
     final sellerIds = products
+        .take(40)
         .map((product) => product.sellerId)
         .where((sellerId) => sellerId.isNotEmpty)
         .toSet()
