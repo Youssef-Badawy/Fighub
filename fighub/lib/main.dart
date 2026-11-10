@@ -40,6 +40,15 @@ Future<void> main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  // Start in guest mode so browsing does not require an email account.
+  if (FirebaseAuth.instance.currentUser == null) {
+    try {
+      await FirebaseAuth.instance.signInAnonymously();
+    } catch (error) {
+      debugPrint('Anonymous sign-in is unavailable: $error');
+    }
+  }
+
   final settings = AppSettings();
   await settings.loadSettings();
 
@@ -303,7 +312,7 @@ class _FigHubHomeState extends State<FigHubHome> {
 
     final user = FirebaseAuth.instance.currentUser;
 
-    if (user != null) {
+    if (user != null && !user.isAnonymous) {
       await _oneSignalService.initialize(
         userId: user.uid,
       );
