@@ -162,14 +162,27 @@ class ChatService {
     final existingChats = await _firestore
         .collection('chats')
         .where('participants', arrayContains: user.uid)
-        .orderBy('updatedAt', descending: true)
         .get();
 
-    for (final document in existingChats.docs) {
+    final matchingChats = existingChats.docs.where((document) {
       final participants = document.data()['participants'];
-      if (participants is List && participants.contains(otherUserId)) {
-        return document.id;
-      }
+      return participants is List && participants.contains(otherUserId);
+    }).toList();
+
+    matchingChats.sort((first, second) {
+      final firstUpdatedAt = first.data()['updatedAt'];
+      final secondUpdatedAt = second.data()['updatedAt'];
+      final firstTime = firstUpdatedAt is Timestamp
+          ? firstUpdatedAt.millisecondsSinceEpoch
+          : 0;
+      final secondTime = secondUpdatedAt is Timestamp
+          ? secondUpdatedAt.millisecondsSinceEpoch
+          : 0;
+      return secondTime.compareTo(firstTime);
+    });
+
+    if (matchingChats.isNotEmpty) {
+      return matchingChats.first.id;
     }
 
     final participants = [user.uid, otherUserId]..sort();
