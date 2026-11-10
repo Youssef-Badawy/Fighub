@@ -171,7 +171,7 @@ class OfferManagerPage extends StatelessWidget {
                       .length;
 
                   final canDelete =
-                      items.isNotEmpty && reservedCount == items.length;
+                      items.isNotEmpty && reservedCount == 0;
 
                   final buyerGroups = <String, List<OfferItem>>{};
                   for (final item in items) {
@@ -265,7 +265,7 @@ class OfferManagerPage extends StatelessWidget {
                               if (canDelete) ...[
                                 const SizedBox(height: 8),
                                 const Text(
-                                  'جميع القطع محجوزة ويمكن حذف العرض.',
+                                  'لا توجد حجوزات نشطة، ويمكن حذف العرض.',
                                   style: TextStyle(fontWeight: FontWeight.w600),
                                 ),
                               ],
