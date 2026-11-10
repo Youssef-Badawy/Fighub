@@ -50,3 +50,14 @@ jobs:
 
       - name: Analyze entire Flutter app
         run: flutter analyze
+
+      - name: Build Android debug APK
+        run: flutter build apk --debug
+
+      - name: Upload Android debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: fighub-debug-apk-${{ github.sha }}
+          path: fighub/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
