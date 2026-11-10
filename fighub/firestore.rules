@@ -40,7 +40,8 @@ service cloud.firestore {
                     );
 
       allow delete: if request.auth != null
-                    && resource.data.sellerId == request.auth.uid;
+                    && resource.data.sellerId == request.auth.uid
+                    && resource.data.get('status', 'Available') == 'Available';
     }
 
     match /app_config/{configId} {
