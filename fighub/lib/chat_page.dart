@@ -317,7 +317,48 @@ class _ChatPageState extends State<ChatPage> {
       }
     }
 
-    if (reservedItems.isEmpty) return;
+    if (reservedItems.isEmpty) {
+      // Older product-specific chats predate the combined offerItems list.
+      // Resolve their product directly so shipping is available there too.
+      final legacyProductId = (chatData['productId'] ?? '').toString();
+      final buyerId = (chatData['buyerId'] ?? '').toString();
+      if (legacyProductId.isNotEmpty &&
+          !legacyProductId.startsWith('combined_') &&
+          buyerId.isNotEmpty) {
+        final product = await FirebaseFirestore.instance
+            .collection('products')
+            .doc(legacyProductId)
+            .get();
+        final data = product.data();
+        if (product.exists &&
+            data?['status'] == 'Reserved' &&
+            data?['reservedBy'] == buyerId) {
+          reservedItems.add({
+            'source': 'product',
+            'productId': legacyProductId,
+            'itemId': legacyProductId,
+            'itemName': data?['name'] ?? widget.productName,
+            'price': data?['price'] ?? '0',
+            'status': 'Reserved',
+          });
+        }
+      }
+    }
+
+    if (reservedItems.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).isArabic
+                  ? 'لا توجد قطع محجوزة جاهزة للشحن في هذه المحادثة.'
+                  : 'There are no reserved items ready for shipping in this chat.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
 
     final isArabic = AppLocalizations.of(context).isArabic;
 
@@ -822,25 +863,50 @@ class _ChatPageState extends State<ChatPage> {
                   : <Map<String, dynamic>>[];
 
               if (offerItems.isEmpty) {
+                final isSeller =
+                    _chatService.currentUserId != null &&
+                    _chatService.currentUserId == chatData['sellerId'];
                 return Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const CircleAvatar(
-                        child: Icon(Icons.shopping_bag_outlined),
+                      Row(
+                        children: [
+                          const CircleAvatar(
+                            child: Icon(Icons.shopping_bag_outlined),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              widget.productName,
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          widget.productName,
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
+                      if (isSeller) ...[
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: isArabic
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: FilledButton.icon(
+                            onPressed: () => _showShippingForm(chatData),
+                            icon: const Icon(Icons.local_shipping_outlined),
+                            label: Text(
+                              isArabic
+                                  ? 'إرسال البيانات للشحن'
+                                  : 'Send shipping details',
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 );
