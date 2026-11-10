@@ -664,14 +664,14 @@ class ChatService {
         throw StateError('Invalid item reservation details.');
       }
 
-      final source = selected['source'];
+      final itemSource = selected['source'];
       DocumentReference<Map<String, dynamic>>? offerItemRef;
       DocumentReference<Map<String, dynamic>>? reservationRef;
       DocumentReference<Map<String, dynamic>>? productRef;
       late DocumentSnapshot<Map<String, dynamic>> sourceSnapshot;
       DocumentSnapshot<Map<String, dynamic>>? reservationSnapshot;
 
-      if (source == 'offer') {
+      if (itemSource == 'offer') {
         final offerId = selected['offerId'] as String? ?? '';
         if (offerId.isEmpty) {
           throw StateError('Offer item information is incomplete.');
@@ -684,7 +684,7 @@ class ChatService {
         reservationRef = offerItemRef.collection('reservations').doc(buyerId);
         sourceSnapshot = await transaction.get(offerItemRef);
         reservationSnapshot = await transaction.get(reservationRef);
-      } else if (source == 'product') {
+      } else if (itemSource == 'product') {
         final productId = selected['productId'] as String? ?? itemId;
         if (productId.isEmpty) {
           throw StateError('Product information is incomplete.');
@@ -705,7 +705,7 @@ class ChatService {
         throw StateError('The reservation is no longer active.');
       }
 
-      if (source == 'offer') {
+      if (itemSource == 'offer') {
         final reservation = reservationSnapshot?.data();
         if (reservation == null ||
             reservation['userId'] != buyerId ||
@@ -731,7 +731,7 @@ class ChatService {
         'sellerId': sellerId,
       });
 
-      if (source == 'offer') {
+      if (itemSource == 'offer') {
         transaction.update(offerItemRef!, {
           'status': 'Sold',
           'soldTo': buyerId,
