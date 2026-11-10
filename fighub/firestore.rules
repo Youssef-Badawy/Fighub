@@ -608,8 +608,10 @@ service cloud.firestore {
                          .affectedKeys().hasAny(['settlementBuyerConfirmed'])
                       || (
                         request.resource.data.settlementBuyerConfirmed is bool
-                        && request.resource.data.settlementBuyerConfirmed != true
-                        || request.auth.uid == resource.data.buyerId
+                        && (
+                          request.resource.data.settlementBuyerConfirmed != true
+                          || request.auth.uid == resource.data.buyerId
+                        )
                       )
                     )
                     && (
@@ -617,8 +619,10 @@ service cloud.firestore {
                          .affectedKeys().hasAny(['settlementSellerConfirmed'])
                       || (
                         request.resource.data.settlementSellerConfirmed is bool
-                        && request.resource.data.settlementSellerConfirmed != true
-                        || request.auth.uid == resource.data.sellerId
+                        && (
+                          request.resource.data.settlementSellerConfirmed != true
+                          || request.auth.uid == resource.data.sellerId
+                        )
                       )
                     )
                     && (
