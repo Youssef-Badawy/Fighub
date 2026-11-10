@@ -156,10 +156,6 @@ class AuthManager extends ChangeNotifier {
     required String email,
     required String password,
   }) async {
-    if (_auth.currentUser?.isAnonymous == true) {
-      await _auth.signOut();
-    }
-
     final credential =
         await _auth.signInWithEmailAndPassword(
       email: email,
@@ -212,18 +208,16 @@ class AuthManager extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    if (_auth.currentUser?.isAnonymous == true) return;
+
     await _auth.signOut();
+    try {
+      await _auth.signInAnonymously();
+    } catch (error) {
+      debugPrint('Could not restart guest session: $error');
+    }
 
-    _isLoggedIn = false;
-    _name = '';
-    _email = '';
-    _phone = '';
-    _photoUrl = '';
-    _bio = '';
-    _coverUrl = '';
-    _interests = [];
-
-    notifyListeners();
+    await load();
   }
 
   Future<void> updateProfile({
