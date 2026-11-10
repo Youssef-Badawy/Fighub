@@ -44,12 +44,6 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Show formatter diff
-        if: always()
-        run: |
-          dart format --output=show lib/chat_service.dart > /tmp/formatted.dart
-          diff -u lib/chat_service.dart /tmp/formatted.dart || true
-
       - name: Check chat service formatting
         run: dart format --output=none --set-exit-if-changed lib/chat_service.dart
 
