@@ -274,6 +274,27 @@ service cloud.firestore {
                         )
                         ||
                         (
+                          resource.data.status == 'Available'
+                          && resource.data.get('reservedBy', null) == null
+                          && request.resource.data.status == 'Available'
+                          && request.resource.data.get('reservedBy', null) == null
+                          && request.resource.data.waitingUsers is list
+                          && request.resource.data.waitingUsers.size()
+                             == resource.data.get('waitingUsers', []).size() + 1
+                          && request.resource.data.waitingUsers[
+                               resource.data.get('waitingUsers', []).size()
+                             ] == request.auth.uid
+                          && getAfter(
+                               /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)/reservations/$(request.auth.uid)
+                             ).data.userId == request.auth.uid
+                          && getAfter(
+                               /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)/reservations/$(request.auth.uid)
+                             ).data.status == 'Waiting'
+                          && request.resource.data.diff(resource.data)
+                             .affectedKeys().hasOnly(['waitingUsers'])
+                        )
+                        ||
+                        (
                           resource.data.status
                              == 'Reserved'
                           && resource.data.reservedBy
