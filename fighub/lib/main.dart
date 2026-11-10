@@ -257,6 +257,7 @@ class _FigHubHomeState extends State<FigHubHome> {
 
   int _unreadNotificationsCount = 0;
   String? _pushInitializedUserId;
+  String? _subscribedUserId;
 
   final List<String> _categories = [
     'All',
@@ -272,6 +273,8 @@ class _FigHubHomeState extends State<FigHubHome> {
 
     widget.authManager.addListener(_onAuthManagerChanged);
     _initializePushNotifications();
+
+    _subscribeToUserData();
 
     _productsSubscription = _productService
         .watchProducts()
@@ -289,40 +292,6 @@ class _FigHubHomeState extends State<FigHubHome> {
       });
 
       _loadSellerProfiles(products);
-    });
-
-    _favoritesSubscription = _favoriteService
-        .watchFavoriteIds()
-        .listen((favoriteIds) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _favoriteIds
-          ..clear()
-          ..addAll(favoriteIds);
-
-        _refreshFavoritesList();
-      });
-    });
-
-    _notificationsSubscription = _notificationService
-        .watchMyNotifications()
-        .listen((notificationList) {
-      if (!mounted) {
-        return;
-      }
-
-      final unreadCount = notificationList.where(
-        (notification) {
-          return !(notification['isRead'] as bool? ?? false);
-        },
-      ).length;
-
-      setState(() {
-        _unreadNotificationsCount = unreadCount;
-      });
     });
   }
 
@@ -364,9 +333,58 @@ class _FigHubHomeState extends State<FigHubHome> {
   }
 
   void _onAuthManagerChanged() {
+    _subscribeToUserData();
     if (FirebaseAuth.instance.currentUser?.isAnonymous == false) {
       _initializePushNotifications();
     }
+  }
+
+  void _subscribeToUserData() {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == _subscribedUserId) return;
+
+    _subscribedUserId = userId;
+    _favoritesSubscription?.cancel();
+    _notificationsSubscription?.cancel();
+
+    if (!mounted) return;
+    setState(() {
+      _favoriteIds.clear();
+      _favorites.clear();
+      _notifications.clear();
+      _unreadNotificationsCount = 0;
+    });
+
+    if (userId == null) return;
+
+    _favoritesSubscription = _favoriteService
+        .watchFavoriteIds()
+        .listen((favoriteIds) {
+      if (!mounted) return;
+      setState(() {
+        _favoriteIds
+          ..clear()
+          ..addAll(favoriteIds);
+        _refreshFavoritesList();
+      });
+    });
+
+    _notificationsSubscription = _notificationService
+        .watchMyNotifications()
+        .listen((notificationList) {
+      if (!mounted) return;
+      final unreadCount = notificationList.where(
+        (notification) => !(notification['isRead'] as bool? ?? false),
+      ).length;
+      setState(() {
+        _notifications
+          ..clear()
+          ..addAll(notificationList.map(
+            (notification) => notification['title']?.toString() ?? '',
+          ));
+        _unreadNotificationsCount = unreadCount;
+      });
+    });
   }
 
   Future<void> _initializePushNotifications() async {
