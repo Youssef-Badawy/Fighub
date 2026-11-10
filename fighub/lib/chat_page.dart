@@ -562,11 +562,10 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  Future<void> _sellReservedOfferItem(Map<String, dynamic> item) async {
-    final offerId = item['offerId'] as String? ?? '';
+  Future<void> _sellReservedItem(Map<String, dynamic> item) async {
     final itemId = item['itemId'] as String? ?? '';
 
-    if (offerId.isEmpty || itemId.isEmpty) {
+    if (itemId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -1029,7 +1028,7 @@ class _ChatPageState extends State<ChatPage> {
                                     height: 32,
                                     child: FilledButton.tonalIcon(
                                       onPressed: () =>
-                                          _sellReservedOfferItem(item),
+                                          _sellReservedItem(item),
                                       icon: const Icon(
                                         Icons.check_circle_outline,
                                         size: 16,
