@@ -541,6 +541,7 @@ class _FigHubHomeState extends State<FigHubHome> {
   }
 
   Future<void> _openAddProduct() async {
+    if (!await requireRegisteredAccount(context)) return;
     final product = await Navigator.push<Product>(
       context,
       MaterialPageRoute(
@@ -978,7 +979,9 @@ class _FigHubHomeState extends State<FigHubHome> {
           SizedBox(
             width: 260,
             child: FilledButton.icon(
-              onPressed: () {
+              onPressed: () async {
+                if (!await requireRegisteredAccount(context)) return;
+                if (!context.mounted) return;
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => const CreateOfferPage(),
