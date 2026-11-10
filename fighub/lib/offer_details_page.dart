@@ -444,7 +444,9 @@ class OfferDetailsPage extends StatelessWidget {
                                 }
 
                                 return FilledButton.icon(
-                                  onPressed: !isActive
+                                  onPressed: !isActive ||
+                                          (item.status == 'Available' &&
+                                              item.waitingUsers.isNotEmpty)
                                       ? null
                                       : item.status == 'Available'
                                           ? () async {
@@ -523,9 +525,12 @@ class OfferDetailsPage extends StatelessWidget {
                                   label: Text(
                                     !isActive
                                         ? 'العرض لم يبدأ بعد'
+                                        : item.status == 'Available' &&
+                                              item.waitingUsers.isNotEmpty
+                                        ? 'يوجد مشترون في الانتظار'
                                         : item.status == 'Available'
-                                            ? 'احجز القطعة'
-                                            : 'انضم لقائمة الانتظار',
+                                        ? 'احجز القطعة'
+                                        : 'انضم لقائمة الانتظار',
                                   ),
                                 );
                               },
