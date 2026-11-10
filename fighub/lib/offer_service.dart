@@ -203,37 +203,65 @@ class OfferService {
     required String itemId,
     required String buyerId,
   }) async {
-    try {
-      final offerSnapshot = await _offers.doc(offerId).get();
-      final itemSnapshot = await _offers
-          .doc(offerId)
-          .collection('items')
-          .doc(itemId)
-          .get();
+    // Reservation is already committed before this method runs. Retry only
+    // transient Firestore failures; never turn a successful reservation into
+    // a reported reservation failure because chat synchronization failed.
+    const retryableCodes = {
+      'aborted',
+      'deadline-exceeded',
+      'internal',
+      'resource-exhausted',
+      'unavailable',
+    };
 
-      if (!offerSnapshot.exists || !itemSnapshot.exists) return;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final offerSnapshot = await _offers.doc(offerId).get();
+        final itemSnapshot = await _offers
+            .doc(offerId)
+            .collection('items')
+            .doc(itemId)
+            .get();
 
-      final offerData = offerSnapshot.data() ?? {};
-      final itemData = itemSnapshot.data() ?? {};
-      final sellerId = offerData['sellerId'] as String? ?? '';
-      if (sellerId.isEmpty || sellerId == buyerId) return;
+        if (!offerSnapshot.exists || !itemSnapshot.exists) return;
 
-      final imagesRaw = itemData['imagePaths'];
-      final images = imagesRaw is List
-          ? imagesRaw.whereType<String>().toList()
-          : <String>[];
+        final offerData = offerSnapshot.data() ?? {};
+        final itemData = itemSnapshot.data() ?? {};
+        final sellerId = offerData['sellerId'] as String? ?? '';
+        if (sellerId.isEmpty || sellerId == buyerId) return;
 
-      await ChatService().addReservedOfferItemToChat(
-        offerId: offerId,
-        itemId: itemId,
-        itemName: itemData['name'] as String? ?? 'قطعة من العرض',
-        price: itemData['price']?.toString() ?? '0',
-        imagePaths: images,
-        sellerId: sellerId,
-      );
-    } catch (error, stackTrace) {
-      debugPrint('FIGHUB OFFER CHAT SYNC ERROR: $error');
-      debugPrintStack(stackTrace: stackTrace);
+        final imagesRaw = itemData['imagePaths'];
+        final images = imagesRaw is List
+            ? imagesRaw.whereType<String>().toList()
+            : <String>[];
+
+        await ChatService().addReservedOfferItemToChat(
+          offerId: offerId,
+          itemId: itemId,
+          itemName: itemData['name'] as String? ?? 'قطعة من العرض',
+          price: itemData['price']?.toString() ?? '0',
+          imagePaths: images,
+          sellerId: sellerId,
+        );
+        return;
+      } on FirebaseException catch (error, stackTrace) {
+        final shouldRetry =
+            retryableCodes.contains(error.code) && attempt < 2;
+        if (!shouldRetry) {
+          debugPrint('FIGHUB OFFER CHAT SYNC ERROR: $error');
+          debugPrintStack(stackTrace: stackTrace);
+          return;
+        }
+
+        await Future<void>.delayed(
+          Duration(milliseconds: 300 * (1 << attempt)),
+        );
+      } catch (error, stackTrace) {
+        // Permission, validation, and unexpected errors are not transient.
+        debugPrint('FIGHUB OFFER CHAT SYNC ERROR: $error');
+        debugPrintStack(stackTrace: stackTrace);
+        return;
+      }
     }
   }
 
