@@ -871,7 +871,7 @@ class _FigHubHomeState extends State<FigHubHome> {
                   child: TextButton.icon(
                     onPressed: () => setState(() => _searchQuery = ''),
                     icon: const Icon(Icons.close),
-                    label: Text('مسح البحث: $_searchQuery'),
+                    label: Text(localization.isArabic ? 'مسح البحث: $_searchQuery' : 'Clear search: $_searchQuery'),
                   ),
                 ),
               SizedBox(
@@ -1091,6 +1091,8 @@ class _ProductCard extends StatelessWidget {
           imagePath,
           width: 90,
           height: 90,
+          cacheWidth: 180,
+          cacheHeight: 180,
           fit: BoxFit.cover,
           errorBuilder: (
             context,
@@ -1109,6 +1111,8 @@ class _ProductCard extends StatelessWidget {
         File(imagePath),
         width: 90,
         height: 90,
+        cacheWidth: 180,
+        cacheHeight: 180,
         fit: BoxFit.cover,
         errorBuilder: (
           context,
