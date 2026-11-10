@@ -33,68 +33,63 @@ class OfferManagerPage extends StatelessWidget {
               );
             },
           ),
-          StreamBuilder<List<OfferItem>>(
-            stream: offerService.watchOfferItems(offerId),
-            builder: (context, snapshot) {
-              return IconButton(
-                tooltip: 'حذف العرض',
-                icon: const Icon(Icons.delete_outline),
-                onPressed: () async {
-                  final confirmed = await showDialog<bool>(
-                    context: context,
-                    builder: (dialogContext) {
-                      return AlertDialog(
-                        title: const Text('حذف العرض؟'),
-                        content: const Text(
-                          'سيختفي العرض من قائمة العروض. ستظل المحادثات والحجوزات السابقة محفوظة. هل تريد المتابعة؟',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () {
-                              Navigator.of(dialogContext).pop(false);
-                            },
-                            child: const Text('إلغاء'),
-                          ),
-                          FilledButton(
-                            onPressed: () {
-                              Navigator.of(dialogContext).pop(true);
-                            },
-                            child: const Text('حذف العرض'),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-
-                  if (confirmed != true || !context.mounted) {
-                    return;
-                  }
-
-                  try {
-                    await offerService.deleteOffer(offerId);
-
-                    if (!context.mounted) {
-                      return;
-                    }
-
-                    Navigator.of(context).pop();
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('تم حذف العرض بنجاح')),
-                    );
-                  } catch (error) {
-                    if (!context.mounted) {
-                      return;
-                    }
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('تعذر حذف العرض: $error')),
-                    );
-                  }
-                },
-              );
-            },
-          ),
+          IconButton(
+                          tooltip: 'حذف العرض',
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () async {
+                            final confirmed = await showDialog<bool>(
+                              context: context,
+                              builder: (dialogContext) {
+                                return AlertDialog(
+                                  title: const Text('حذف العرض؟'),
+                                  content: const Text(
+                                    'سيختفي العرض من قائمة العروض. ستظل المحادثات والحجوزات السابقة محفوظة. هل تريد المتابعة؟',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () {
+                                        Navigator.of(dialogContext).pop(false);
+                                      },
+                                      child: const Text('إلغاء'),
+                                    ),
+                                    FilledButton(
+                                      onPressed: () {
+                                        Navigator.of(dialogContext).pop(true);
+                                      },
+                                      child: const Text('حذف العرض'),
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+          
+                            if (confirmed != true || !context.mounted) {
+                              return;
+                            }
+          
+                            try {
+                              await offerService.deleteOffer(offerId);
+          
+                              if (!context.mounted) {
+                                return;
+                              }
+          
+                              Navigator.of(context).pop();
+          
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('تم حذف العرض بنجاح')),
+                              );
+                            } catch (error) {
+                              if (!context.mounted) {
+                                return;
+                              }
+          
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('تعذر حذف العرض: $error')),
+                              );
+                            }
+                          },
+                        );
         ],
       ),
       body: StreamBuilder<Offer?>(
