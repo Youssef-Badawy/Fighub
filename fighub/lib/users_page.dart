@@ -81,11 +81,12 @@ class _UsersPageState extends State<UsersPage> {
 
   @override
   Widget build(BuildContext context) {
+    final localization = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Users',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        title: Text(
+          localization.isArabic ? 'المستخدمون' : 'Users',
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
       body: Column(
@@ -111,8 +112,12 @@ class _UsersPageState extends State<UsersPage> {
           ),
           Expanded(
             child: _searchQuery.length < 2
-                ? const Center(
-                    child: Text('اكتب حرفين على الأقل للبحث عن مستخدم.'),
+                ? Center(
+                    child: Text(
+                      localization.isArabic
+                          ? 'اكتب حرفين على الأقل للبحث عن مستخدم.'
+                          : 'Type at least two letters to search for a user.',
+                    ),
                   )
                 : FutureBuilder<List<SellerProfile>>(
                     future: _searchFuture,
@@ -135,7 +140,11 @@ class _UsersPageState extends State<UsersPage> {
                       final profiles = snapshot.data ?? const <SellerProfile>[];
                       if (profiles.isEmpty) {
                         return const Center(
-                          child: Text('No users match your search.'),
+                          child: Text(
+                            localization.isArabic
+                                ? 'لا يوجد مستخدمون بهذا الاسم.'
+                                : 'No users match your search.',
+                          ),
                         );
                       }
                       return ListView.separated(
