@@ -131,6 +131,11 @@ class ProductService {
       throw StateError('You can only delete your own products.');
     }
 
+    final status = data?['status'] as String? ?? 'Available';
+    if (status != 'Available') {
+      throw StateError('Reserved or sold products cannot be deleted.');
+    }
+
     await _productsCollection.doc(productId).delete();
   }
 
