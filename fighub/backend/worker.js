@@ -76,7 +76,7 @@ export default {
         return new Response(
           JSON.stringify({
             error:
-              'userId, title and message are required',
+              'userId, chatId, messageId, title and message are required',
           }),
           {
             status: 400,
