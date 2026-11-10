@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'follow_service.dart';
+import 'chat_page.dart';
+import 'chat_service.dart';
 import 'product_details_page.dart';
 import 'product_model.dart';
 import 'product_service.dart';
@@ -38,6 +40,9 @@ class _SellerProfilePageState
   bool _isLoadingProfile = true;
   String? _profileError;
   bool _isFollowLoading = false;
+  bool _isOpeningChat = false;
+
+  final ChatService _chatService = ChatService();
 
   final FirebaseAuth _auth =
       FirebaseAuth.instance;
@@ -103,6 +108,37 @@ class _SellerProfilePageState
         File(photoUrl),
       ),
     );
+  }
+
+  Future<void> _openDirectChat() async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null || currentUser.uid == widget.sellerId ||
+        _isOpeningChat) {
+      return;
+    }
+
+    setState(() => _isOpeningChat = true);
+    try {
+      final chatId = await _chatService.getOrCreateDirectChat(
+        otherUserId: widget.sellerId,
+      );
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChatPage(
+            chatId: chatId,
+            productName: 'محادثة مع ${_sellerProfile?.name ?? 'المستخدم'}',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر فتح المحادثة: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _isOpeningChat = false);
+    }
   }
 
   Future<void> _toggleFollow() async {
@@ -181,7 +217,23 @@ class _SellerProfilePageState
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            _buildProfilePhoto(),
+            Container(
+              height: 138,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(16),
+                image: (_sellerProfile?.coverUrl.isNotEmpty == true)
+                    ? DecorationImage(
+                        image: NetworkImage(_sellerProfile!.coverUrl),
+                        fit: BoxFit.cover,
+                      )
+                    : null,
+              ),
+              alignment: Alignment.bottomCenter,
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _buildProfilePhoto(),
+            ),
             const SizedBox(height: 12),
             Text(
               sellerName,
@@ -190,6 +242,14 @@ class _SellerProfilePageState
                 fontWeight: FontWeight.bold,
               ),
             ),
+            if (_sellerProfile?.bio.trim().isNotEmpty == true) ...[
+              const SizedBox(height: 8),
+              Text(
+                _sellerProfile!.bio,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium,
+              ),
+            ],
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment:
@@ -286,32 +346,40 @@ class _SellerProfilePageState
                   final isFollowing =
                       snapshot.data ?? false;
 
-                  return SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _isFollowLoading
-                          ? null
-                          : _toggleFollow,
-                      icon: _isFollowLoading
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child:
-                                  CircularProgressIndicator(
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : Icon(
-                              isFollowing
-                                  ? Icons.person_remove_outlined
-                                  : Icons.person_add_outlined,
-                            ),
-                      label: Text(
-                        isFollowing
-                            ? 'Following'
-                            : 'Follow',
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _isFollowLoading ? null : _toggleFollow,
+                          icon: _isFollowLoading
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : Icon(
+                                  isFollowing
+                                      ? Icons.person_remove_outlined
+                                      : Icons.person_add_outlined,
+                                ),
+                          label: Text(isFollowing ? 'Following' : 'Follow'),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _isOpeningChat ? null : _openDirectChat,
+                          icon: _isOpeningChat
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.chat_bubble_outline),
+                          label: const Text('Message'),
+                        ),
+                      ),
+                    ],
                   );
                 },
               ),
