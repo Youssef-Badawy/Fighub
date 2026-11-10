@@ -39,7 +39,10 @@ class OfferManagerPage extends StatelessWidget {
               final items = snapshot.data ?? [];
 
               final hasProtectedItems = items.any(
-                (item) => item.status == 'Reserved' || item.status == 'Sold',
+                (item) =>
+                    item.status == 'Reserved' ||
+                    item.status == 'Sold' ||
+                    item.waitingUsers.isNotEmpty,
               );
               final canDelete = items.isNotEmpty && !hasProtectedItems;
 
@@ -174,7 +177,10 @@ class OfferManagerPage extends StatelessWidget {
                       .length;
 
                   final hasProtectedItems = items.any(
-                    (item) => item.status == 'Reserved' || item.status == 'Sold',
+                    (item) =>
+                    item.status == 'Reserved' ||
+                    item.status == 'Sold' ||
+                    item.waitingUsers.isNotEmpty,
                   );
                   final canDelete = items.isNotEmpty && !hasProtectedItems;
 
