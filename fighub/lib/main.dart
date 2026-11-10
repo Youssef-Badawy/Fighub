@@ -932,15 +932,18 @@ class _FigHubHomeState extends State<FigHubHome> {
                 (context, index) {
                   final product = products[index];
                   _loadSellerProfiles(products.skip(index).take(20).toList());
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: _ProductCard(
-                      product: product,
-                      sellerProfile: _sellerProfiles[product.sellerId],
-                      isFavorite: _isFavorite(product),
-                      onFavorite: () => _toggleFavorite(product),
-                      onTap: () => _openProductDetails(product),
-                      onSellerTap: () => _openSellerProfile(product.sellerId),
+                  return RepaintBoundary(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _ProductCard(
+                        product: product,
+                        sellerProfile: _sellerProfiles[product.sellerId],
+                        isFavorite: _isFavorite(product),
+                        onFavorite: () => _toggleFavorite(product),
+                        onTap: () => _openProductDetails(product),
+                        onSellerTap: () =>
+                            _openSellerProfile(product.sellerId),
+                      ),
                     ),
                   );
                 },
