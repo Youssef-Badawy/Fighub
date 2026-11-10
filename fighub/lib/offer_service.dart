@@ -245,8 +245,7 @@ class OfferService {
         );
         return;
       } on FirebaseException catch (error, stackTrace) {
-        final shouldRetry =
-            retryableCodes.contains(error.code) && attempt < 2;
+        final shouldRetry = retryableCodes.contains(error.code) && attempt < 2;
         if (!shouldRetry) {
           debugPrint('FIGHUB OFFER CHAT SYNC ERROR: $error');
           debugPrintStack(stackTrace: stackTrace);
