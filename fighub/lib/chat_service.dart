@@ -602,6 +602,9 @@ class ChatService {
   Future<void> markOfferItemSold({
     required String chatId,
     required String itemId,
+    required String source,
+    String? offerId,
+    String? productId,
   }) async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -638,9 +641,19 @@ class ChatService {
                 .toList()
           : <Map<String, dynamic>>[];
 
-      final index = items.indexWhere(
-        (item) => item['itemId'] == itemId && item['status'] == 'Reserved',
-      );
+      final index = items.indexWhere((item) {
+        if (item['itemId'] != itemId ||
+            item['status'] != 'Reserved' ||
+            item['source'] != source) {
+          return false;
+        }
+        if (source == 'offer') return item['offerId'] == offerId;
+        if (source == 'product') {
+          return (item['productId'] as String? ?? item['itemId']) ==
+              (productId ?? itemId);
+        }
+        return false;
+      });
 
       if (index == -1) {
         throw StateError('This item is not actively reserved in this chat.');
