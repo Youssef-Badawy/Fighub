@@ -521,19 +521,43 @@ class OfferService {
       });
     });
 
-    try {
-      final offerSnapshot = await _offers.doc(offerId).get();
-      final sellerId = offerSnapshot.data()?['sellerId'] as String? ?? '';
-      if (sellerId.isNotEmpty && sellerId != uid) {
-        await ChatService().removeReservedOfferItemFromChat(
-          offerId: offerId,
-          itemId: itemId,
-          sellerId: sellerId,
+    const retryableCodes = {
+      'aborted',
+      'deadline-exceeded',
+      'internal',
+      'resource-exhausted',
+      'unavailable',
+    };
+
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final offerSnapshot = await _offers.doc(offerId).get();
+        final sellerId = offerSnapshot.data()?['sellerId'] as String? ?? '';
+        if (sellerId.isNotEmpty && sellerId != uid) {
+          await ChatService().removeReservedOfferItemFromChat(
+            offerId: offerId,
+            itemId: itemId,
+            sellerId: sellerId,
+          );
+        }
+        break;
+      } on FirebaseException catch (error, stackTrace) {
+        final shouldRetry =
+            retryableCodes.contains(error.code) && attempt < 2;
+        if (!shouldRetry) {
+          debugPrint('FIGHUB OFFER CHAT CANCEL SYNC ERROR: $error');
+          debugPrintStack(stackTrace: stackTrace);
+          break;
+        }
+
+        await Future<void>.delayed(
+          Duration(milliseconds: 300 * (1 << attempt)),
         );
+      } catch (error, stackTrace) {
+        debugPrint('FIGHUB OFFER CHAT CANCEL SYNC ERROR: $error');
+        debugPrintStack(stackTrace: stackTrace);
+        break;
       }
-    } catch (error, stackTrace) {
-      debugPrint('FIGHUB OFFER CHAT CANCEL SYNC ERROR: $error');
-      debugPrintStack(stackTrace: stackTrace);
     }
   }
 
