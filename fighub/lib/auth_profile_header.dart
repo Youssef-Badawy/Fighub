@@ -141,18 +141,27 @@ class _AuthProfileHeaderState extends State<AuthProfileHeader> {
         children: [
           Stack(
             children: [
-              Container(
-                height: 142,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: colors.primaryContainer,
-                  borderRadius: BorderRadius.circular(16),
-                  image: coverUrl.isNotEmpty
-                      ? DecorationImage(
-                          image: NetworkImage(coverUrl),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: SizedBox(
+                  height: 142,
+                  width: double.infinity,
+                  child: coverUrl.isEmpty
+                      ? ColoredBox(color: colors.primaryContainer)
+                      : Image.network(
+                          coverUrl,
                           fit: BoxFit.cover,
-                        )
-                      : null,
+                          errorBuilder: (context, error, stackTrace) =>
+                              ColoredBox(
+                            color: colors.primaryContainer,
+                            child: Center(
+                              child: Icon(
+                                Icons.image_not_supported_outlined,
+                                color: colors.onPrimaryContainer,
+                              ),
+                            ),
+                          ),
+                        ),
                 ),
               ),
               Positioned(
