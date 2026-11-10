@@ -273,36 +273,33 @@ class _FigHubHomeState extends State<FigHubHome> {
     final sellerIds = products
         .map((product) => product.sellerId)
         .where((sellerId) => sellerId.isNotEmpty)
-        .toSet();
+        .toSet()
+        .where((sellerId) =>
+            !_sellerProfiles.containsKey(sellerId) &&
+            !_loadingSellerIds.contains(sellerId))
+        .toList();
 
-    for (final sellerId in sellerIds) {
-      if (_sellerProfiles.containsKey(sellerId) ||
-          _loadingSellerIds.contains(sellerId)) {
-        continue;
-      }
+    if (sellerIds.isEmpty) return;
+    _loadingSellerIds.addAll(sellerIds);
 
-      _loadingSellerIds.add(sellerId);
+    try {
+      final profiles = await Future.wait(
+        sellerIds.map(_sellerProfileService.getSellerProfile),
+      );
+      if (!mounted) return;
 
-      try {
-        final profile =
-            await _sellerProfileService.getSellerProfile(
-          sellerId,
-        );
-
-        if (!mounted) {
-          return;
+      setState(() {
+        for (var index = 0; index < sellerIds.length; index++) {
+          final profile = profiles[index];
+          if (profile != null) {
+            _sellerProfiles[sellerIds[index]] = profile;
+          }
         }
-
-        if (profile != null) {
-          setState(() {
-            _sellerProfiles[sellerId] = profile;
-          });
-        }
-      } catch (_) {
-        // Ignore individual seller profile errors.
-      } finally {
-        _loadingSellerIds.remove(sellerId);
-      }
+      });
+    } catch (_) {
+      // Ignore individual seller profile errors.
+    } finally {
+      _loadingSellerIds.removeAll(sellerIds);
     }
   }
 
@@ -795,98 +792,92 @@ class _FigHubHomeState extends State<FigHubHome> {
   ) {
     final products = _filteredProducts;
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        if (_searchQuery.isNotEmpty)
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: TextButton.icon(
-              onPressed: () => setState(() => _searchQuery = ''),
-              icon: const Icon(Icons.close),
-              label: Text('مسح البحث: $_searchQuery'),
-            ),
-          ),
-        SizedBox(
-          height: 42,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: _categories.length,
-            separatorBuilder: (_, _) =>
-                const SizedBox(width: 8),
-            itemBuilder: (context, index) {
-              final category = _categories[index];
-
-              return ChoiceChip(
-                label: Text(
-                  _categoryLabel(
-                    context,
-                    category,
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              if (_searchQuery.isNotEmpty)
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton.icon(
+                    onPressed: () => setState(() => _searchQuery = ''),
+                    icon: const Icon(Icons.close),
+                    label: Text('مسح البحث: $_searchQuery'),
                   ),
                 ),
-                selected:
-                    _selectedCategory == category,
-                onSelected: (_) {
-                  setState(() {
-                    _selectedCategory = category;
-                  });
-                },
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const OffersPage(),
+              SizedBox(
+                height: 42,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _categories.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final category = _categories[index];
+                    return ChoiceChip(
+                      label: Text(_categoryLabel(context, category)),
+                      selected: _selectedCategory == category,
+                      onSelected: (_) {
+                        setState(() => _selectedCategory = category);
+                      },
+                    );
+                  },
                 ),
-              );
-            },
-            icon: const Icon(Icons.local_offer_outlined),
-            label: const Text('العروض الجماعية'),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const OffersPage(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.local_offer_outlined),
+                  label: const Text('العروض الجماعية'),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ]),
           ),
         ),
-        const SizedBox(height: 20),
         if (products.isEmpty)
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.only(
-                top: 80,
-              ),
-              child: Text(
-                localization.noProducts,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyLarge,
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  localization.noProducts,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
               ),
             ),
           )
         else
-          ...products.map(
-            (product) => Padding(
-              padding: const EdgeInsets.only(
-                bottom: 12,
-              ),
-              child: _ProductCard(
-                product: product,
-                sellerProfile:
-                    _sellerProfiles[product.sellerId],
-                isFavorite: _isFavorite(product),
-                onFavorite: () {
-                  _toggleFavorite(product);
-                },
-                onTap: () {
-                  _openProductDetails(product);
-                },
-                onSellerTap: () {
-                  _openSellerProfile(
-                    product.sellerId,
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final product = products[index];
+                  _loadSellerProfiles(products.skip(index).take(20).toList());
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _ProductCard(
+                      product: product,
+                      sellerProfile: _sellerProfiles[product.sellerId],
+                      isFavorite: _isFavorite(product),
+                      onFavorite: () => _toggleFavorite(product),
+                      onTap: () => _openProductDetails(product),
+                      onSellerTap: () => _openSellerProfile(product.sellerId),
+                    ),
                   );
                 },
+                childCount: products.length,
               ),
             ),
           ),
