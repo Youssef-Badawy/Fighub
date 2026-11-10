@@ -10,6 +10,7 @@ class WorkerPushService {
   Future<void> sendPush({
     required String userId,
     required String chatId,
+    required String messageId,
     required String title,
     required String message,
   }) async {
@@ -34,6 +35,7 @@ class WorkerPushService {
       body: jsonEncode({
         'userId': userId,
         'chatId': chatId,
+        'messageId': messageId,
         'title': title,
         'message': message,
       }),
