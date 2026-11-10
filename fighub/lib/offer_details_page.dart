@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import 'auth_guard.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'offer_manager_page.dart';
@@ -403,6 +405,7 @@ class OfferDetailsPage extends StatelessWidget {
                                       item.status == 'Available') {
                                     return FilledButton.icon(
                                       onPressed: () async {
+                                        if (!await requireRegisteredAccount(context)) return;
                                         try {
                                           await OfferService()
                                               .claimWaitingReservation(
@@ -460,6 +463,7 @@ class OfferDetailsPage extends StatelessWidget {
                                       ? null
                                       : item.status == 'Available'
                                           ? () async {
+                                              if (!await requireRegisteredAccount(context)) return;
                                               try {
                                                 await OfferService()
                                                     .reserveItem(
@@ -495,6 +499,7 @@ class OfferDetailsPage extends StatelessWidget {
                                               }
                                             }
                                           : () async {
+                                              if (!await requireRegisteredAccount(context)) return;
                                               try {
                                                 await OfferService()
                                                     .reserveItem(
