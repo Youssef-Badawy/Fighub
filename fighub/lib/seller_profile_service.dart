@@ -80,6 +80,20 @@ class SellerProfileService {
     return SellerProfile.fromFirestore(document);
   }
 
+  Future<List<SellerProfile>> searchSellerProfiles(String query) async {
+    final normalized = query.trim();
+    if (normalized.length < 2) return const <SellerProfile>[];
+
+    final snapshot = await _sellerProfilesCollection
+        .orderBy('name')
+        .startAt([normalized])
+        .endAt(['$normalized\\uf8ff'])
+        .limit(30)
+        .get();
+
+    return snapshot.docs.map(SellerProfile.fromFirestore).toList();
+  }
+
   Stream<List<SellerProfile>> watchAllSellerProfiles() {
     return _sellerProfilesCollection
         .orderBy('name')
