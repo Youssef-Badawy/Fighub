@@ -50,7 +50,6 @@ class SellerProfileService {
 
   Future<void> saveMyProfile({
     required String name,
-    required String email,
     required String phone,
     required String photoUrl,
     String bio = '',
@@ -65,7 +64,7 @@ class SellerProfileService {
     await _sellerProfilesCollection.doc(user.uid).set({
       'name': name,
       'nameSearch': name.trim().toLowerCase(),
-      'email': email,
+      'email': FieldValue.delete(),
       'phone': phone,
       'photoUrl': photoUrl,
       'bio': bio,
