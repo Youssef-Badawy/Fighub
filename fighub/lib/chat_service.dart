@@ -169,6 +169,7 @@ class ChatService {
       return participants is List && participants.contains(otherUserId);
     }).toList();
 
+    // Prefer the most recently active legacy conversation for this pair.
     matchingChats.sort((first, second) {
       final firstUpdatedAt = first.data()['updatedAt'];
       final secondUpdatedAt = second.data()['updatedAt'];
