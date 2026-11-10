@@ -104,10 +104,12 @@ class OfferService {
     return _offers
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .where((document) => document.data()['isDeleted'] != true)
-            .map(Offer.fromFirestore)
-            .toList());
+        .map(
+          (snapshot) => snapshot.docs
+              .where((document) => document.data()['isDeleted'] != true)
+              .map(Offer.fromFirestore)
+              .toList(),
+        );
   }
 
   Stream<List<Offer>> watchRecommendedOffers(List<String> interests) {
@@ -257,8 +259,7 @@ class OfferService {
 
     await _firestore.runTransaction((transaction) async {
       final offerSnapshot = await transaction.get(_offers.doc(offerId));
-      if (!offerSnapshot.exists ||
-          offerSnapshot.data()?['isDeleted'] == true) {
+      if (!offerSnapshot.exists || offerSnapshot.data()?['isDeleted'] == true) {
         throw StateError('This offer is no longer available.');
       }
 
@@ -369,8 +370,7 @@ class OfferService {
 
     await _firestore.runTransaction((transaction) async {
       final offerSnapshot = await transaction.get(_offers.doc(offerId));
-      if (!offerSnapshot.exists ||
-          offerSnapshot.data()?['isDeleted'] == true) {
+      if (!offerSnapshot.exists || offerSnapshot.data()?['isDeleted'] == true) {
         throw StateError('This offer is no longer available.');
       }
 
@@ -545,8 +545,7 @@ class OfferService {
         }
         break;
       } on FirebaseException catch (error, stackTrace) {
-        final shouldRetry =
-            retryableCodes.contains(error.code) && attempt < 2;
+        final shouldRetry = retryableCodes.contains(error.code) && attempt < 2;
         if (!shouldRetry) {
           debugPrint('FIGHUB OFFER CHAT CANCEL SYNC ERROR: $error');
           debugPrintStack(stackTrace: stackTrace);
