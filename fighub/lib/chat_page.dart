@@ -41,10 +41,9 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _startVoiceRecording() async {
+    final isArabic = AppLocalizations.of(context).isArabic;
     if (!await requireRegisteredAccount(context)) return;
     if (_isSending || _isRecording) return;
-
-    final isArabic = AppLocalizations.of(context).isArabic;
 
     try {
       final hasPermission = await _audioRecorder.hasPermission();
@@ -101,10 +100,9 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _stopAndSendVoiceMessage() async {
+    final isArabic = AppLocalizations.of(context).isArabic;
     if (!await requireRegisteredAccount(context)) return;
     if (!_isRecording || _isSending) return;
-
-    final isArabic = AppLocalizations.of(context).isArabic;
     String? path;
 
     setState(() {
@@ -195,10 +193,10 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _pickAndSendMedia() async {
-    if (!await requireRegisteredAccount(context)) return;
-    if (_isSending) return;
-
     final isArabic = AppLocalizations.of(context).isArabic;
+    if (!await requireRegisteredAccount(context)) return;
+    if (_isSending || !mounted) return;
+
     final selectedType = await showModalBottomSheet<String>(
       context: context,
       builder: (sheetContext) => SafeArea(
@@ -294,6 +292,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _showShippingForm(Map<String, dynamic> chatData) async {
+    final isArabic = AppLocalizations.of(context).isArabic;
     final currentUserId = _chatService.currentUserId;
     if (currentUserId == null || currentUserId != chatData['sellerId']) {
       return;
@@ -365,8 +364,6 @@ class _ChatPageState extends State<ChatPage> {
       }
       return;
     }
-
-    final isArabic = AppLocalizations.of(context).isArabic;
 
     try {
       final config = await FirebaseFirestore.instance
