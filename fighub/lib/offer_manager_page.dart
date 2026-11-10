@@ -36,20 +36,6 @@ class OfferManagerPage extends StatelessWidget {
           StreamBuilder<List<OfferItem>>(
             stream: offerService.watchOfferItems(offerId),
             builder: (context, snapshot) {
-              final items = snapshot.data ?? [];
-
-              final hasProtectedItems = items.any(
-                (item) =>
-                    item.status == 'Reserved' ||
-                    item.status == 'Sold' ||
-                    item.waitingUsers.isNotEmpty,
-              );
-              final canDelete = items.isNotEmpty && !hasProtectedItems;
-
-              if (!canDelete) {
-                return const SizedBox.shrink();
-              }
-
               return IconButton(
                 tooltip: 'حذف العرض',
                 icon: const Icon(Icons.delete_outline),
@@ -60,7 +46,7 @@ class OfferManagerPage extends StatelessWidget {
                       return AlertDialog(
                         title: const Text('حذف العرض؟'),
                         content: const Text(
-                          'سيتم حذف العرض وجميع قطعه. هل أنت متأكد؟',
+                          'سيختفي العرض من قائمة العروض. ستظل المحادثات والحجوزات السابقة محفوظة. هل تريد المتابعة؟',
                         ),
                         actions: [
                           TextButton(
@@ -176,14 +162,6 @@ class OfferManagerPage extends StatelessWidget {
                       .where((item) => item.status == 'Reserved')
                       .length;
 
-                  final hasProtectedItems = items.any(
-                    (item) =>
-                        item.status == 'Reserved' ||
-                        item.status == 'Sold' ||
-                        item.waitingUsers.isNotEmpty,
-                  );
-                  final canDelete = items.isNotEmpty && !hasProtectedItems;
-
                   final buyerGroups = <String, List<OfferItem>>{};
                   for (final item in items) {
                     final buyerId = item.reservedBy;
@@ -273,13 +251,6 @@ class OfferManagerPage extends StatelessWidget {
                                   ),
                                 ],
                               ),
-                              if (canDelete) ...[
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'العرض لا يحتوي حجوزات نشطة أو قطع مباعة ويمكن حذفه.',
-                                  style: TextStyle(fontWeight: FontWeight.w600),
-                                ),
-                              ],
                             ],
                           ),
                         ),
