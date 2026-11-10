@@ -261,7 +261,10 @@ service cloud.firestore {
                         )
                         ||
                         (
-                          resource.data.status
+                          get(
+                            /databases/$(database)/documents/offers/$(offerId)
+                          ).data.get('isDeleted', false) != true
+                          && resource.data.status
                              == 'Available'
                           && resource.data.reservedBy
                              == null
@@ -302,7 +305,10 @@ service cloud.firestore {
 
                         ||
                         (
-                          resource.data.status
+                          get(
+                            /databases/$(database)/documents/offers/$(offerId)
+                          ).data.get('isDeleted', false) != true
+                          && resource.data.status
                              == 'Reserved'
                           && resource.data.reservedBy
                              != null
@@ -356,6 +362,9 @@ service cloud.firestore {
                         && request.auth.uid == reservationId
                         && request.resource.data.userId
                            == request.auth.uid
+                        && get(
+                          /databases/$(database)/documents/offers/$(offerId)
+                        ).data.get('isDeleted', false) != true
                         && (
                           request.resource.data.status
                              == 'Active'
