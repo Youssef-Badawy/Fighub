@@ -20,6 +20,8 @@ class AuthManager extends ChangeNotifier {
   String _email = '';
   String _phone = '';
   String _photoUrl = '';
+  String _bio = '';
+  String _coverUrl = '';
   List<String> _interests = [];
 
   bool get isLoggedIn => _isLoggedIn;
@@ -27,6 +29,9 @@ class AuthManager extends ChangeNotifier {
   String get email => _email;
   String get phone => _phone;
   String get photoUrl => _photoUrl;
+  String get bio => _bio;
+  String get coverUrl => _coverUrl;
+  bool get isGuest => _auth.currentUser?.isAnonymous ?? false;
   List<String> get interests => List.unmodifiable(_interests);
 
   Future<void> load() async {
@@ -38,6 +43,8 @@ class AuthManager extends ChangeNotifier {
       _email = '';
       _phone = '';
       _photoUrl = '';
+      _bio = '';
+      _coverUrl = '';
       _interests = [];
       notifyListeners();
       return;
@@ -62,6 +69,8 @@ class AuthManager extends ChangeNotifier {
             data?['phone'] as String? ?? _phone;
         _photoUrl =
             data?['photoUrl'] as String? ?? _photoUrl;
+        _bio = data?['bio'] as String? ?? '';
+        _coverUrl = data?['coverUrl'] as String? ?? '';
 
         final rawInterests = data?['interests'];
 
@@ -70,10 +79,14 @@ class AuthManager extends ChangeNotifier {
             : [];
       } else {
         _name = user.displayName ?? '';
+        _bio = '';
+        _coverUrl = '';
         _interests = [];
       }
     } catch (_) {
       _name = user.displayName ?? '';
+      _bio = '';
+      _coverUrl = '';
       _interests = [];
     }
 
@@ -89,11 +102,18 @@ class AuthManager extends ChangeNotifier {
     required String password,
     List<String> interests = const [],
   }) async {
-    final credential =
-        await _auth.createUserWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
+    final currentUser = _auth.currentUser;
+    final credential = currentUser?.isAnonymous == true
+        ? await currentUser!.linkWithCredential(
+            EmailAuthProvider.credential(
+              email: email,
+              password: password,
+            ),
+          )
+        : await _auth.createUserWithEmailAndPassword(
+            email: email,
+            password: password,
+          );
 
     final user = credential.user;
 
@@ -114,9 +134,11 @@ class AuthManager extends ChangeNotifier {
       'email': email,
       'phone': phone,
       'photoUrl': '',
+      'bio': _bio,
+      'coverUrl': _coverUrl,
       'interests': interests,
       'createdAt': FieldValue.serverTimestamp(),
-    });
+    }, SetOptions(merge: true));
 
     _isLoggedIn = true;
     _name = name;
@@ -134,6 +156,10 @@ class AuthManager extends ChangeNotifier {
     required String email,
     required String password,
   }) async {
+    if (_auth.currentUser?.isAnonymous == true) {
+      await _auth.signOut();
+    }
+
     final credential =
         await _auth.signInWithEmailAndPassword(
       email: email,
@@ -167,6 +193,8 @@ class AuthManager extends ChangeNotifier {
           data?['phone'] as String? ?? _phone;
       _photoUrl =
           data?['photoUrl'] as String? ?? _photoUrl;
+      _bio = data?['bio'] as String? ?? '';
+      _coverUrl = data?['coverUrl'] as String? ?? '';
 
       final rawInterests = data?['interests'];
 
@@ -191,6 +219,8 @@ class AuthManager extends ChangeNotifier {
     _email = '';
     _phone = '';
     _photoUrl = '';
+    _bio = '';
+    _coverUrl = '';
     _interests = [];
 
     notifyListeners();
@@ -222,6 +252,8 @@ class AuthManager extends ChangeNotifier {
       'email': email,
       'phone': phone,
       'photoUrl': _photoUrl,
+      'bio': _bio,
+      'coverUrl': _coverUrl,
       'updatedAt': FieldValue.serverTimestamp(),
     };
 
@@ -307,6 +339,50 @@ class AuthManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateBio(String bio) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'not-authenticated',
+        message: 'User is not signed in.',
+      );
+    }
+
+    final normalized = bio.trim();
+    if (normalized.length > 240) {
+      throw ArgumentError('Bio must be 240 characters or fewer.');
+    }
+
+    await _firestore.collection('users').doc(user.uid).set({
+      'bio': normalized,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    _bio = normalized;
+    await _syncSellerProfile();
+    notifyListeners();
+  }
+
+  Future<void> updateCoverPhoto(XFile imageFile) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'not-authenticated',
+        message: 'User is not signed in.',
+      );
+    }
+
+    final imageUrl = await _cloudinaryService.uploadImage(imageFile);
+    await _firestore.collection('users').doc(user.uid).set({
+      'coverUrl': imageUrl,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    _coverUrl = imageUrl;
+    await _syncSellerProfile();
+    notifyListeners();
+  }
+
   Future<void> _syncSellerProfile() async {
     final user = _auth.currentUser;
 
@@ -320,6 +396,8 @@ class AuthManager extends ChangeNotifier {
         email: _email,
         phone: _phone,
         photoUrl: _photoUrl,
+        bio: _bio,
+        coverUrl: _coverUrl,
       );
     } catch (_) {
       // Keep authentication working even if
