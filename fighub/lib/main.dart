@@ -101,21 +101,78 @@ class _FigHubAppState extends State<FigHubApp> {
     setState(() {});
   }
 
-  ThemeData _lightTheme() {
+  ThemeData _buildTheme(Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
+    final scheme = ColorScheme.fromSeed(
+      seedColor: const Color(0xFF246BCE),
+      brightness: brightness,
+    );
+    final roundedBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: BorderSide(
+        color: scheme.outlineVariant,
+      ),
+    );
+
     return ThemeData(
       useMaterial3: true,
-      colorSchemeSeed: Colors.blue,
-      brightness: Brightness.light,
+      colorScheme: scheme,
+      brightness: brightness,
+      visualDensity: VisualDensity.standard,
+      scaffoldBackgroundColor:
+          isDark ? const Color(0xFF101722) : const Color(0xFFF6F8FC),
+      appBarTheme: const AppBarTheme(
+        centerTitle: false,
+        scrolledUnderElevation: 0,
+        backgroundColor: Colors.transparent,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: scheme.surfaceContainerHighest.withValues(
+          alpha: isDark ? 0.35 : 0.55,
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
+        border: roundedBorder,
+        enabledBorder: roundedBorder,
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: scheme.primary,
+            width: 1.6,
+          ),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 18,
+            vertical: 13,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 13,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
     );
   }
 
-  ThemeData _darkTheme() {
-    return ThemeData(
-      useMaterial3: true,
-      colorSchemeSeed: Colors.blue,
-      brightness: Brightness.dark,
-    );
-  }
+  ThemeData _lightTheme() => _buildTheme(Brightness.light);
+
+  ThemeData _darkTheme() => _buildTheme(Brightness.dark);
 
   @override
   Widget build(BuildContext context) {
