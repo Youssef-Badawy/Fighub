@@ -201,15 +201,6 @@ class _AuthProfileHeaderState extends State<AuthProfileHeader> {
                   fontWeight: FontWeight.bold,
                 ),
           ),
-          if (widget.authManager.email.isNotEmpty) ...[
-            const SizedBox(height: 3),
-            Text(
-              widget.authManager.email,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colors.onSurfaceVariant,
-                  ),
-            ),
-          ],
           const SizedBox(height: 14),
           TextField(
             controller: _bioController,
