@@ -537,7 +537,7 @@ class ChatService {
       DocumentReference<Map<String, dynamic>>? offerItemRef;
       DocumentReference<Map<String, dynamic>>? reservationRef;
       DocumentReference<Map<String, dynamic>>? productRef;
-      DocumentSnapshot<Map<String, dynamic>>? sourceSnapshot;
+      late DocumentSnapshot<Map<String, dynamic>> sourceSnapshot;
       DocumentSnapshot<Map<String, dynamic>>? reservationSnapshot;
 
       if (source == 'offer') {
