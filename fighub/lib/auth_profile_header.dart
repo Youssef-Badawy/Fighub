@@ -114,7 +114,7 @@ class _AuthProfileHeaderState extends State<AuthProfileHeader> {
       radius: 38,
       backgroundColor: primary,
       backgroundImage: photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-      onBackgroundImageError: (_, _) {},
+      onBackgroundImageError: photoUrl.isNotEmpty ? (_, _) {} : null,
       child: photoUrl.isEmpty
           ? Icon(Icons.person, size: 38, color: onPrimary)
           : null,
