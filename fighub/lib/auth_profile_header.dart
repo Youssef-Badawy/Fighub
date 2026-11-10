@@ -40,8 +40,10 @@ class _AuthProfileHeaderState extends State<AuthProfileHeader> {
       final image = await _imagePicker.pickImage(
         source: ImageSource.gallery,
         imageQuality: 85,
+        maxWidth: 900,
+        maxHeight: 900,
       );
-      if (image == null) return;
+      if (!mounted || image == null) return;
       setState(() => _isUploadingPhoto = true);
       await widget.authManager.updateProfilePhoto(image);
     } catch (error) {
@@ -60,9 +62,11 @@ class _AuthProfileHeaderState extends State<AuthProfileHeader> {
     try {
       final image = await _imagePicker.pickImage(
         source: ImageSource.gallery,
-        imageQuality: 85,
+        imageQuality: 82,
+        maxWidth: 1800,
+        maxHeight: 1000,
       );
-      if (image == null) return;
+      if (!mounted || image == null) return;
       setState(() => _isUploadingCover = true);
       await widget.authManager.updateCoverPhoto(image);
     } catch (error) {
