@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'app_localizations.dart';
 import 'app_settings.dart';
 import 'auth_gate.dart';
+import 'auth_guard.dart';
 import 'auth_manager.dart';
 import 'add_product_page.dart';
 import 'create_offer_page.dart';
@@ -255,6 +256,7 @@ class _FigHubHomeState extends State<FigHubHome> {
   final Set<String> _loadingSellerIds = {};
 
   int _unreadNotificationsCount = 0;
+  String? _pushInitializedUserId;
 
   final List<String> _categories = [
     'All',
@@ -268,8 +270,8 @@ class _FigHubHomeState extends State<FigHubHome> {
   void initState() {
     super.initState();
 
+    widget.authManager.addListener(_onAuthManagerChanged);
     _initializePushNotifications();
-
 
     _productsSubscription = _productService
         .watchProducts()
@@ -361,26 +363,31 @@ class _FigHubHomeState extends State<FigHubHome> {
     }
   }
 
+  void _onAuthManagerChanged() {
+    if (FirebaseAuth.instance.currentUser?.isAnonymous == false) {
+      _initializePushNotifications();
+    }
+  }
+
   Future<void> _initializePushNotifications() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous ||
+        _pushInitializedUserId == user.uid) {
+      return;
+    }
+
     try {
       await _pushNotificationService.initialize();
-
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user != null && !user.isAnonymous) {
-      await _oneSignalService.initialize(
-        userId: user.uid,
-      );
-    }
+      await _oneSignalService.initialize(userId: user.uid);
+      _pushInitializedUserId = user.uid;
     } catch (error) {
-      debugPrint(
-        'Push notification initialization failed: $error',
-      );
+      debugPrint('Push notification initialization failed: $error');
     }
   }
 
   @override
   void dispose() {
+    widget.authManager.removeListener(_onAuthManagerChanged);
     _productsSubscription?.cancel();
     _favoritesSubscription?.cancel();
     _notificationsSubscription?.cancel();
@@ -687,6 +694,7 @@ class _FigHubHomeState extends State<FigHubHome> {
   }
 
   Future<void> _openChat() async {
+    if (!await requireRegisteredAccount(context)) return;
     await Navigator.push(
       context,
       MaterialPageRoute(
