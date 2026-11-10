@@ -173,7 +173,7 @@ class ChatService {
     }
 
     final participants = [user.uid, otherUserId]..sort();
-    final chatId = 'direct_${participants[0]}_${participants[1]}';
+    final chatId = 'offer_${participants[0]}_${participants[1]}';
     final reference = _firestore.collection('chats').doc(chatId);
     await reference.set({
       'productId': chatId,
