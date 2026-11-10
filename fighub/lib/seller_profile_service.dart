@@ -87,7 +87,7 @@ class SellerProfileService {
     final snapshot = await _sellerProfilesCollection
         .orderBy('name')
         .startAt([normalized])
-        .endAt(['$normalized\\uf8ff'])
+        .endAt(['$normalized\uf8ff'])
         .limit(30)
         .get();
 
