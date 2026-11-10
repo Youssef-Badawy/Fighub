@@ -105,14 +105,14 @@ class SellerProfileService {
       _sellerProfilesCollection
           .orderBy('nameSearch')
           .startAt([lower])
-          .endAt(['$lower\\uf8ff'])
+          .endAt(['$lower\uf8ff'])
           .limit(30)
           .get(),
       ...legacyPrefixes.map(
         (prefix) => _sellerProfilesCollection
             .orderBy('name')
             .startAt([prefix])
-            .endAt(['$prefix\\uf8ff'])
+            .endAt(['$prefix\uf8ff'])
             .limit(30)
             .get(),
       ),
