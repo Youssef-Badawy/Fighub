@@ -49,3 +49,8 @@ app.*.map.json
 
 # Cloudflare Wrangler local account and cache data
 .wrangler/
+
+# Node, Firebase CLI, and local backend artifacts
+**/node_modules/
+firebase-debug.log
+firebase-debug.*.log
