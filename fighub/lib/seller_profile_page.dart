@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'follow_service.dart';
 import 'chat_page.dart';
 import 'chat_service.dart';
+import 'auth_guard.dart';
 import 'product_details_page.dart';
 import 'product_model.dart';
 import 'product_service.dart';
@@ -111,6 +112,7 @@ class _SellerProfilePageState
   }
 
   Future<void> _openDirectChat() async {
+    if (!await requireRegisteredAccount(context)) return;
     final currentUser = _auth.currentUser;
     if (currentUser == null || currentUser.uid == widget.sellerId ||
         _isOpeningChat) {
