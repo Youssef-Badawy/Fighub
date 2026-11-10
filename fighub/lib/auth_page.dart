@@ -33,6 +33,14 @@ class _AuthPageState extends State<AuthPage> {
   final confirmPasswordController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    // A guest reaching a protected action should be guided to create an
+    // account and link it to the current guest UID, preserving their data.
+    isLogin = FirebaseAuth.instance.currentUser?.isAnonymous != true;
+  }
+
+  @override
   void dispose() {
     nameController.dispose();
     emailController.dispose();
