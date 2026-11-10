@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - main
+      - fix/unified-buyer-seller-chats
     paths:
       - "fighub/**"
       - ".github/workflows/flutter-checks.yml"
