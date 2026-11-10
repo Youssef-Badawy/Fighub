@@ -295,8 +295,10 @@ class OfferDetailsPage extends StatelessWidget {
                                     FirebaseAuth.instance.currentUser?.uid;
 
                                 final isMyReservation =
+                                    item.status == 'Reserved' &&
                                     item.reservedBy != null &&
                                     item.reservedBy == currentUserId;
+                                final isSold = item.status == 'Sold';
 
                                 final waitingIndex =
                                     currentUserId == null
@@ -311,6 +313,14 @@ class OfferDetailsPage extends StatelessWidget {
                                 final isFirstWaiting =
                                     isWaiting &&
                                     waitingIndex == 0;
+
+                                if (isSold) {
+                                  return const OutlinedButton.icon(
+                                    onPressed: null,
+                                    icon: Icon(Icons.check_circle_outline),
+                                    label: Text('تم البيع'),
+                                  );
+                                }
 
                                 if (isMyReservation) {
                                   return FilledButton.icon(
