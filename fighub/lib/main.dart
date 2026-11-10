@@ -648,17 +648,18 @@ class _FigHubHomeState extends State<FigHubHome> {
   }
 
   Future<void> _openSearch() async {
+    final localization = AppLocalizations.of(context);
     final controller = TextEditingController(text: _searchQuery);
     final query = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('بحث'),
+        title: Text(localization.isArabic ? 'بحث' : 'Search'),
         content: TextField(
           controller: controller,
           autofocus: true,
           textInputAction: TextInputAction.search,
           decoration: InputDecoration(
-            hintText: AppLocalizations.of(context).search,
+            hintText: localization.search,
             prefixIcon: const Icon(Icons.search),
           ),
           onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
@@ -666,11 +667,11 @@ class _FigHubHomeState extends State<FigHubHome> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('إلغاء'),
+            child: Text(localization.isArabic ? 'إلغاء' : 'Cancel'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            child: const Text('بحث'),
+            child: Text(localization.isArabic ? 'بحث' : 'Search'),
           ),
         ],
       ),
@@ -758,7 +759,7 @@ class _FigHubHomeState extends State<FigHubHome> {
           IconButton(
             onPressed: _openSearch,
             icon: const Icon(Icons.search),
-            tooltip: 'بحث',
+            tooltip: localization.isArabic ? 'بحث' : 'Search',
           ),
           IconButton(
             onPressed: _openUsers,
