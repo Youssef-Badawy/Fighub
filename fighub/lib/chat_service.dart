@@ -1103,7 +1103,7 @@ class ChatService {
 
     final recipientId = user.uid == buyerId ? sellerId : buyerId;
 
-    await _messagesCollection(chatId).add({
+    final messageReference = await _messagesCollection(chatId).add({
       'senderId': user.uid,
       'text': message,
       'createdAt': FieldValue.serverTimestamp(),
@@ -1126,6 +1126,7 @@ class ChatService {
       await _workerPushService.sendPush(
         userId: recipientId,
         chatId: chatId,
+        messageId: messageReference.id,
         title: 'رسالة جديدة',
         message: '$productName: $message',
       );
@@ -1178,7 +1179,7 @@ class ChatService {
         ? label
         : '$label: $trimmedCaption';
 
-    await _messagesCollection(chatId).add({
+    final messageReference = await _messagesCollection(chatId).add({
       'senderId': user.uid,
       'text': trimmedCaption,
       'type': mediaType,
@@ -1203,6 +1204,7 @@ class ChatService {
       await _workerPushService.sendPush(
         userId: recipientId,
         chatId: chatId,
+        messageId: messageReference.id,
         title: 'رسالة جديدة',
         message: '$productName: $lastMessage',
       );
