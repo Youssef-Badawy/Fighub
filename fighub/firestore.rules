@@ -298,10 +298,10 @@ service cloud.firestore {
                              == 'Reserved'
                           && request.resource.data.reservedBy
                              == resource.data.reservedBy
-                          && request.resource.data.waitingUsers.size()
-                             == resource.data.waitingUsers.size() + 1
-                          && request.resource.data.waitingUsers[
-                               resource.data.waitingUsers.size()
+                          && request.resource.data.get('waitingUsers', []).size()
+                             == resource.data.get('waitingUsers', []).size() + 1
+                          && request.resource.data.get('waitingUsers', [])[
+                               resource.data.get('waitingUsers', []).size()
                              ]
                              == request.auth.uid
                           && getAfter(
