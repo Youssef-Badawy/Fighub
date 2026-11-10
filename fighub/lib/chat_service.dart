@@ -148,6 +148,47 @@ class ChatService {
     return chatId;
   }
 
+  Future<String> getOrCreateDirectChat({
+    required String otherUserId,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) throw StateError('User must be signed in.');
+    if (otherUserId.isEmpty || otherUserId == user.uid) {
+      throw ArgumentError('A different user is required.');
+    }
+
+    // Reuse the most recently active thread for this pair. This preserves
+    // existing messages instead of creating a duplicate profile chat.
+    final existingChats = await _firestore
+        .collection('chats')
+        .where('participants', arrayContains: user.uid)
+        .orderBy('updatedAt', descending: true)
+        .get();
+
+    for (final document in existingChats.docs) {
+      final participants = document.data()['participants'];
+      if (participants is List && participants.contains(otherUserId)) {
+        return document.id;
+      }
+    }
+
+    final participants = [user.uid, otherUserId]..sort();
+    final chatId = 'direct_${participants[0]}_${participants[1]}';
+    final reference = _firestore.collection('chats').doc(chatId);
+    await reference.set({
+      'productId': chatId,
+      'productName': 'محادثة مباشرة',
+      'buyerId': user.uid,
+      'sellerId': otherUserId,
+      'participants': [user.uid, otherUserId],
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'lastMessage': '',
+    });
+
+    return chatId;
+  }
+
   Future<String> addReservedProductToChat({
     required String productId,
     required String productName,
