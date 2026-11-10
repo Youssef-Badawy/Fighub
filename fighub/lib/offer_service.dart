@@ -303,28 +303,12 @@ class OfferService {
         throw StateError('This item has already been sold.');
       }
 
-      // Do not let a new buyer bypass people already waiting when a
-      // reservation is cancelled and the item becomes available.
+      // The first waiting buyer must claim an available item before
+      // anyone else can reserve it.
       if (currentStatus == 'Available' &&
           (currentReservedBy == null || currentReservedBy.isEmpty) &&
           waitingUsers.isNotEmpty) {
-        if (waitingUsers.contains(uid)) {
-          throw StateError('You are already in the waiting list.');
-        }
-
-        transaction.set(reservationReference, {
-          'userId': uid,
-          'offerId': offerId,
-          'itemId': itemId,
-          'status': 'Waiting',
-          'createdAt': FieldValue.serverTimestamp(),
-          'cancelledAt': null,
-        });
-
-        transaction.update(itemReference, {
-          'waitingUsers': [...waitingUsers, uid],
-        });
-        return;
+        throw StateError('Other buyers have priority in the waiting list.');
       }
 
       if (currentStatus != 'Available' ||
