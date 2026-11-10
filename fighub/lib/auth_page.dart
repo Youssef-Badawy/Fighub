@@ -37,6 +37,7 @@ class _AuthPageState extends State<AuthPage> {
     super.initState();
     // A guest reaching a protected action should be guided to create an
     // account and link it to the current guest UID, preserving their data.
+    // Users without a guest session retain the normal sign-in entry point.
     isLogin = FirebaseAuth.instance.currentUser?.isAnonymous != true;
   }
 
