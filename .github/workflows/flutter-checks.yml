@@ -45,6 +45,9 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Show offer service formatting diff
+        run: dart format --output=show lib/offer_service.dart | diff -u lib/offer_service.dart - || true
+
       - name: Check formatting for changed service files
         run: dart format --output=none --set-exit-if-changed lib/chat_service.dart lib/offer_service.dart
 
