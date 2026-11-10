@@ -248,6 +248,53 @@ class ChatService {
     return chatId;
   }
 
+  Future<void> removeReservedProductFromChat({
+    required String productId,
+    required String sellerId,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) throw StateError('User must be signed in.');
+    if (productId.isEmpty || sellerId.isEmpty || user.uid == sellerId) return;
+
+    final chatId = await _resolveCombinedChatId(
+      buyerId: user.uid,
+      sellerId: sellerId,
+    );
+    final reference = _firestore.collection('chats').doc(chatId);
+
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(reference);
+      if (!snapshot.exists) return;
+
+      final data = snapshot.data()!;
+      final rawItems = data['offerItems'];
+      final items = rawItems is List
+          ? rawItems.whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item)).toList()
+          : <Map<String, dynamic>>[];
+
+      var changed = false;
+      for (final item in items) {
+        if (item['source'] == 'product' &&
+            item['productId'] == productId &&
+            item['status'] == 'Reserved') {
+          item['status'] = 'Cancelled';
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        transaction.update(reference, {
+          'offerItems': items,
+          'settlementBuyerConfirmed': false,
+          'settlementSellerConfirmed': false,
+          'updatedAt': FieldValue.serverTimestamp(),
+          'lastMessage': 'تم إلغاء حجز منتج',
+        });
+      }
+    });
+  }
+
   Future<String> addReservedOfferItemToChat({
     required String offerId,
     required String itemId,
