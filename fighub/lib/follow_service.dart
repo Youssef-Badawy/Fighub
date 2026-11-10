@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 import 'notification_service.dart';
 
@@ -134,11 +135,16 @@ class FollowService {
             ? user.displayName!.trim()
             : 'Someone';
 
-    await _notificationService.addNotification(
-      userId: targetUserId,
-      title: 'New follower',
-      message: '$followerName started following you.',
-    );
+    try {
+      await _notificationService.addNotification(
+        userId: targetUserId,
+        title: 'New follower',
+        message: '$followerName started following you.',
+      );
+    } catch (error, stackTrace) {
+      debugPrint('FIGHUB FOLLOW NOTIFICATION ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   Future<void> unfollowUser(
