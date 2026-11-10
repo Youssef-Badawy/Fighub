@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'seller_profile_page.dart';
+import 'app_localizations.dart';
 import 'seller_profile_service.dart';
 
 class UsersPage extends StatefulWidget {
@@ -94,7 +95,7 @@ class _UsersPageState extends State<UsersPage> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search users by name',
+                hintText: localization.isArabic ? 'ابحث عن مستخدم بالاسم' : 'Search users by name',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? IconButton(
