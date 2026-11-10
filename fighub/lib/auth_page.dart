@@ -67,7 +67,9 @@ class _AuthPageState extends State<AuthPage> {
           password: passwordController.text,
         );
 
-        if (!mounted) {
+        if (!mounted) return;
+        if (widget.onAuthenticated != null) {
+          widget.onAuthenticated!.call();
           return;
         }
 
@@ -78,8 +80,6 @@ class _AuthPageState extends State<AuthPage> {
             ),
           ),
         );
-        if (!mounted) return;
-        widget.onAuthenticated?.call();
       }
     } on FirebaseAuthException catch (error) {
       if (!mounted) {
