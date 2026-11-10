@@ -158,16 +158,31 @@ class ChatService {
       throw ArgumentError('A different user is required.');
     }
 
-    // Reuse the most recently active thread for this pair. This preserves
-    // existing messages instead of creating a duplicate profile chat.
+    final participants = [user.uid, otherUserId]..sort();
+    final chatId = 'offer_${participants[0]}_${participants[1]}';
+    final reference = _firestore.collection('chats').doc(chatId);
+
+    // Most existing offer and product chats already use this deterministic ID.
+    // Check it first so users with many conversations do not need a full query.
+    final directChat = await reference.get();
+    final directParticipants = directChat.data()?['participants'];
+    if (directChat.exists &&
+        directParticipants is List &&
+        directParticipants.contains(user.uid) &&
+        directParticipants.contains(otherUserId)) {
+      return chatId;
+    }
+
+    // Fall back to legacy chat IDs to preserve older message history.
     final existingChats = await _firestore
         .collection('chats')
         .where('participants', arrayContains: user.uid)
         .get();
 
     final matchingChats = existingChats.docs.where((document) {
-      final participants = document.data()['participants'];
-      return participants is List && participants.contains(otherUserId);
+      final chatParticipants = document.data()['participants'];
+      return chatParticipants is List &&
+          chatParticipants.contains(otherUserId);
     }).toList();
 
     // Prefer the most recently active legacy conversation for this pair.
@@ -187,9 +202,6 @@ class ChatService {
       return matchingChats.first.id;
     }
 
-    final participants = [user.uid, otherUserId]..sort();
-    final chatId = 'offer_${participants[0]}_${participants[1]}';
-    final reference = _firestore.collection('chats').doc(chatId);
     await reference.set({
       'productId': chatId,
       'productName': 'محادثة مباشرة',
