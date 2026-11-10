@@ -238,8 +238,7 @@ class _AuthPageState extends State<AuthPage> {
                         prefixIcon: Icon(Icons.phone_outlined),
                         border: OutlineInputBorder(),
                       ),
-                      validator: (value) =>
-                          _requiredValidator(value, 'اكتب رقم الموبايل'),
+                      validator: (_) => null,
                     ),
                     const SizedBox(height: 16),
                   ],
