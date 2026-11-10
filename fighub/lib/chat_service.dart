@@ -319,9 +319,9 @@ class ChatService {
       final rawItems = data['offerItems'];
       final items = rawItems is List
           ? rawItems
-              .whereType<Map>()
-              .map((item) => Map<String, dynamic>.from(item))
-              .toList()
+                .whereType<Map>()
+                .map((item) => Map<String, dynamic>.from(item))
+                .toList()
           : <Map<String, dynamic>>[];
 
       var changed = false;
