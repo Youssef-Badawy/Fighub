@@ -255,6 +255,19 @@ service cloud.firestore {
                              == 'Reserved'
                           && request.resource.data.reservedBy
                              == request.auth.uid
+                          && (
+                            (
+                              resource.data.get('waitingUsers', []).size() == 0
+                              && request.resource.data.get('waitingUsers', []).size() == 0
+                            )
+                            ||
+                            (
+                              resource.data.get('waitingUsers', []).size() > 0
+                              && resource.data.waitingUsers[0] == request.auth.uid
+                              && request.resource.data.get('waitingUsers', []).size()
+                                 == resource.data.waitingUsers.size() - 1
+                            )
+                          )
                           && getAfter(
                                /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)/reservations/$(request.auth.uid)
                              ).data.userId
@@ -306,7 +319,8 @@ service cloud.firestore {
                       );
 
         allow delete: if request.auth != null
-                      && resource.data.status != 'Sold'
+                      && resource.data.status == 'Available'
+                      && resource.data.get('waitingUsers', []).size() == 0
                       && get(
                         /databases/$(database)/documents/offers/$(offerId)
                       ).data.sellerId
@@ -413,6 +427,7 @@ service cloud.firestore {
                         );
 
           allow delete: if request.auth != null
+                        && resource.data.status == 'Cancelled'
                         && get(
                           /databases/$(database)/documents/offers/$(offerId)
                         ).data.sellerId
