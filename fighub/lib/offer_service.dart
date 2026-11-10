@@ -81,82 +81,30 @@ class OfferService {
     }
 
     final offerData = offerSnapshot.data() ?? {};
-
     if (offerData['sellerId'] != uid) {
       throw StateError('You can only delete your own offers.');
     }
 
-    final itemsSnapshot = await offerReference.collection('items').get();
+    // Soft-delete the offer from discovery. Keep its items and reservation
+    // documents so existing chats, active reservations, and sale history
+    // continue to work without losing references.
+    if (offerData['isDeleted'] == true) return;
 
-    if (itemsSnapshot.docs.isEmpty) {
-      throw StateError('Add at least one item before deleting the offer.');
-    }
-
-    for (final item in itemsSnapshot.docs) {
-      final itemData = item.data();
-      final reservationsSnapshot = await item.reference
-          .collection('reservations')
-          .get();
-
-      final rawWaitingUsers = itemData['waitingUsers'];
-      final hasWaitingBuyers =
-          rawWaitingUsers is List && rawWaitingUsers.isNotEmpty;
-      final hasActiveReservation =
-          itemData['status'] == 'Reserved' ||
-          reservationsSnapshot.docs.any(
-            (reservation) => reservation.data()['status'] == 'Active',
-          );
-      final hasCompletedSale = itemData['status'] == 'Sold' ||
-          reservationsSnapshot.docs.any(
-            (reservation) => reservation.data()['status'] == 'Settled',
-          );
-
-      if (hasActiveReservation) {
-        throw StateError(
-          'This offer has an active reservation and cannot be deleted.',
-        );
-      }
-
-      if (hasWaitingBuyers ||
-          reservationsSnapshot.docs.any(
-            (reservation) => reservation.data()['status'] == 'Waiting',
-          )) {
-        throw StateError(
-          'This offer has buyers in the waiting list and cannot be deleted.',
-        );
-      }
-
-      if (hasCompletedSale) {
-        throw StateError(
-          'This offer contains sold items and cannot be deleted.',
-        );
-      }
-    }
-
-    final batch = _firestore.batch();
-
-    for (final item in itemsSnapshot.docs) {
-      final reservationsSnapshot = await item.reference
-          .collection('reservations')
-          .get();
-
-      for (final reservation in reservationsSnapshot.docs) {
-        batch.delete(reservation.reference);
-      }
-
-      batch.delete(item.reference);
-    }
-
-    batch.delete(offerReference);
-
-    await batch.commit();
+    await offerReference.update({
+      'isDeleted': true,
+      'deletedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   Stream<List<Offer>> watchOffers() {
     return _offers
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map(Offer.fromFirestore).toList());
+        .map((snapshot) => snapshot.docs
+            .where((document) => document.data()['isDeleted'] != true)
+            .map(Offer.fromFirestore)
+            .toList());
   }
 
   Stream<List<Offer>> watchRecommendedOffers(List<String> interests) {
