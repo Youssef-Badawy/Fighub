@@ -125,7 +125,7 @@ class _UsersPageState extends State<UsersPage> {
                           child: Padding(
                             padding: const EdgeInsets.all(24),
                             child: Text(
-                              'Could not search users.\\n${snapshot.error}',
+                              'Could not search users.\n${snapshot.error}',
                               textAlign: TextAlign.center,
                             ),
                           ),
