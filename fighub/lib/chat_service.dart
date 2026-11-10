@@ -333,7 +333,9 @@ class ChatService {
 
     await _firestore.runTransaction((transaction) async {
       final snapshot = await transaction.get(reference);
-      if (!snapshot.exists) return;
+      if (!snapshot.exists) {
+        return;
+      }
 
       final data = snapshot.data()!;
       final rawItems = data['offerItems'];
@@ -669,7 +671,9 @@ class ChatService {
             .doc(offerId)
             .collection('items')
             .doc(itemId);
-        reservationRef = offerItemRef.collection('reservations').doc(buyerId);
+        reservationRef = offerItemRef
+            .collection('reservations')
+            .doc(buyerId);
         sourceSnapshot = await transaction.get(offerItemRef);
         reservationSnapshot = await transaction.get(reservationRef);
       } else if (source == 'product') {
@@ -677,7 +681,9 @@ class ChatService {
         if (productId.isEmpty) {
           throw StateError('Product information is incomplete.');
         }
-        productRef = _firestore.collection('products').doc(productId);
+        productRef = _firestore
+            .collection('products')
+            .doc(productId);
         sourceSnapshot = await transaction.get(productRef);
       } else {
         throw StateError('Unsupported reserved item type.');
