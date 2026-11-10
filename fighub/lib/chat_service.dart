@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'notification_service.dart';
 import 'worker_push_service.dart';
 
+// Keep chat reservation updates and settlement history in one shared thread.
 class ChatService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
