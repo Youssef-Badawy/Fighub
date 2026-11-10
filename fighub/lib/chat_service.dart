@@ -102,39 +102,39 @@ class ChatService {
     if (user == null) {
       throw StateError('User must be signed in.');
     }
-
     if (productId.isEmpty) {
       throw ArgumentError('Product ID is required.');
     }
-
     if (sellerId.isEmpty) {
       throw ArgumentError('Seller ID is required.');
     }
-
     if (sellerId == user.uid) {
       throw StateError('You cannot start a chat with yourself.');
     }
 
-    final chatId = createChatId(
-      productId: productId,
+    // Product inquiries and reservations from offers/products for the same
+    // buyer-seller pair must use the same conversation document.
+    final chatId = await _resolveCombinedChatId(
       buyerId: user.uid,
       sellerId: sellerId,
     );
-
     final chatReference = _firestore.collection('chats').doc(chatId);
-
     final chatDocument = await chatReference.get();
 
     if (!chatDocument.exists) {
       await chatReference.set({
-        'productId': productId,
-        'productName': productName,
+        'productId': 'combined_$chatId',
+        'productName': 'حساب المشتريات',
         'buyerId': user.uid,
         'sellerId': sellerId,
         'participants': [user.uid, sellerId],
+        'offerItems': <Map<String, dynamic>>[],
+        'settlementBuyerConfirmed': false,
+        'settlementSellerConfirmed': false,
+        'settledOrders': <Map<String, dynamic>>[],
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-        'lastMessage': '',
+        'lastMessage': 'محادثة بخصوص $productName',
       });
 
       await _notifySafely(
