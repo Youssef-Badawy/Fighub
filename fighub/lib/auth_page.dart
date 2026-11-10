@@ -6,10 +6,12 @@ import 'interests_page.dart';
 
 class AuthPage extends StatefulWidget {
   final AuthManager authManager;
+  final VoidCallback? onAuthenticated;
 
   const AuthPage({
     super.key,
     required this.authManager,
+    this.onAuthenticated,
   });
 
   @override
@@ -55,6 +57,8 @@ class _AuthPageState extends State<AuthPage> {
           email: emailController.text.trim(),
           password: passwordController.text,
         );
+        if (!mounted) return;
+        widget.onAuthenticated?.call();
       } else {
         await widget.authManager.register(
           name: nameController.text.trim(),
@@ -74,6 +78,8 @@ class _AuthPageState extends State<AuthPage> {
             ),
           ),
         );
+        if (!mounted) return;
+        widget.onAuthenticated?.call();
       }
     } on FirebaseAuthException catch (error) {
       if (!mounted) {
