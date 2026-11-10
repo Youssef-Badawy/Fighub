@@ -317,9 +317,7 @@ class _FigHubHomeState extends State<FigHubHome> {
 
   @override
   void dispose() {
-    widget.authManager.removeListener(_onAuthManagerChanged);
     _productsSubscription?.cancel();
-    _recommendedOffersSubscription?.cancel();
     _favoritesSubscription?.cancel();
     _notificationsSubscription?.cancel();
     super.dispose();
