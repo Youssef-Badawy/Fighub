@@ -623,6 +623,8 @@ class ChatService {
       transaction.update(chatRef, {
         'offerItems': items,
         'settledOrders': history,
+        'settlementBuyerConfirmed': false,
+        'settlementSellerConfirmed': false,
         'updatedAt': FieldValue.serverTimestamp(),
         'lastMessage': 'تم بيع قطعة واحدة',
       });
