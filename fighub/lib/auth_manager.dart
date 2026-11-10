@@ -394,7 +394,6 @@ class AuthManager extends ChangeNotifier {
     try {
       await _sellerProfileService.saveMyProfile(
         name: _name,
-        email: _email,
         phone: _phone,
         photoUrl: _photoUrl,
         bio: _bio,
