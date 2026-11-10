@@ -23,6 +23,9 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Validate Firestore indexes JSON
+        run: python -m json.tool firestore.indexes.json > /dev/null
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
