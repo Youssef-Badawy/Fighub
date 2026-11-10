@@ -93,18 +93,30 @@ class OfferService {
     }
 
     for (final item in itemsSnapshot.docs) {
+      final itemData = item.data();
       final reservationsSnapshot = await item.reference
           .collection('reservations')
           .get();
 
-      final hasActiveReservation = reservationsSnapshot.docs.any((reservation) {
-        final data = reservation.data();
-        return data['status'] == 'Active';
-      });
+      final hasActiveReservation =
+          itemData['status'] == 'Reserved' ||
+          reservationsSnapshot.docs.any(
+            (reservation) => reservation.data()['status'] == 'Active',
+          );
+      final hasCompletedSale = itemData['status'] == 'Sold' ||
+          reservationsSnapshot.docs.any(
+            (reservation) => reservation.data()['status'] == 'Settled',
+          );
 
       if (hasActiveReservation) {
         throw StateError(
           'This offer has an active reservation and cannot be deleted.',
+        );
+      }
+
+      if (hasCompletedSale) {
+        throw StateError(
+          'This offer contains sold items and cannot be deleted.',
         );
       }
     }
