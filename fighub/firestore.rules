@@ -37,6 +37,17 @@ service cloud.firestore {
                            .affectedKeys()
                            .hasOnly(['status', 'reservedBy', 'reservedAt'])
                       )
+                      ||
+                      (
+                        request.auth.uid != resource.data.sellerId
+                        && resource.data.status == 'Reserved'
+                        && resource.data.reservedBy == request.auth.uid
+                        && request.resource.data.status == 'Available'
+                        && request.resource.data.reservedBy == null
+                        && request.resource.data.diff(resource.data)
+                           .affectedKeys()
+                           .hasOnly(['status', 'reservedBy', 'reservedAt'])
+                      )
                     );
 
       allow delete: if request.auth != null
