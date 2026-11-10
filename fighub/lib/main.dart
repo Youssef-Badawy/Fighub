@@ -923,7 +923,9 @@ class _FigHubHomeState extends State<FigHubHome> {
                     );
                   },
                   icon: const Icon(Icons.local_offer_outlined),
-                  label: const Text('العروض الجماعية'),
+                  label: Text(
+                    localization.isArabic ? 'العروض الجماعية' : 'Group offers',
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
