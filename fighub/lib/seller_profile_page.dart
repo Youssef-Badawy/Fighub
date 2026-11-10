@@ -423,6 +423,8 @@ class _SellerProfilePageState
           imagePath,
           width: 85,
           height: 85,
+          cacheWidth: 170,
+          cacheHeight: 170,
           fit: BoxFit.cover,
           errorBuilder: (
             context,
@@ -441,6 +443,8 @@ class _SellerProfilePageState
         File(imagePath),
         width: 85,
         height: 85,
+        cacheWidth: 170,
+        cacheHeight: 170,
         fit: BoxFit.cover,
         errorBuilder: (
           context,
