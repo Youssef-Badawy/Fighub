@@ -358,12 +358,6 @@ class OfferService {
         .doc(uid);
 
     await _firestore.runTransaction((transaction) async {
-      final offerSnapshot = await transaction.get(_offers.doc(offerId));
-      if (!offerSnapshot.exists ||
-          offerSnapshot.data()?['isDeleted'] == true) {
-        throw StateError('This offer is no longer available.');
-      }
-
       final itemSnapshot = await transaction.get(itemReference);
 
       final reservationSnapshot = await transaction.get(reservationReference);
