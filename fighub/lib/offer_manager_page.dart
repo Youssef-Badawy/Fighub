@@ -38,10 +38,10 @@ class OfferManagerPage extends StatelessWidget {
             builder: (context, snapshot) {
               final items = snapshot.data ?? [];
 
-              final hasActiveReservations = items.any(
-                (item) => item.status == 'Reserved',
+              final hasProtectedItems = items.any(
+                (item) => item.status == 'Reserved' || item.status == 'Sold',
               );
-              final canDelete = items.isNotEmpty && !hasActiveReservations;
+              final canDelete = items.isNotEmpty && !hasProtectedItems;
 
               if (!canDelete) {
                 return const SizedBox.shrink();
@@ -173,8 +173,10 @@ class OfferManagerPage extends StatelessWidget {
                       .where((item) => item.status == 'Reserved')
                       .length;
 
-                  final canDelete =
-                      items.isNotEmpty && reservedCount == 0;
+                  final hasProtectedItems = items.any(
+                    (item) => item.status == 'Reserved' || item.status == 'Sold',
+                  );
+                  final canDelete = items.isNotEmpty && !hasProtectedItems;
 
                   final buyerGroups = <String, List<OfferItem>>{};
                   for (final item in items) {
@@ -268,7 +270,7 @@ class OfferManagerPage extends StatelessWidget {
                               if (canDelete) ...[
                                 const SizedBox(height: 8),
                                 const Text(
-                                  'لا توجد حجوزات نشطة، ويمكن حذف العرض.',
+                                  'العرض لا يحتوي حجوزات نشطة أو قطع مباعة ويمكن حذفه.',
                                   style: TextStyle(fontWeight: FontWeight.w600),
                                 ),
                               ],
