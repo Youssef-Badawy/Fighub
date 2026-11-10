@@ -241,8 +241,10 @@ class ChatService {
       throw StateError('Buyer and seller must be different.');
     }
 
-    final participants = [user.uid, sellerId]..sort();
-    final chatId = 'offer_${participants[0]}_${participants[1]}';
+    final chatId = await _resolveCombinedChatId(
+      buyerId: user.uid,
+      sellerId: sellerId,
+    );
     final ref = _firestore.collection('chats').doc(chatId);
     final newItem = <String, dynamic>{
       'source': 'offer',
