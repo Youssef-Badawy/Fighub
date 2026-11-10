@@ -869,7 +869,14 @@ class _ChatPageState extends State<ChatPage> {
                   : <Map<String, dynamic>>[];
 
               if (offerItems.isEmpty) {
+                final productId = (chatData['productId'] ?? '').toString();
+                final isLegacyProductChat =
+                    productId.isNotEmpty &&
+                    !productId.startsWith('combined_') &&
+                    !productId.startsWith('offer_') &&
+                    !productId.startsWith('direct_');
                 final isSeller =
+                    isLegacyProductChat &&
                     _chatService.currentUserId != null &&
                     _chatService.currentUserId == chatData['sellerId'];
                 return Container(
