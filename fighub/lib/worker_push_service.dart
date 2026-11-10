@@ -41,8 +41,7 @@ class WorkerPushService {
       }),
     );
 
-    if (response.statusCode < 200 ||
-        response.statusCode >= 300) {
+    if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(
         'Push Worker failed: '
         '${response.statusCode} ${response.body}',
