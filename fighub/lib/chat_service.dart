@@ -152,7 +152,9 @@ class ChatService {
     required String otherUserId,
   }) async {
     final user = _auth.currentUser;
-    if (user == null) throw StateError('User must be signed in.');
+    if (user == null) {
+      throw StateError('User must be signed in.');
+    }
     if (otherUserId.isEmpty || otherUserId == user.uid) {
       throw ArgumentError('A different user is required.');
     }
@@ -316,8 +318,12 @@ class ChatService {
     required String sellerId,
   }) async {
     final user = _auth.currentUser;
-    if (user == null) throw StateError('User must be signed in.');
-    if (productId.isEmpty || sellerId.isEmpty || user.uid == sellerId) return;
+    if (user == null) {
+      throw StateError('User must be signed in.');
+    }
+    if (productId.isEmpty || sellerId.isEmpty || user.uid == sellerId) {
+      return;
+    }
 
     final chatId = await _resolveCombinedChatId(
       buyerId: user.uid,
