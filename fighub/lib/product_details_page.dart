@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'app_localizations.dart';
+import 'auth_guard.dart';
 import 'chat_page.dart';
 import 'chat_service.dart';
 import 'product_model.dart';
@@ -168,6 +169,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   }
 
   Future<void> _reserveProduct() async {
+    if (!await requireRegisteredAccount(context)) return;
     if (_productStatus != 'Available' || _isUpdatingStatus) {
       return;
     }
@@ -346,6 +348,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   }
 
   Future<void> _openChat() async {
+    if (!await requireRegisteredAccount(context)) return;
     if (_isOpeningChat) {
       return;
     }
