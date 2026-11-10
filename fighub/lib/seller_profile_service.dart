@@ -7,6 +7,8 @@ class SellerProfile {
   final String email;
   final String phone;
   final String photoUrl;
+  final String bio;
+  final String coverUrl;
 
   const SellerProfile({
     required this.id,
@@ -14,6 +16,8 @@ class SellerProfile {
     required this.email,
     required this.phone,
     required this.photoUrl,
+    this.bio = '',
+    this.coverUrl = '',
   });
 
   factory SellerProfile.fromFirestore(
@@ -27,6 +31,8 @@ class SellerProfile {
       email: data['email'] as String? ?? '',
       phone: data['phone'] as String? ?? '',
       photoUrl: data['photoUrl'] as String? ?? '',
+      bio: data['bio'] as String? ?? '',
+      coverUrl: data['coverUrl'] as String? ?? '',
     );
   }
 }
@@ -47,6 +53,8 @@ class SellerProfileService {
     required String email,
     required String phone,
     required String photoUrl,
+    String bio = '',
+    String coverUrl = '',
   }) async {
     final user = _auth.currentUser;
 
@@ -59,6 +67,8 @@ class SellerProfileService {
       'email': email,
       'phone': phone,
       'photoUrl': photoUrl,
+      'bio': bio,
+      'coverUrl': coverUrl,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
