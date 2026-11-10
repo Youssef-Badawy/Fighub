@@ -7,6 +7,12 @@ import 'cloudinary_service.dart';
 import 'seller_profile_service.dart';
 
 class AuthManager extends ChangeNotifier {
+  static final AuthManager _instance = AuthManager._internal();
+
+  factory AuthManager() => _instance;
+
+  AuthManager._internal();
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore =
       FirebaseFirestore.instance;
