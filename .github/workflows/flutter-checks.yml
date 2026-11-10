@@ -46,7 +46,7 @@ jobs:
         run: flutter pub get
 
       - name: Check formatting for changed service files
-        run: dart format --output=none --set-exit-if-changed lib/chat_service.dart lib/offer_service.dart lib/worker_push_service.dart
+        run: dart format --output=none --set-exit-if-changed lib/chat_service.dart lib/chat_page.dart lib/auth_profile_header.dart lib/offer_service.dart lib/worker_push_service.dart
 
       - name: Analyze entire Flutter app
         run: flutter analyze
