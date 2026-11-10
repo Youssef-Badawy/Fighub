@@ -59,7 +59,9 @@ class ProductService {
       throw StateError('You can only update your own products.');
     }
 
-    await _productsCollection.doc(productId).update(product.toFirestore());
+    final updates = product.toFirestore()..remove('createdAt');
+
+    await _productsCollection.doc(productId).update(updates);
   }
 
   Future<void> reserveProduct(String productId) async {
