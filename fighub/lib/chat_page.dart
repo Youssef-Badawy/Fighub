@@ -10,6 +10,7 @@ import 'package:video_player/video_player.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'app_localizations.dart';
+import 'auth_guard.dart';
 import 'chat_service.dart';
 import 'cloudinary_service.dart';
 
@@ -40,6 +41,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _startVoiceRecording() async {
+    if (!await requireRegisteredAccount(context)) return;
     if (_isSending || _isRecording) return;
 
     final isArabic = AppLocalizations.of(context).isArabic;
@@ -99,6 +101,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _stopAndSendVoiceMessage() async {
+    if (!await requireRegisteredAccount(context)) return;
     if (!_isRecording || _isSending) return;
 
     final isArabic = AppLocalizations.of(context).isArabic;
@@ -155,6 +158,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _sendMessage() async {
+    if (!await requireRegisteredAccount(context)) return;
     final message = _messageController.text.trim();
 
     if (message.isEmpty || _isSending) {
@@ -191,6 +195,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _pickAndSendMedia() async {
+    if (!await requireRegisteredAccount(context)) return;
     if (_isSending) return;
 
     final isArabic = AppLocalizations.of(context).isArabic;
@@ -260,6 +265,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _sendQuickMessage(String message) async {
+    if (!await requireRegisteredAccount(context)) return;
     if (_isSending) {
       return;
     }
