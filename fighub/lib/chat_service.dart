@@ -937,6 +937,7 @@ class ChatService {
     try {
       await _workerPushService.sendPush(
         userId: recipientId,
+        chatId: chatId,
         title: 'رسالة جديدة',
         message: '$productName: $message',
       );
@@ -1013,6 +1014,7 @@ class ChatService {
     try {
       await _workerPushService.sendPush(
         userId: recipientId,
+        chatId: chatId,
         title: 'رسالة جديدة',
         message: '$productName: $lastMessage',
       );
