@@ -64,6 +64,7 @@ class SellerProfileService {
 
     await _sellerProfilesCollection.doc(user.uid).set({
       'name': name,
+      'nameSearch': name.trim().toLowerCase(),
       'email': email,
       'phone': phone,
       'photoUrl': photoUrl,
@@ -94,25 +95,40 @@ class SellerProfileService {
     final normalized = query.trim();
     if (normalized.length < 2) return const <SellerProfile>[];
 
-    final snapshot = await _sellerProfilesCollection
-        .orderBy('name')
-        .startAt([normalized])
-        .endAt(['$normalized\uf8ff'])
-        .limit(30)
-        .get();
+    final lower = normalized.toLowerCase();
+    final legacyPrefixes = <String>{
+      normalized,
+      '${normalized[0].toUpperCase()}${normalized.substring(1)}',
+    };
 
-    return snapshot.docs.map(SellerProfile.fromFirestore).toList();
-  }
+    final snapshots = await Future.wait([
+      _sellerProfilesCollection
+          .orderBy('nameSearch')
+          .startAt([lower])
+          .endAt(['$lower\\uf8ff'])
+          .limit(30)
+          .get(),
+      ...legacyPrefixes.map(
+        (prefix) => _sellerProfilesCollection
+            .orderBy('name')
+            .startAt([prefix])
+            .endAt(['$prefix\\uf8ff'])
+            .limit(30)
+            .get(),
+      ),
+    ]);
 
-  Stream<List<SellerProfile>> watchAllSellerProfiles() {
-    return _sellerProfilesCollection
-        .orderBy('name')
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs
-          .map(SellerProfile.fromFirestore)
-          .toList();
-    });
+    final profilesById = <String, SellerProfile>{};
+    for (final snapshot in snapshots) {
+      for (final document in snapshot.docs) {
+        profilesById.putIfAbsent(
+          document.id,
+          () => SellerProfile.fromFirestore(document),
+        );
+      }
+    }
+
+    return profilesById.values.take(30).toList();
   }
 
   Stream<SellerProfile?> watchSellerProfile(
