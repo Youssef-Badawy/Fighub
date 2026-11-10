@@ -44,8 +44,18 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Check changed service formatting
-        run: dart format --output=none --set-exit-if-changed lib/chat_service.dart
+      - name: Check changed Dart formatting
+        run: >-
+          dart format --output=none --set-exit-if-changed
+          lib/chat_service.dart
+          lib/follow_service.dart
+          lib/offer_details_page.dart
+          lib/offer_manager_page.dart
+          lib/offer_service.dart
+          lib/product_details_page.dart
+          lib/product_service.dart
+          lib/verification_service.dart
+          lib/worker_push_service.dart
 
       - name: Analyze entire Flutter app
         run: flutter analyze
