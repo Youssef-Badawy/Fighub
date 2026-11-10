@@ -557,9 +557,9 @@ class _FigHubHomeState extends State<FigHubHome> {
   }
 
   Future<void> _openAddProduct() async {
+    final navigator = Navigator.of(context);
     if (!await requireRegisteredAccount(context)) return;
-    final product = await Navigator.push<Product>(
-      context,
+    final product = await navigator.push<Product>(
       MaterialPageRoute(
         builder: (_) => const AddProductPage(),
       ),
@@ -712,9 +712,9 @@ class _FigHubHomeState extends State<FigHubHome> {
   }
 
   Future<void> _openChat() async {
+    final navigator = Navigator.of(context);
     if (!await requireRegisteredAccount(context)) return;
-    await Navigator.push(
-      context,
+    await navigator.push(
       MaterialPageRoute(
         builder: (_) => ChatListPage(
           productNames: _chatProducts,
@@ -1003,7 +1003,7 @@ class _FigHubHomeState extends State<FigHubHome> {
             child: FilledButton.icon(
               onPressed: () async {
                 if (!await requireRegisteredAccount(context)) return;
-                if (!context.mounted) return;
+                if (!mounted) return;
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => const CreateOfferPage(),
