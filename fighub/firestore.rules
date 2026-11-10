@@ -100,7 +100,25 @@ service cloud.firestore {
         allow create: if request.auth != null
                       && request.resource.data.title is string
                       && request.resource.data.message is string
-                      && request.resource.data.isRead == false;
+                      && request.resource.data.isRead == false
+                      && (
+                        (
+                          request.resource.data.chatId is string
+                          && exists(
+                            /databases/$(database)/documents/chats/$(request.resource.data.chatId)
+                          )
+                          && request.auth.uid in get(
+                            /databases/$(database)/documents/chats/$(request.resource.data.chatId)
+                          ).data.participants
+                          && userId in get(
+                            /databases/$(database)/documents/chats/$(request.resource.data.chatId)
+                          ).data.participants
+                        )
+                        ||
+                        exists(
+                          /databases/$(database)/documents/users/$(userId)/followers/$(request.auth.uid)
+                        )
+                      );
 
         allow update: if request.auth != null
                       && request.auth.uid == userId
