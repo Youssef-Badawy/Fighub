@@ -139,7 +139,7 @@ class _UsersPageState extends State<UsersPage> {
                       }
                       final profiles = snapshot.data ?? const <SellerProfile>[];
                       if (profiles.isEmpty) {
-                        return const Center(
+                        return Center(
                           child: Text(
                             localization.isArabic
                                 ? 'لا يوجد مستخدمون بهذا الاسم.'
