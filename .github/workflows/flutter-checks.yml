@@ -29,6 +29,9 @@ jobs:
       - name: Validate Firestore rules with emulator
         run: npx --yes firebase-tools@15.32.1 emulators:exec --only firestore --project demo-fighub "echo Firestore rules loaded"
 
+      - name: Check Cloudflare worker JavaScript syntax
+        run: node --input-type=module --check < backend/worker.js
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
