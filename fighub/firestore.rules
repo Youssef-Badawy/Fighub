@@ -16,6 +16,8 @@ service cloud.firestore {
                         resource.data.sellerId == request.auth.uid
                         && request.resource.data.sellerId
                            == resource.data.sellerId
+                        && !request.resource.data.diff(resource.data)
+                           .affectedKeys().hasAny(['createdAt'])
                       )
                       ||
                       (
