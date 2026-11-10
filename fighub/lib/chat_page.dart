@@ -630,6 +630,9 @@ class _ChatPageState extends State<ChatPage> {
       await _chatService.markOfferItemSold(
         chatId: widget.chatId,
         itemId: itemId,
+        source: item['source'] as String? ?? '',
+        offerId: item['offerId'] as String?,
+        productId: item['productId'] as String?,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
