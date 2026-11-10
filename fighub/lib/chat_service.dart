@@ -31,6 +31,44 @@ class ChatService {
     return '${productId}_${participants[0]}_${participants[1]}';
   }
 
+  Future<String> _resolveCombinedChatId({
+    required String buyerId,
+    required String sellerId,
+  }) async {
+    final participants = [buyerId, sellerId]..sort();
+    final legacyChatId = 'offer_${participants[0]}_${participants[1]}';
+    final legacySnapshot = await _firestore
+        .collection('chats')
+        .doc(legacyChatId)
+        .get();
+
+    if (!legacySnapshot.exists) return legacyChatId;
+
+    final data = legacySnapshot.data() ?? {};
+    final rawParticipants = data['participants'];
+    final hasBothParticipants =
+        rawParticipants is List &&
+        rawParticipants.contains(buyerId) &&
+        rawParticipants.contains(sellerId);
+
+    if (hasBothParticipants &&
+        data['buyerId'] == buyerId &&
+        data['sellerId'] == sellerId) {
+      return legacyChatId;
+    }
+
+    // Older pair-only chat IDs cannot represent purchases in both
+    // directions. Keep the existing conversation intact and create a
+    // separate, role-consistent thread for the opposite direction.
+    if (hasBothParticipants &&
+        data['buyerId'] == sellerId &&
+        data['sellerId'] == buyerId) {
+      return '${legacyChatId}_buyer_${buyerId}';
+    }
+
+    throw StateError('Existing chat participants do not match this order.');
+  }
+
   Future<String> getOrCreateChat({
     required String productId,
     required String productName,
@@ -104,8 +142,10 @@ class ChatService {
       throw StateError('You cannot reserve your own product.');
     }
 
-    final participants = [user.uid, sellerId]..sort();
-    final chatId = 'offer_${participants[0]}_${participants[1]}';
+    final chatId = await _resolveCombinedChatId(
+      buyerId: user.uid,
+      sellerId: sellerId,
+    );
     final ref = _firestore.collection('chats').doc(chatId);
     final newItem = <String, dynamic>{
       'source': 'product',
@@ -318,10 +358,11 @@ class ChatService {
     if (user == null) throw StateError('User must be signed in.');
     if (offerId.isEmpty || itemId.isEmpty || sellerId.isEmpty) return;
 
-    final participants = [user.uid, sellerId]..sort();
-    final ref = _firestore
-        .collection('chats')
-        .doc('offer_${participants[0]}_${participants[1]}');
+    final chatId = await _resolveCombinedChatId(
+      buyerId: user.uid,
+      sellerId: sellerId,
+    );
+    final ref = _firestore.collection('chats').doc(chatId);
 
     await _firestore.runTransaction((transaction) async {
       final snapshot = await transaction.get(ref);
@@ -689,8 +730,10 @@ class ChatService {
       throw StateError('Only the seller can open this offer chat.');
     }
 
-    final participants = [buyerId, sellerId]..sort();
-    final chatId = 'offer_${participants[0]}_${participants[1]}';
+    final chatId = await _resolveCombinedChatId(
+      buyerId: buyerId,
+      sellerId: sellerId,
+    );
     final ref = _firestore.collection('chats').doc(chatId);
 
     final item = <String, dynamic>{
