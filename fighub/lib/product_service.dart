@@ -106,6 +106,33 @@ class ProductService {
     });
   }
 
+  Future<void> cancelReservation(String productId) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw StateError('User must be signed in.');
+    }
+    if (productId.isEmpty) {
+      throw ArgumentError('Product ID is required.');
+    }
+
+    final reference = _productsCollection.doc(productId);
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(reference);
+      if (!snapshot.exists) throw StateError('Product not found.');
+
+      final data = snapshot.data()!;
+      if (data['reservedBy'] != user.uid || data['status'] != 'Reserved') {
+        throw StateError('You do not own an active reservation for this product.');
+      }
+
+      transaction.update(reference, {
+        'status': 'Available',
+        'reservedBy': null,
+        'reservedAt': null,
+      });
+    });
+  }
+
   Future<void> deleteProduct(String productId) async {
     final user = _auth.currentUser;
 
