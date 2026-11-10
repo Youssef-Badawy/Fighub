@@ -133,7 +133,7 @@ class AuthManager extends ChangeNotifier {
       'name': name,
       'email': email,
       'phone': phone,
-      'photoUrl': '',
+      'photoUrl': _photoUrl,
       'bio': _bio,
       'coverUrl': _coverUrl,
       'interests': interests,
@@ -144,7 +144,6 @@ class AuthManager extends ChangeNotifier {
     _name = name;
     _email = email;
     _phone = phone;
-    _photoUrl = '';
     _interests = List<String>.from(interests);
 
     await _syncSellerProfile();
@@ -199,6 +198,8 @@ class AuthManager extends ChangeNotifier {
           : [];
     } else {
       _name = user.displayName ?? '';
+      _bio = '';
+      _coverUrl = '';
       _interests = [];
     }
 
@@ -380,7 +381,7 @@ class AuthManager extends ChangeNotifier {
   Future<void> _syncSellerProfile() async {
     final user = _auth.currentUser;
 
-    if (user == null) {
+    if (user == null || user.isAnonymous) {
       return;
     }
 
