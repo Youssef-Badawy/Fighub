@@ -149,9 +149,7 @@ class ChatService {
     return chatId;
   }
 
-  Future<String> getOrCreateDirectChat({
-    required String otherUserId,
-  }) async {
+  Future<String> getOrCreateDirectChat({required String otherUserId}) async {
     final user = _auth.currentUser;
     if (user == null) {
       throw StateError('User must be signed in.');
@@ -279,9 +277,7 @@ class ChatService {
           : <Map<String, dynamic>>[];
 
       final existingIndex = items.indexWhere(
-        (item) =>
-            item['source'] == 'product' &&
-            item['productId'] == productId,
+        (item) => item['source'] == 'product' && item['productId'] == productId,
       );
 
       if (existingIndex >= 0) {
@@ -678,9 +674,7 @@ class ChatService {
             .doc(offerId)
             .collection('items')
             .doc(itemId);
-        reservationRef = offerItemRef
-            .collection('reservations')
-            .doc(buyerId);
+        reservationRef = offerItemRef.collection('reservations').doc(buyerId);
         sourceSnapshot = await transaction.get(offerItemRef);
         reservationSnapshot = await transaction.get(reservationRef);
       } else if (source == 'product') {
@@ -688,9 +682,7 @@ class ChatService {
         if (productId.isEmpty) {
           throw StateError('Product information is incomplete.');
         }
-        productRef = _firestore
-            .collection('products')
-            .doc(productId);
+        productRef = _firestore.collection('products').doc(productId);
         sourceSnapshot = await transaction.get(productRef);
       } else {
         throw StateError('Unsupported reserved item type.');
