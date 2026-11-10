@@ -213,7 +213,9 @@ class ChatService {
     required String sellerId,
   }) async {
     final user = _auth.currentUser;
-    if (user == null) throw StateError('User must be signed in.');
+    if (user == null) {
+      throw StateError('User must be signed in.');
+    }
     if (productId.isEmpty || sellerId.isEmpty) {
       throw ArgumentError('Product ID and seller ID are required.');
     }
@@ -611,7 +613,9 @@ class ChatService {
     required String itemId,
   }) async {
     final user = _auth.currentUser;
-    if (user == null) throw StateError('User must be signed in.');
+    if (user == null) {
+      throw StateError('User must be signed in.');
+    }
     if (chatId.isEmpty || itemId.isEmpty) {
       throw ArgumentError('Chat ID and item ID are required.');
     }
@@ -620,7 +624,9 @@ class ChatService {
 
     await _firestore.runTransaction((transaction) async {
       final chatSnapshot = await transaction.get(chatRef);
-      if (!chatSnapshot.exists) throw StateError('Chat not found.');
+      if (!chatSnapshot.exists) {
+        throw StateError('Chat not found.');
+      }
 
       final chat = chatSnapshot.data()!;
       final buyerId = chat['buyerId'] as String? ?? '';
