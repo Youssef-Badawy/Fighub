@@ -360,7 +360,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
     }
   }
 
-  Future<void> _buyProduct(String productId, Map<String, dynamic> product) async {
+  Future<void> _buyProduct(String productId) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || user.isAnonymous) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('سجّل حسابك أولًا لإتمام الطلب')));
@@ -474,7 +474,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
                             )
                           : FilledButton(
                               onPressed: stock > 0 && !_busy
-                                  ? () => _buyProduct(doc.id, data)
+                                  ? () => _buyProduct(doc.id)
                                   : null,
                               child: const Text('اطلب'),
                             ),
