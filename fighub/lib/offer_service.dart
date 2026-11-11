@@ -196,6 +196,25 @@ class OfferService {
     await offerReference.delete();
   }
 
+  /// Finishes cleanup for offers that older app versions only soft-deleted.
+  /// Failed cleanup remains retryable on the next app launch.
+  Future<void> cleanupPreviouslyDeletedOffers() async {
+    final uid = _uid;
+    final snapshot = await _offers
+        .where('sellerId', isEqualTo: uid)
+        .get();
+
+    for (final document in snapshot.docs) {
+      if (document.data()['isDeleted'] != true) continue;
+      try {
+        await deleteOffer(document.id);
+      } catch (error, stackTrace) {
+        debugPrint('FIGHUB DELETED OFFER CLEANUP ERROR: $error');
+        debugPrintStack(stackTrace: stackTrace);
+      }
+    }
+  }
+
   Stream<List<Offer>> watchOffers() {
     return _offers
         .orderBy('createdAt', descending: true)
