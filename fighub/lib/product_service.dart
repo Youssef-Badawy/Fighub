@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'product_model.dart';
+import 'cloudinary_service.dart';
 
 class ProductService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -163,6 +164,19 @@ class ProductService {
       throw StateError('Reserved or sold products cannot be deleted.');
     }
 
+    final rawImages = data?['imagePaths'];
+    final imageUrls = rawImages is List
+        ? rawImages.whereType<String>().toList()
+        : <String>[];
+    final legacyImage = data?['imagePath'] as String?;
+    if (legacyImage != null && legacyImage.isNotEmpty) {
+      imageUrls.add(legacyImage);
+    }
+
+    await CloudinaryService().deleteProductAssets(
+      productId: productId,
+      assetUrls: imageUrls,
+    );
     await _productsCollection.doc(productId).delete();
   }
 
