@@ -34,6 +34,12 @@ class _ChatPageState extends State<ChatPage> {
   final AudioRecorder _audioRecorder = AudioRecorder();
 
   @override
+  void initState() {
+    super.initState();
+    unawaited(_chatService.reconcileChatItems(widget.chatId));
+  }
+
+  @override
   void dispose() {
     _messageController.dispose();
     unawaited(_audioRecorder.dispose());
