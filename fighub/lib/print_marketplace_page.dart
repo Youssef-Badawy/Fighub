@@ -253,7 +253,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
           key: formKey,
           child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
             TextFormField(controller: name, decoration: const InputDecoration(labelText: 'اسم المنتج'), validator: (v) => v == null || v.trim().isEmpty ? 'اكتب اسم المنتج' : null),
-            TextFormField(controller: price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'السعر بالجنيه'), validator: (v) => double.tryParse(v ?? '') == null ? 'اكتب سعرًا صحيحًا' : null),
+            TextFormField(controller: price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'السعر بالجنيه'), validator: (v) { final value = double.tryParse(v ?? ''); return value == null || value <= 0 ? 'اكتب سعرًا أكبر من صفر' : null; }),
             TextFormField(controller: stock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'عدد القطع المتوفرة'), validator: (v) => int.tryParse(v ?? '') == null || int.parse(v!) < 0 ? 'اكتب كمية صحيحة' : null),
             DropdownButtonFormField<String>(value: category, decoration: const InputDecoration(labelText: 'القسم'), items: printCategories.map((c) => DropdownMenuItem(value: c['name'] as String, child: Text(c['name'] as String))).toList(), onChanged: (v) => refresh(() => category = v ?? category)),
             TextFormField(controller: description, maxLines: 2, decoration: const InputDecoration(labelText: 'وصف المنتج')),
@@ -373,11 +373,29 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
         ])),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, {'category': category, 'notes': notes.text.trim(), 'image': image}), child: const Text('إرسال الطلب')),
+          FilledButton(
+            onPressed: () {
+              if (image == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('ارفع صورة مرجعية للتصميم أولًا')),
+                );
+                return;
+              }
+              Navigator.pop(dialogContext, {
+                'category': category,
+                'notes': notes.text.trim(),
+                'image': image,
+              });
+            },
+            child: const Text('إرسال الطلب'),
+          ),
         ],
       )),
     );
-    if (result == null || !mounted) return;
+    if (result == null || !mounted) {
+      notes.dispose();
+      return;
+    }
     setState(() => _busy = true);
     try {
       String imageUrl = '';
@@ -422,6 +440,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
     } catch (error) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر إرسال الطلب: $error')));
     } finally {
+      notes.dispose();
       if (mounted) setState(() => _busy = false);
     }
   }
