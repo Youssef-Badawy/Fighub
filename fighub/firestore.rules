@@ -623,6 +623,7 @@ service cloud.firestore {
                         request.auth.uid != resource.data.sellerId
                         && resource.data.active == true
                         && resource.data.stockQuantity is int
+                        && resource.data.stockQuantity > 0
                         && request.resource.data.stockQuantity
                            == resource.data.stockQuantity - 1
                         && request.resource.data.diff(resource.data)
