@@ -128,7 +128,7 @@ class OfferService {
     // offer items from the active combined-order view.
     final chats = await _firestore
         .collection('chats')
-        .where('sellerId', isEqualTo: uid)
+        .where('participants', arrayContains: uid)
         .get();
     for (var offset = 0; offset < chats.docs.length; offset += 450) {
       final batch = _firestore.batch();
@@ -139,7 +139,9 @@ class OfferService {
       for (final chatDocument in chats.docs.sublist(offset, end)) {
         final chatData = chatDocument.data();
         final participants = chatData['participants'];
-        if (participants is! List || !participants.contains(uid)) continue;
+        if (chatData['sellerId'] != uid ||
+            participants is! List ||
+            !participants.contains(uid)) continue;
         final rawItems = chatData['offerItems'];
         if (rawItems is! List) continue;
 
