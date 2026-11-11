@@ -419,6 +419,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
     setState(() => _busy = true);
     final orderRef = _db.collection('products').doc();
     final productRef = _db.collection('print_products').doc(productId);
+    var orderSaved = false;
     try {
       await _db.runTransaction((transaction) async {
         final snapshot = await transaction.get(productRef);
@@ -445,6 +446,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
           'createdAt': FieldValue.serverTimestamp(),
         });
       });
+      orderSaved = true;
       final orderData = await orderRef.get();
       final data = orderData.data()!;
       final chatId = await ChatService().addReservedProductToChat(
@@ -460,8 +462,11 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
       }
     } catch (error) {
       if (mounted) {
+        final message = orderSaved
+            ? 'تم تسجيل الطلب وتحديث المخزون، لكن تعذر فتح المحادثة: $error'
+            : 'تعذر إتمام الطلب: $error';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('تعذر إتمام الطلب: $error')),
+          SnackBar(content: Text(message)),
         );
       }
     } finally {
