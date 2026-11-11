@@ -1120,6 +1120,45 @@ class ChatService {
         }
 
         var changed = false;
+        var historyChanged = false;
+        final rawHistory = chat['settledOrders'];
+        final history = rawHistory is List
+            ? List<dynamic>.from(rawHistory)
+            : <dynamic>[];
+
+        bool historyContains(Map<String, dynamic> item) {
+          for (final rawOrder in history.whereType<Map>()) {
+            final orderItems = rawOrder['items'];
+            if (orderItems is! List) continue;
+            for (final rawSettled in orderItems.whereType<Map>()) {
+              if (item['source'] == 'offer' &&
+                  rawSettled['offerId'] == item['offerId'] &&
+                  rawSettled['itemId'] == item['itemId']) {
+                return true;
+              }
+              if (item['source'] == 'product' &&
+                  rawSettled['productId'] == item['productId']) {
+                return true;
+              }
+            }
+          }
+          return false;
+        }
+
+        void preserveSoldItem(Map<String, dynamic> item) {
+          item['status'] = 'Settled';
+          if (!historyContains(item)) {
+            history.add({
+              'items': [Map<String, dynamic>.from(item)],
+              'settledAt': FieldValue.serverTimestamp(),
+              'buyerId': currentBuyerId,
+              'sellerId': chat['sellerId'],
+            });
+            historyChanged = true;
+          }
+          changed = true;
+        }
+
         for (final item in items) {
           if (item['status'] != 'Reserved') continue;
           final source = item['source'] as String? ??
@@ -1133,6 +1172,13 @@ class ChatService {
             final offerData = offerSnapshots[offerId]?.data();
             final sourceData = itemSnapshots[key]?.data();
             final reservationData = reservationSnapshots[key]?.data();
+            final wasSoldToBuyer = sourceData?['status'] == 'Sold' &&
+                sourceData?['soldTo'] == currentBuyerId &&
+                reservationData?['status'] == 'Settled';
+            if (wasSoldToBuyer) {
+              preserveSoldItem(item);
+              continue;
+            }
             final isActive = offerData != null &&
                 offerData['isDeleted'] != true &&
                 sourceData != null &&
@@ -1147,6 +1193,11 @@ class ChatService {
           } else if (source == 'product') {
             final productId = item['productId'] as String? ?? itemId;
             final sourceData = productSnapshots[productId]?.data();
+            if (sourceData?['status'] == 'Sold' &&
+                sourceData?['soldTo'] == currentBuyerId) {
+              preserveSoldItem(item);
+              continue;
+            }
             final isActive = sourceData != null &&
                 sourceData['status'] == 'Reserved' &&
                 sourceData['reservedBy'] == currentBuyerId;
@@ -1160,6 +1211,7 @@ class ChatService {
         if (changed) {
           transaction.update(chatRef, {
             'offerItems': items,
+            if (historyChanged) 'settledOrders': history,
             'updatedAt': FieldValue.serverTimestamp(),
           });
         }
