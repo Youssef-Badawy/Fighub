@@ -33,74 +33,52 @@ class OfferManagerPage extends StatelessWidget {
               );
             },
           ),
-          StreamBuilder<List<OfferItem>>(
-            stream: offerService.watchOfferItems(offerId),
-            builder: (context, snapshot) {
-              final items = snapshot.data ?? [];
-
-              final canDelete = items.isNotEmpty;
-
-              if (!canDelete) {
-                return const SizedBox.shrink();
-              }
-
-              return IconButton(
-                tooltip: 'حذف العرض',
-                icon: const Icon(Icons.delete_outline),
-                onPressed: () async {
-                  final confirmed = await showDialog<bool>(
-                    context: context,
-                    builder: (dialogContext) {
-                      return AlertDialog(
-                        title: const Text('حذف العرض؟'),
-                        content: const Text(
-                          'سيتم حذف العرض وجميع قطعه. هل أنت متأكد؟',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () {
-                              Navigator.of(dialogContext).pop(false);
-                            },
-                            child: const Text('إلغاء'),
-                          ),
-                          FilledButton(
-                            onPressed: () {
-                              Navigator.of(dialogContext).pop(true);
-                            },
-                            child: const Text('حذف العرض'),
-                          ),
-                        ],
-                      );
-                    },
+          IconButton(
+            tooltip: 'حذف العرض',
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () async {
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (dialogContext) {
+                  return AlertDialog(
+                    title: const Text('حذف العرض؟'),
+                    content: const Text(
+                      'سيختفي العرض، وسيتم حذف القطع والحجوزات التابعة له من بيانات العرض. ستظل رسائل المحادثات وسجل المبيعات المكتمل محفوظين. هل تريد المتابعة؟',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          Navigator.of(dialogContext).pop(false);
+                        },
+                        child: const Text('إلغاء'),
+                      ),
+                      FilledButton(
+                        onPressed: () {
+                          Navigator.of(dialogContext).pop(true);
+                        },
+                        child: const Text('حذف العرض'),
+                      ),
+                    ],
                   );
-
-                  if (confirmed != true || !context.mounted) {
-                    return;
-                  }
-
-                  try {
-                    await offerService.deleteOffer(offerId);
-
-                    if (!context.mounted) {
-                      return;
-                    }
-
-                    Navigator.of(context).pop();
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('تم حذف العرض بنجاح')),
-                    );
-                  } catch (error) {
-                    if (!context.mounted) {
-                      return;
-                    }
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('تعذر حذف العرض: $error')),
-                    );
-                  }
                 },
               );
+
+              if (confirmed != true || !context.mounted) return;
+
+              try {
+                await offerService.deleteOffer(offerId);
+                if (!context.mounted) return;
+
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('تم حذف العرض بنجاح')),
+                );
+              } catch (error) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('تعذر حذف العرض: $error')),
+                );
+              }
             },
           ),
         ],
@@ -169,9 +147,6 @@ class OfferManagerPage extends StatelessWidget {
                   final reservedCount = items
                       .where((item) => item.status == 'Reserved')
                       .length;
-
-                  final canDelete =
-                      items.isNotEmpty && reservedCount == items.length;
 
                   final buyerGroups = <String, List<OfferItem>>{};
                   for (final item in items) {
@@ -262,13 +237,6 @@ class OfferManagerPage extends StatelessWidget {
                                   ),
                                 ],
                               ),
-                              if (canDelete) ...[
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'جميع القطع محجوزة ويمكن حذف العرض.',
-                                  style: TextStyle(fontWeight: FontWeight.w600),
-                                ),
-                              ],
                             ],
                           ),
                         ),

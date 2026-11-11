@@ -9,6 +9,7 @@ import 'app_localizations.dart';
 import 'auth_manager.dart';
 import 'account_page.dart';
 import 'auth_profile_header.dart';
+import 'auth_guard.dart';
 import 'interests_page.dart';
 import 'verification_page.dart';
 import 'admin_verification_page.dart';
@@ -268,18 +269,31 @@ class ProfilePage extends StatelessWidget {
 
           const SizedBox(height: 20),
 
-          OutlinedButton.icon(
-            onPressed: () async {
-              await authManager.logout();
+          ListenableBuilder(
+            listenable: authManager,
+            builder: (context, child) {
+              final isGuest = authManager.isGuest;
+              return OutlinedButton.icon(
+                onPressed: () async {
+                  if (isGuest) {
+                    await requireRegisteredAccount(context);
+                    return;
+                  }
 
-              if (!context.mounted) {
-                return;
-              }
-
-              Navigator.pop(context);
+                  await authManager.logout();
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                },
+                icon: Icon(
+                  isGuest ? Icons.person_add_alt_1 : Icons.logout,
+                ),
+                label: Text(
+                  isGuest
+                      ? (settings.isArabic ? 'إنشاء حساب' : 'Create account')
+                      : (settings.isArabic ? 'تسجيل الخروج' : 'Log Out'),
+                ),
+              );
             },
-            icon: const Icon(Icons.logout),
-            label: Text(settings.isArabic ? 'تسجيل الخروج' : 'Log Out'),
           ),
 
           const SizedBox(height: 24),

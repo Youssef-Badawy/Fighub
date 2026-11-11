@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'app_localizations.dart';
+import 'auth_guard.dart';
 import 'chat_page.dart';
 import 'chat_service.dart';
 import 'product_model.dart';
@@ -168,6 +169,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   }
 
   Future<void> _reserveProduct() async {
+    if (!await requireRegisteredAccount(context)) return;
     if (_productStatus != 'Available' || _isUpdatingStatus) {
       return;
     }
@@ -189,25 +191,52 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
       widget.product.reservedBy = userId;
 
       if (userId != null && widget.product.sellerId != userId) {
-        try {
-          await _chatService.addReservedProductToChat(
-            productId: productId,
-            productName: widget.product.name,
-            price: widget.product.price,
-            imagePaths: widget.product.imagePaths.isNotEmpty
-                ? widget.product.imagePaths
-                : (widget.product.imagePath == null ||
-                          widget.product.imagePath!.isEmpty
-                      ? <String>[]
-                      : <String>[widget.product.imagePath!]),
-            sellerId: widget.product.sellerId,
-          );
-        } catch (chatError, chatStackTrace) {
-          debugPrint('CREATE RESERVED PRODUCT CHAT ERROR: $chatError');
-          debugPrintStack(
-            label: 'CREATE RESERVED PRODUCT CHAT STACK TRACE',
-            stackTrace: chatStackTrace,
-          );
+        const retryableCodes = {
+          'aborted',
+          'deadline-exceeded',
+          'internal',
+          'resource-exhausted',
+          'unavailable',
+        };
+
+        for (var attempt = 0; attempt < 3; attempt++) {
+          try {
+            await _chatService.addReservedProductToChat(
+              productId: productId,
+              productName: widget.product.name,
+              price: widget.product.price,
+              imagePaths: widget.product.imagePaths.isNotEmpty
+                  ? widget.product.imagePaths
+                  : (widget.product.imagePath == null ||
+                            widget.product.imagePath!.isEmpty
+                        ? <String>[]
+                        : <String>[widget.product.imagePath!]),
+              sellerId: widget.product.sellerId,
+            );
+            break;
+          } on FirebaseException catch (chatError, chatStackTrace) {
+            final shouldRetry =
+                retryableCodes.contains(chatError.code) && attempt < 2;
+            if (!shouldRetry) {
+              debugPrint('CREATE RESERVED PRODUCT CHAT ERROR: $chatError');
+              debugPrintStack(
+                label: 'CREATE RESERVED PRODUCT CHAT STACK TRACE',
+                stackTrace: chatStackTrace,
+              );
+              break;
+            }
+
+            await Future<void>.delayed(
+              Duration(milliseconds: 300 * (1 << attempt)),
+            );
+          } catch (chatError, chatStackTrace) {
+            debugPrint('CREATE RESERVED PRODUCT CHAT ERROR: $chatError');
+            debugPrintStack(
+              label: 'CREATE RESERVED PRODUCT CHAT STACK TRACE',
+              stackTrace: chatStackTrace,
+            );
+            break;
+          }
         }
       }
 
@@ -260,7 +289,66 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
     }
   }
 
+  Future<void> _cancelProductReservation() async {
+    final productId = widget.product.id;
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (productId == null ||
+        productId.isEmpty ||
+        userId == null ||
+        widget.product.reservedBy != userId ||
+        _isUpdatingStatus) {
+      return;
+    }
+
+    setState(() => _isUpdatingStatus = true);
+    try {
+      await _productService.cancelReservation(productId);
+
+      try {
+        await _chatService.removeReservedProductFromChat(
+          productId: productId,
+          sellerId: widget.product.sellerId,
+        );
+      } catch (error, stackTrace) {
+        debugPrint('CANCEL PRODUCT CHAT SYNC ERROR: $error');
+        debugPrintStack(stackTrace: stackTrace);
+      }
+
+      widget.product.status = 'Available';
+      widget.product.reservedBy = null;
+      widget.onStatusChanged('Available');
+      if (!mounted) return;
+
+      setState(() => _productStatus = 'Available');
+      final localization = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            localization.isArabic
+                ? 'تم إلغاء حجز المنتج بنجاح'
+                : 'Product reservation cancelled.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final localization = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            localization.isArabic
+                ? 'تعذر إلغاء الحجز: $error'
+                : 'Could not cancel reservation: $error',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isUpdatingStatus = false);
+    }
+  }
+
   Future<void> _openChat() async {
+    if (!await requireRegisteredAccount(context)) return;
     if (_isOpeningChat) {
       return;
     }
@@ -907,6 +995,21 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                 ),
               ),
             ),
+          if (_productStatus == 'Reserved' &&
+              widget.product.reservedBy ==
+                  FirebaseAuth.instance.currentUser?.uid) ...[
+            SizedBox(
+              height: 52,
+              child: OutlinedButton.icon(
+                onPressed:
+                    _isUpdatingStatus ? null : _cancelProductReservation,
+                icon: const Icon(Icons.bookmark_remove_outlined),
+                label: Text(
+                  isArabic ? 'إلغاء الحجز' : 'Cancel reservation',
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           SizedBox(
             height: 52,

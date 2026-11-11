@@ -6,10 +6,12 @@ import 'interests_page.dart';
 
 class AuthPage extends StatefulWidget {
   final AuthManager authManager;
+  final VoidCallback? onAuthenticated;
 
   const AuthPage({
     super.key,
     required this.authManager,
+    this.onAuthenticated,
   });
 
   @override
@@ -29,6 +31,15 @@ class _AuthPageState extends State<AuthPage> {
   final phoneController = TextEditingController();
   final passwordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    // A guest reaching a protected action should be guided to create an
+    // account and link it to the current guest UID, preserving their data.
+    // Users without a guest session retain the normal sign-in entry point.
+    isLogin = FirebaseAuth.instance.currentUser?.isAnonymous != true;
+  }
 
   @override
   void dispose() {
@@ -55,6 +66,8 @@ class _AuthPageState extends State<AuthPage> {
           email: emailController.text.trim(),
           password: passwordController.text,
         );
+        if (!mounted) return;
+        widget.onAuthenticated?.call();
       } else {
         await widget.authManager.register(
           name: nameController.text.trim(),
@@ -63,7 +76,9 @@ class _AuthPageState extends State<AuthPage> {
           password: passwordController.text,
         );
 
-        if (!mounted) {
+        if (!mounted) return;
+        if (widget.onAuthenticated != null) {
+          widget.onAuthenticated!.call();
           return;
         }
 
@@ -84,7 +99,13 @@ class _AuthPageState extends State<AuthPage> {
 
       switch (error.code) {
         case 'email-already-in-use':
-          message = 'هذا البريد الإلكتروني مستخدم بالفعل.';
+          message = 'هذا البريد الإلكتروني مستخدم بالفعل. سجّل الدخول بدل إنشاء حساب جديد.';
+          break;
+        case 'credential-already-in-use':
+          message = 'هذا البريد مرتبط بحساب موجود. سجّل الدخول بهذا البريد وكلمة المرور.';
+          break;
+        case 'operation-not-allowed':
+          message = 'تسجيل الدخول كضيف غير مفعّل في إعدادات التطبيق بعد.';
           break;
         case 'invalid-email':
           message = 'البريد الإلكتروني غير صحيح.';
@@ -226,8 +247,7 @@ class _AuthPageState extends State<AuthPage> {
                         prefixIcon: Icon(Icons.phone_outlined),
                         border: OutlineInputBorder(),
                       ),
-                      validator: (value) =>
-                          _requiredValidator(value, 'اكتب رقم الموبايل'),
+                      validator: (_) => null,
                     ),
                     const SizedBox(height: 16),
                   ],

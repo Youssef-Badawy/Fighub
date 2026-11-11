@@ -16,6 +16,8 @@ service cloud.firestore {
                         resource.data.sellerId == request.auth.uid
                         && request.resource.data.sellerId
                            == resource.data.sellerId
+                        && !request.resource.data.diff(resource.data)
+                           .affectedKeys().hasAny(['createdAt'])
                       )
                       ||
                       (
@@ -35,10 +37,22 @@ service cloud.firestore {
                            .affectedKeys()
                            .hasOnly(['status', 'reservedBy', 'reservedAt'])
                       )
+                      ||
+                      (
+                        request.auth.uid != resource.data.sellerId
+                        && resource.data.status == 'Reserved'
+                        && resource.data.reservedBy == request.auth.uid
+                        && request.resource.data.status == 'Available'
+                        && request.resource.data.reservedBy == null
+                        && request.resource.data.diff(resource.data)
+                           .affectedKeys()
+                           .hasOnly(['status', 'reservedBy', 'reservedAt'])
+                      )
                     );
 
       allow delete: if request.auth != null
-                    && resource.data.sellerId == request.auth.uid;
+                    && resource.data.sellerId == request.auth.uid
+                    && resource.data.get('status', 'Available') == 'Available';
     }
 
     match /app_config/{configId} {
@@ -100,7 +114,25 @@ service cloud.firestore {
         allow create: if request.auth != null
                       && request.resource.data.title is string
                       && request.resource.data.message is string
-                      && request.resource.data.isRead == false;
+                      && request.resource.data.isRead == false
+                      && (
+                        (
+                          request.resource.data.chatId is string
+                          && exists(
+                            /databases/$(database)/documents/chats/$(request.resource.data.chatId)
+                          )
+                          && request.auth.uid in get(
+                            /databases/$(database)/documents/chats/$(request.resource.data.chatId)
+                          ).data.participants
+                          && userId in get(
+                            /databases/$(database)/documents/chats/$(request.resource.data.chatId)
+                          ).data.participants
+                        )
+                        ||
+                        exists(
+                          /databases/$(database)/documents/users/$(userId)/followers/$(request.auth.uid)
+                        )
+                      );
 
         allow update: if request.auth != null
                       && request.auth.uid == userId
@@ -229,7 +261,10 @@ service cloud.firestore {
                         )
                         ||
                         (
-                          resource.data.status
+                          get(
+                            /databases/$(database)/documents/offers/$(offerId)
+                          ).data.get('isDeleted', false) != true
+                          && resource.data.status
                              == 'Available'
                           && resource.data.reservedBy
                              == null
@@ -237,6 +272,19 @@ service cloud.firestore {
                              == 'Reserved'
                           && request.resource.data.reservedBy
                              == request.auth.uid
+                          && (
+                            (
+                              resource.data.get('waitingUsers', []).size() == 0
+                              && request.resource.data.get('waitingUsers', []).size() == 0
+                            )
+                            ||
+                            (
+                              resource.data.get('waitingUsers', []).size() > 0
+                              && resource.data.waitingUsers[0] == request.auth.uid
+                              && request.resource.data.get('waitingUsers', []).size()
+                                 == resource.data.waitingUsers.size() - 1
+                            )
+                          )
                           && getAfter(
                                /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)/reservations/$(request.auth.uid)
                              ).data.userId
@@ -254,9 +302,13 @@ service cloud.firestore {
                                'waitingUsers'
                              ])
                         )
+
                         ||
                         (
-                          resource.data.status
+                          get(
+                            /databases/$(database)/documents/offers/$(offerId)
+                          ).data.get('isDeleted', false) != true
+                          && resource.data.status
                              == 'Reserved'
                           && resource.data.reservedBy
                              != null
@@ -264,10 +316,10 @@ service cloud.firestore {
                              == 'Reserved'
                           && request.resource.data.reservedBy
                              == resource.data.reservedBy
-                          && request.resource.data.waitingUsers.size()
-                             == resource.data.waitingUsers.size() + 1
-                          && request.resource.data.waitingUsers[
-                               resource.data.waitingUsers.size()
+                          && request.resource.data.get('waitingUsers', []).size()
+                             == resource.data.get('waitingUsers', []).size() + 1
+                          && request.resource.data.get('waitingUsers', [])[
+                               resource.data.get('waitingUsers', []).size()
                              ]
                              == request.auth.uid
                           && getAfter(
@@ -287,11 +339,19 @@ service cloud.firestore {
                       );
 
         allow delete: if request.auth != null
-                      && resource.data.status != 'Sold'
                       && get(
                         /databases/$(database)/documents/offers/$(offerId)
-                      ).data.sellerId
-                         == request.auth.uid;
+                      ).data.sellerId == request.auth.uid
+                      && (
+                        get(
+                          /databases/$(database)/documents/offers/$(offerId)
+                        ).data.get('isDeleted', false) == true
+                        ||
+                        (
+                          resource.data.status == 'Available'
+                          && resource.data.get('waitingUsers', []).size() == 0
+                        )
+                      );
 
         match /reservations/{reservationId} {
 
@@ -309,6 +369,9 @@ service cloud.firestore {
                         && request.auth.uid == reservationId
                         && request.resource.data.userId
                            == request.auth.uid
+                        && get(
+                          /databases/$(database)/documents/offers/$(offerId)
+                        ).data.get('isDeleted', false) != true
                         && (
                           request.resource.data.status
                              == 'Active'
@@ -356,6 +419,26 @@ service cloud.firestore {
                               )
                               ||
                               (
+                                resource.data.status == 'Cancelled'
+                                && request.resource.data.status == 'Waiting'
+                                && resource.data.userId == request.auth.uid
+                                && request.resource.data.userId == request.auth.uid
+                                && request.resource.data.cancelledAt == null
+                                && getAfter(
+                                  /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)
+                                ).data.status == 'Reserved'
+                                && getAfter(
+                                  /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)
+                                ).data.reservedBy != request.auth.uid
+                                && request.auth.uid in getAfter(
+                                  /databases/$(database)/documents/offers/$(offerId)/items/$(itemId)
+                                ).data.waitingUsers
+                                && request.resource.data.diff(resource.data)
+                                   .affectedKeys()
+                                   .hasOnly(['status', 'cancelledAt', 'createdAt'])
+                              )
+                              ||
+                              (
                                 resource.data.status == 'Active'
                                 && request.resource.data.status == 'Cancelled'
                                 && request.resource.data.cancelledAt == request.time
@@ -396,8 +479,13 @@ service cloud.firestore {
           allow delete: if request.auth != null
                         && get(
                           /databases/$(database)/documents/offers/$(offerId)
-                        ).data.sellerId
-                           == request.auth.uid;
+                        ).data.sellerId == request.auth.uid
+                        && (
+                          get(
+                            /databases/$(database)/documents/offers/$(offerId)
+                          ).data.get('isDeleted', false) == true
+                          || resource.data.status == 'Cancelled'
+                        );
         }
       }
     }
@@ -526,6 +614,28 @@ service cloud.firestore {
                            'clearedAt',
                            'lastReadBy'
                          ])
+                    && (
+                      !request.resource.data.diff(resource.data)
+                         .affectedKeys().hasAny(['settlementBuyerConfirmed'])
+                      || (
+                        request.resource.data.settlementBuyerConfirmed is bool
+                        && (
+                          request.resource.data.settlementBuyerConfirmed != true
+                          || request.auth.uid == resource.data.buyerId
+                        )
+                      )
+                    )
+                    && (
+                      !request.resource.data.diff(resource.data)
+                         .affectedKeys().hasAny(['settlementSellerConfirmed'])
+                      || (
+                        request.resource.data.settlementSellerConfirmed is bool
+                        && (
+                          request.resource.data.settlementSellerConfirmed != true
+                          || request.auth.uid == resource.data.sellerId
+                        )
+                      )
+                    )
                     && (
                       !request.resource.data.diff(resource.data)
                          .affectedKeys().hasAny(['settledOrders'])

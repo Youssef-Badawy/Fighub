@@ -9,6 +9,8 @@ class WorkerPushService {
 
   Future<void> sendPush({
     required String userId,
+    required String chatId,
+    required String messageId,
     required String title,
     required String message,
   }) async {
@@ -32,13 +34,14 @@ class WorkerPushService {
       },
       body: jsonEncode({
         'userId': userId,
+        'chatId': chatId,
+        'messageId': messageId,
         'title': title,
         'message': message,
       }),
     );
 
-    if (response.statusCode < 200 ||
-        response.statusCode >= 300) {
+    if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(
         'Push Worker failed: '
         '${response.statusCode} ${response.body}',

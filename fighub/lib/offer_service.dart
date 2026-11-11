@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'interests.dart';
 import 'offer_model.dart';
 import 'chat_service.dart';
+import 'cloudinary_service.dart';
 
 class OfferService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -58,6 +59,9 @@ class OfferService {
     if (offerData['sellerId'] != uid) {
       throw StateError('You can only add items to your own offers.');
     }
+    if (offerData['isDeleted'] == true) {
+      throw StateError('A deleted offer cannot receive new items.');
+    }
 
     final itemReference = offerReference.collection('items').doc();
 
@@ -68,71 +72,165 @@ class OfferService {
 
   Future<void> deleteOffer(String offerId) async {
     final uid = _uid;
-
     if (offerId.isEmpty) {
       throw ArgumentError('Offer ID is required.');
     }
 
     final offerReference = _offers.doc(offerId);
     final offerSnapshot = await offerReference.get();
-
-    if (!offerSnapshot.exists) {
-      throw StateError('Offer not found.');
-    }
+    if (!offerSnapshot.exists) return;
 
     final offerData = offerSnapshot.data() ?? {};
-
     if (offerData['sellerId'] != uid) {
       throw StateError('You can only delete your own offers.');
     }
 
-    final itemsSnapshot = await offerReference.collection('items').get();
-
-    if (itemsSnapshot.docs.isEmpty) {
-      throw StateError('Add at least one item before deleting the offer.');
-    }
-
-    for (final item in itemsSnapshot.docs) {
-      final reservationsSnapshot = await item.reference
-          .collection('reservations')
-          .get();
-
-      final hasActiveReservation = reservationsSnapshot.docs.any((reservation) {
-        final data = reservation.data();
-        return data['status'] == 'Active';
+    // Hide the offer first so no new reservation can race with cleanup.
+    if (offerData['isDeleted'] != true) {
+      await offerReference.update({
+        'isDeleted': true,
+        'deletedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
+    }
 
-      if (hasActiveReservation) {
-        throw StateError(
-          'This offer has an active reservation and cannot be deleted.',
-        );
+    final itemsSnapshot =
+        await offerReference.collection('items').get();
+    final itemAssets = itemsSnapshot.docs.map((document) {
+      final data = document.data();
+      final rawImages = data['imagePaths'];
+      final urls = rawImages is List
+          ? rawImages.whereType<String>().toList()
+          : <String>[];
+      final legacyImage = data['imagePath'] as String?;
+      if (legacyImage != null && legacyImage.isNotEmpty) {
+        urls.add(legacyImage);
+      }
+      return <String, dynamic>{
+        'itemId': document.id,
+        'assetUrls': urls,
+      };
+    }).toList();
+
+    // Cloudinary is called through the authenticated Worker. Chat media URLs
+    // are never included here, so message attachments remain untouched.
+    for (var offset = 0; offset < itemAssets.length; offset += 25) {
+      final end = (offset + 25 < itemAssets.length)
+          ? offset + 25
+          : itemAssets.length;
+      await CloudinaryService().deleteOfferAssets(
+        offerId: offerId,
+        items: itemAssets.sublist(offset, end),
+      );
+    }
+
+    // Keep conversation messages and completed sales, but remove deleted
+    // offer items from the active combined-order view.
+    final chats = await _firestore
+        .collection('chats')
+        .where('participants', arrayContains: uid)
+        .get();
+    for (var offset = 0; offset < chats.docs.length; offset += 450) {
+      final batch = _firestore.batch();
+      var hasWrites = false;
+      final end = (offset + 450 < chats.docs.length)
+          ? offset + 450
+          : chats.docs.length;
+      for (final chatDocument in chats.docs.sublist(offset, end)) {
+        final chatData = chatDocument.data();
+        final participants = chatData['participants'];
+        if (chatData['sellerId'] != uid ||
+            participants is! List ||
+            !participants.contains(uid)) {
+          continue;
+        }
+        final rawItems = chatData['offerItems'];
+        if (rawItems is! List) {
+          continue;
+        }
+
+        var changed = false;
+        final updatedItems = rawItems.whereType<Map>().map((rawItem) {
+          final item = Map<String, dynamic>.from(rawItem);
+          if (item['offerId'] == offerId &&
+              item['status'] != 'Settled' &&
+              item['status'] != 'Cancelled') {
+            item['status'] = 'Cancelled';
+            changed = true;
+          }
+          return item;
+        }).toList();
+
+        if (changed) {
+          hasWrites = true;
+          batch.update(chatDocument.reference, {
+            'offerItems': updatedItems,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+      }
+      if (hasWrites) {
+        await batch.commit();
       }
     }
 
-    final batch = _firestore.batch();
-
-    for (final item in itemsSnapshot.docs) {
-      final reservationsSnapshot = await item.reference
+    // Firestore does not cascade-delete subcollections. Explicitly remove
+    // reservations and item documents after the parent is marked deleted.
+    final documentsToDelete =
+        <DocumentReference<Map<String, dynamic>>>[];
+    for (final itemDocument in itemsSnapshot.docs) {
+      final reservations = await itemDocument.reference
           .collection('reservations')
           .get();
-
-      for (final reservation in reservationsSnapshot.docs) {
-        batch.delete(reservation.reference);
-      }
-
-      batch.delete(item.reference);
+      documentsToDelete.addAll(
+        reservations.docs.map((document) => document.reference),
+      );
+      documentsToDelete.add(itemDocument.reference);
     }
 
-    batch.delete(offerReference);
+    for (var offset = 0; offset < documentsToDelete.length; offset += 450) {
+      final batch = _firestore.batch();
+      final end = (offset + 450 < documentsToDelete.length)
+          ? offset + 450
+          : documentsToDelete.length;
+      for (final reference in documentsToDelete.sublist(offset, end)) {
+        batch.delete(reference);
+      }
+      await batch.commit();
+    }
 
-    await batch.commit();
+    await offerReference.delete();
+  }
+
+  /// Finishes cleanup for offers that older app versions only soft-deleted.
+  /// Failed cleanup remains retryable on the next app launch.
+  Future<void> cleanupPreviouslyDeletedOffers() async {
+    final uid = _uid;
+    final snapshot = await _offers
+        .where('sellerId', isEqualTo: uid)
+        .get();
+
+    for (final document in snapshot.docs) {
+      if (document.data()['isDeleted'] != true) continue;
+      try {
+        await deleteOffer(document.id);
+      } catch (error, stackTrace) {
+        debugPrint('FIGHUB DELETED OFFER CLEANUP ERROR: $error');
+        debugPrintStack(stackTrace: stackTrace);
+      }
+    }
   }
 
   Stream<List<Offer>> watchOffers() {
     return _offers
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map(Offer.fromFirestore).toList());
+        .map(
+          (snapshot) => snapshot.docs
+              .where((document) => document.data()['isDeleted'] != true)
+              .map(Offer.fromFirestore)
+              .toList(),
+        );
   }
 
   Stream<List<Offer>> watchRecommendedOffers(List<String> interests) {
@@ -203,37 +301,70 @@ class OfferService {
     required String itemId,
     required String buyerId,
   }) async {
-    try {
-      final offerSnapshot = await _offers.doc(offerId).get();
-      final itemSnapshot = await _offers
-          .doc(offerId)
-          .collection('items')
-          .doc(itemId)
-          .get();
+    // Reservation is already committed before this method runs. Retry only
+    // transient Firestore failures; never turn a successful reservation into
+    // a reported reservation failure because chat synchronization failed.
+    const retryableCodes = {
+      'aborted',
+      'deadline-exceeded',
+      'internal',
+      'resource-exhausted',
+      'unavailable',
+    };
 
-      if (!offerSnapshot.exists || !itemSnapshot.exists) return;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final offerSnapshot = await _offers.doc(offerId).get();
+        final itemSnapshot = await _offers
+            .doc(offerId)
+            .collection('items')
+            .doc(itemId)
+            .get();
 
-      final offerData = offerSnapshot.data() ?? {};
-      final itemData = itemSnapshot.data() ?? {};
-      final sellerId = offerData['sellerId'] as String? ?? '';
-      if (sellerId.isEmpty || sellerId == buyerId) return;
+        if (!offerSnapshot.exists || !itemSnapshot.exists) return;
 
-      final imagesRaw = itemData['imagePaths'];
-      final images = imagesRaw is List
-          ? imagesRaw.whereType<String>().toList()
-          : <String>[];
+        final offerData = offerSnapshot.data() ?? {};
+        final itemData = itemSnapshot.data() ?? {};
+        final sellerId = offerData['sellerId'] as String? ?? '';
+        if (sellerId.isEmpty ||
+            sellerId == buyerId ||
+            offerData['isDeleted'] == true ||
+            itemData['status'] != 'Reserved' ||
+            itemData['reservedBy'] != buyerId) {
+          return;
+        }
 
-      await ChatService().addReservedOfferItemToChat(
-        offerId: offerId,
-        itemId: itemId,
-        itemName: itemData['name'] as String? ?? 'قطعة من العرض',
-        price: itemData['price']?.toString() ?? '0',
-        imagePaths: images,
-        sellerId: sellerId,
-      );
-    } catch (error, stackTrace) {
-      debugPrint('FIGHUB OFFER CHAT SYNC ERROR: $error');
-      debugPrintStack(stackTrace: stackTrace);
+        final imagesRaw = itemData['imagePaths'];
+        final images = imagesRaw is List
+            ? imagesRaw.whereType<String>().toList()
+            : <String>[];
+
+        await ChatService().addReservedOfferItemToChat(
+          offerId: offerId,
+          itemId: itemId,
+          itemName: itemData['name'] as String? ?? 'قطعة من العرض',
+          price: itemData['price']?.toString() ?? '0',
+          imagePaths: images,
+          sellerId: sellerId,
+        );
+        return;
+      } on FirebaseException catch (error, stackTrace) {
+        final shouldRetry = retryableCodes.contains(error.code) && attempt < 2;
+        if (!shouldRetry) {
+          debugPrint('FIGHUB OFFER CHAT SYNC ERROR: $error');
+          debugPrintStack(stackTrace: stackTrace);
+          return;
+        }
+
+        await Future<void>.delayed(
+          Duration(milliseconds: 300 * (1 << attempt)),
+        );
+      } catch (error, stackTrace) {
+        // Permission, validation, and unexpected errors are not transient.
+        debugPrint('FIGHUB OFFER CHAT SYNC ERROR: $error');
+        debugPrintStack(stackTrace: stackTrace);
+        return;
+      }
     }
   }
 
@@ -254,17 +385,31 @@ class OfferService {
         .doc(uid);
 
     await _firestore.runTransaction((transaction) async {
+      final offerSnapshot = await transaction.get(_offers.doc(offerId));
+      if (!offerSnapshot.exists || offerSnapshot.data()?['isDeleted'] == true) {
+        throw StateError('This offer is no longer available.');
+      }
+
       final itemSnapshot = await transaction.get(itemReference);
+      final reservationSnapshot = await transaction.get(reservationReference);
 
       if (!itemSnapshot.exists) {
         throw StateError('Offer item not found.');
       }
 
       final itemData = itemSnapshot.data() ?? {};
+      final reservationData = reservationSnapshot.data() ?? {};
 
       final currentStatus = itemData['status'] as String? ?? 'Available';
-
       final currentReservedBy = itemData['reservedBy'] as String?;
+
+      if (currentReservedBy == uid || reservationData['status'] == 'Active') {
+        throw StateError('You already have an active reservation.');
+      }
+
+      if (reservationData['status'] == 'Waiting') {
+        throw StateError('You are already in the waiting list.');
+      }
 
       final rawWaitingUsers = itemData['waitingUsers'];
 
@@ -274,6 +419,14 @@ class OfferService {
 
       if (currentStatus == 'Sold') {
         throw StateError('This item has already been sold.');
+      }
+
+      // The first waiting buyer must claim an available item before
+      // anyone else can reserve it.
+      if (currentStatus == 'Available' &&
+          (currentReservedBy == null || currentReservedBy.isEmpty) &&
+          waitingUsers.isNotEmpty) {
+        throw StateError('Other buyers have priority in the waiting list.');
       }
 
       if (currentStatus != 'Available' ||
@@ -329,6 +482,7 @@ class OfferService {
     required String offerId,
     required String itemId,
   }) async {
+    // Hidden offers block both new reservations and waitlist claims.
     final uid = _uid;
 
     if (offerId.isEmpty || itemId.isEmpty) {
@@ -342,8 +496,12 @@ class OfferService {
         .doc(uid);
 
     await _firestore.runTransaction((transaction) async {
-      final itemSnapshot = await transaction.get(itemReference);
+      final offerSnapshot = await transaction.get(_offers.doc(offerId));
+      if (!offerSnapshot.exists || offerSnapshot.data()?['isDeleted'] == true) {
+        throw StateError('This offer is no longer available.');
+      }
 
+      final itemSnapshot = await transaction.get(itemReference);
       final reservationSnapshot = await transaction.get(reservationReference);
 
       if (!itemSnapshot.exists) {
@@ -493,19 +651,42 @@ class OfferService {
       });
     });
 
-    try {
-      final offerSnapshot = await _offers.doc(offerId).get();
-      final sellerId = offerSnapshot.data()?['sellerId'] as String? ?? '';
-      if (sellerId.isNotEmpty && sellerId != uid) {
-        await ChatService().removeReservedOfferItemFromChat(
-          offerId: offerId,
-          itemId: itemId,
-          sellerId: sellerId,
+    const retryableCodes = {
+      'aborted',
+      'deadline-exceeded',
+      'internal',
+      'resource-exhausted',
+      'unavailable',
+    };
+
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final offerSnapshot = await _offers.doc(offerId).get();
+        final sellerId = offerSnapshot.data()?['sellerId'] as String? ?? '';
+        if (sellerId.isNotEmpty && sellerId != uid) {
+          await ChatService().removeReservedOfferItemFromChat(
+            offerId: offerId,
+            itemId: itemId,
+            sellerId: sellerId,
+          );
+        }
+        break;
+      } on FirebaseException catch (error, stackTrace) {
+        final shouldRetry = retryableCodes.contains(error.code) && attempt < 2;
+        if (!shouldRetry) {
+          debugPrint('FIGHUB OFFER CHAT CANCEL SYNC ERROR: $error');
+          debugPrintStack(stackTrace: stackTrace);
+          break;
+        }
+
+        await Future<void>.delayed(
+          Duration(milliseconds: 300 * (1 << attempt)),
         );
+      } catch (error, stackTrace) {
+        debugPrint('FIGHUB OFFER CHAT CANCEL SYNC ERROR: $error');
+        debugPrintStack(stackTrace: stackTrace);
+        break;
       }
-    } catch (error, stackTrace) {
-      debugPrint('FIGHUB OFFER CHAT CANCEL SYNC ERROR: $error');
-      debugPrintStack(stackTrace: stackTrace);
     }
   }
 

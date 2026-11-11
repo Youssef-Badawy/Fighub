@@ -46,3 +46,11 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Cloudflare Wrangler local account and cache data
+.wrangler/
+
+# Node, Firebase CLI, and local backend artifacts
+**/node_modules/
+firebase-debug.log
+firebase-debug.*.log

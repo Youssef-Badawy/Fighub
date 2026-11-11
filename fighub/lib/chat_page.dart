@@ -10,6 +10,7 @@ import 'package:video_player/video_player.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'app_localizations.dart';
+import 'auth_guard.dart';
 import 'chat_service.dart';
 import 'cloudinary_service.dart';
 
@@ -33,6 +34,12 @@ class _ChatPageState extends State<ChatPage> {
   final AudioRecorder _audioRecorder = AudioRecorder();
 
   @override
+  void initState() {
+    super.initState();
+    unawaited(_chatService.reconcileChatItems(widget.chatId));
+  }
+
+  @override
   void dispose() {
     _messageController.dispose();
     unawaited(_audioRecorder.dispose());
@@ -40,9 +47,9 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _startVoiceRecording() async {
-    if (_isSending || _isRecording) return;
-
     final isArabic = AppLocalizations.of(context).isArabic;
+    if (!await requireRegisteredAccount(context)) return;
+    if (_isSending || _isRecording) return;
 
     try {
       final hasPermission = await _audioRecorder.hasPermission();
@@ -99,9 +106,9 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _stopAndSendVoiceMessage() async {
-    if (!_isRecording || _isSending) return;
-
     final isArabic = AppLocalizations.of(context).isArabic;
+    if (!await requireRegisteredAccount(context)) return;
+    if (!_isRecording || _isSending) return;
     String? path;
 
     setState(() {
@@ -155,6 +162,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _sendMessage() async {
+    if (!await requireRegisteredAccount(context)) return;
     final message = _messageController.text.trim();
 
     if (message.isEmpty || _isSending) {
@@ -191,9 +199,10 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _pickAndSendMedia() async {
-    if (_isSending) return;
-
     final isArabic = AppLocalizations.of(context).isArabic;
+    if (!await requireRegisteredAccount(context)) return;
+    if (_isSending || !mounted) return;
+
     final selectedType = await showModalBottomSheet<String>(
       context: context,
       builder: (sheetContext) => SafeArea(
@@ -260,6 +269,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _sendQuickMessage(String message) async {
+    if (!await requireRegisteredAccount(context)) return;
     if (_isSending) {
       return;
     }
@@ -288,6 +298,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _showShippingForm(Map<String, dynamic> chatData) async {
+    final isArabic = AppLocalizations.of(context).isArabic;
     final currentUserId = _chatService.currentUserId;
     if (currentUserId == null || currentUserId != chatData['sellerId']) {
       return;
@@ -300,7 +311,9 @@ class _ChatPageState extends State<ChatPage> {
     if (rawItems is List) {
       for (final rawItem in rawItems.whereType<Map>()) {
         final item = Map<String, dynamic>.from(rawItem);
-        if (item['status'] != 'Reserved') continue;
+        if (item['status'] != 'Reserved' && item['status'] != 'Settled') {
+          continue;
+        }
 
         final offerId = (item['offerId'] ?? '').toString();
         final itemId = (item['itemId'] ?? '').toString();
@@ -317,9 +330,50 @@ class _ChatPageState extends State<ChatPage> {
       }
     }
 
-    if (reservedItems.isEmpty) return;
+    if (reservedItems.isEmpty) {
+      // Older product-specific chats predate the combined offerItems list.
+      // Resolve their product directly so shipping is available there too.
+      final legacyProductId = (chatData['productId'] ?? '').toString();
+      final buyerId = (chatData['buyerId'] ?? '').toString();
+      if (legacyProductId.isNotEmpty &&
+          !legacyProductId.startsWith('combined_') &&
+          buyerId.isNotEmpty) {
+        final product = await FirebaseFirestore.instance
+            .collection('products')
+            .doc(legacyProductId)
+            .get();
+        final data = product.data();
+        final isReservedForBuyer =
+            data?['status'] == 'Reserved' && data?['reservedBy'] == buyerId;
+        final isSoldToBuyer =
+            data?['status'] == 'Sold' && data?['soldTo'] == buyerId;
+        if (product.exists && (isReservedForBuyer || isSoldToBuyer)) {
+          reservedItems.add({
+            'source': 'product',
+            'productId': legacyProductId,
+            'itemId': legacyProductId,
+            'itemName': data?['name'] ?? widget.productName,
+            'price': data?['price'] ?? '0',
+            'status': 'Reserved',
+          });
+        }
+      }
+    }
 
-    final isArabic = AppLocalizations.of(context).isArabic;
+    if (reservedItems.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).isArabic
+                  ? 'لا توجد قطع محجوزة جاهزة للشحن في هذه المحادثة.'
+                  : 'There are no reserved items ready for shipping in this chat.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
 
     try {
       final config = await FirebaseFirestore.instance
@@ -562,11 +616,10 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  Future<void> _sellReservedOfferItem(Map<String, dynamic> item) async {
-    final offerId = item['offerId'] as String? ?? '';
+  Future<void> _sellReservedItem(Map<String, dynamic> item) async {
     final itemId = item['itemId'] as String? ?? '';
 
-    if (offerId.isEmpty || itemId.isEmpty) {
+    if (itemId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -583,6 +636,9 @@ class _ChatPageState extends State<ChatPage> {
       await _chatService.markOfferItemSold(
         chatId: widget.chatId,
         itemId: itemId,
+        source: item['source'] as String? ?? '',
+        offerId: item['offerId'] as String?,
+        productId: item['productId'] as String?,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -823,25 +879,57 @@ class _ChatPageState extends State<ChatPage> {
                   : <Map<String, dynamic>>[];
 
               if (offerItems.isEmpty) {
+                final productId = (chatData['productId'] ?? '').toString();
+                final isLegacyProductChat =
+                    productId.isNotEmpty &&
+                    !productId.startsWith('combined_') &&
+                    !productId.startsWith('offer_') &&
+                    !productId.startsWith('direct_');
+                final isSeller =
+                    isLegacyProductChat &&
+                    _chatService.currentUserId != null &&
+                    _chatService.currentUserId == chatData['sellerId'];
                 return Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const CircleAvatar(
-                        child: Icon(Icons.shopping_bag_outlined),
+                      Row(
+                        children: [
+                          const CircleAvatar(
+                            child: Icon(Icons.shopping_bag_outlined),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              widget.productName,
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          widget.productName,
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
+                      if (isSeller) ...[
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: isArabic
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: FilledButton.icon(
+                            onPressed: () => _showShippingForm(chatData),
+                            icon: const Icon(Icons.local_shipping_outlined),
+                            label: Text(
+                              isArabic
+                                  ? 'إرسال البيانات للشحن'
+                                  : 'Send shipping details',
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 );
@@ -856,8 +944,8 @@ class _ChatPageState extends State<ChatPage> {
                   children: [
                     Text(
                       isArabic
-                          ? 'القطع المحجوزة في هذه المحادثة'
-                          : 'Reserved items in this chat',
+                          ? 'القطع في هذه المحادثة'
+                          : 'Items in this chat',
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
@@ -866,7 +954,11 @@ class _ChatPageState extends State<ChatPage> {
                     const SizedBox(height: 10),
                     if (_chatService.currentUserId != null &&
                         _chatService.currentUserId == chatData['sellerId'] &&
-                        offerItems.any((item) => item['status'] == 'Reserved'))
+                        offerItems.any(
+                          (item) =>
+                              item['status'] == 'Reserved' ||
+                              item['status'] == 'Settled',
+                        ))
                       Align(
                         alignment: isArabic
                             ? Alignment.centerRight
@@ -876,7 +968,7 @@ class _ChatPageState extends State<ChatPage> {
                           child: FilledButton.icon(
                             onPressed: () => _showShippingForm(chatData),
                             icon: const Icon(Icons.local_shipping_outlined),
-                            label: Text(isArabic ? 'الشحن' : 'Shipping'),
+                            label: Text(isArabic ? 'إرسال البيانات للشحن' : 'Send shipping details'),
                           ),
                         ),
                       ),
@@ -1029,7 +1121,7 @@ class _ChatPageState extends State<ChatPage> {
                                     height: 32,
                                     child: FilledButton.tonalIcon(
                                       onPressed: () =>
-                                          _sellReservedOfferItem(item),
+                                          _sellReservedItem(item),
                                       icon: const Icon(
                                         Icons.check_circle_outline,
                                         size: 16,

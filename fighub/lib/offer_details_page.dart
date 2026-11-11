@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import 'auth_guard.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'offer_manager_page.dart';
@@ -295,8 +297,10 @@ class OfferDetailsPage extends StatelessWidget {
                                     FirebaseAuth.instance.currentUser?.uid;
 
                                 final isMyReservation =
+                                    item.status == 'Reserved' &&
                                     item.reservedBy != null &&
                                     item.reservedBy == currentUserId;
+                                final isSold = item.status == 'Sold';
 
                                 final waitingIndex =
                                     currentUserId == null
@@ -311,6 +315,14 @@ class OfferDetailsPage extends StatelessWidget {
                                 final isFirstWaiting =
                                     isWaiting &&
                                     waitingIndex == 0;
+
+                                if (isSold) {
+                                  return OutlinedButton.icon(
+                                    onPressed: null,
+                                    icon: const Icon(Icons.check_circle_outline),
+                                    label: const Text('تم البيع'),
+                                  );
+                                }
 
                                 if (isMyReservation) {
                                   return FilledButton.icon(
@@ -393,6 +405,7 @@ class OfferDetailsPage extends StatelessWidget {
                                       item.status == 'Available') {
                                     return FilledButton.icon(
                                       onPressed: () async {
+                                        if (!await requireRegisteredAccount(context)) return;
                                         try {
                                           await OfferService()
                                               .claimWaitingReservation(
@@ -444,10 +457,13 @@ class OfferDetailsPage extends StatelessWidget {
                                 }
 
                                 return FilledButton.icon(
-                                  onPressed: !isActive
+                                  onPressed: !isActive ||
+                                          (item.status == 'Available' &&
+                                              item.waitingUsers.isNotEmpty)
                                       ? null
                                       : item.status == 'Available'
                                           ? () async {
+                                              if (!await requireRegisteredAccount(context)) return;
                                               try {
                                                 await OfferService()
                                                     .reserveItem(
@@ -483,6 +499,7 @@ class OfferDetailsPage extends StatelessWidget {
                                               }
                                             }
                                           : () async {
+                                              if (!await requireRegisteredAccount(context)) return;
                                               try {
                                                 await OfferService()
                                                     .reserveItem(
@@ -523,9 +540,12 @@ class OfferDetailsPage extends StatelessWidget {
                                   label: Text(
                                     !isActive
                                         ? 'العرض لم يبدأ بعد'
+                                        : item.status == 'Available' &&
+                                              item.waitingUsers.isNotEmpty
+                                        ? 'يوجد مشترون في الانتظار'
                                         : item.status == 'Available'
-                                            ? 'احجز القطعة'
-                                            : 'انضم لقائمة الانتظار',
+                                        ? 'احجز القطعة'
+                                        : 'انضم لقائمة الانتظار',
                                   ),
                                 );
                               },

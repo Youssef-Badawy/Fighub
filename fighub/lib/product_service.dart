@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'product_model.dart';
+import 'cloudinary_service.dart';
 
 class ProductService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -59,7 +60,9 @@ class ProductService {
       throw StateError('You can only update your own products.');
     }
 
-    await _productsCollection.doc(productId).update(product.toFirestore());
+    final updates = product.toFirestore()..remove('createdAt');
+
+    await _productsCollection.doc(productId).update(updates);
   }
 
   Future<void> reserveProduct(String productId) async {
@@ -104,6 +107,33 @@ class ProductService {
     });
   }
 
+  Future<void> cancelReservation(String productId) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw StateError('User must be signed in.');
+    }
+    if (productId.isEmpty) {
+      throw ArgumentError('Product ID is required.');
+    }
+
+    final reference = _productsCollection.doc(productId);
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(reference);
+      if (!snapshot.exists) throw StateError('Product not found.');
+
+      final data = snapshot.data()!;
+      if (data['reservedBy'] != user.uid || data['status'] != 'Reserved') {
+        throw StateError('You do not own an active reservation for this product.');
+      }
+
+      transaction.update(reference, {
+        'status': 'Available',
+        'reservedBy': null,
+        'reservedAt': null,
+      });
+    });
+  }
+
   Future<void> deleteProduct(String productId) async {
     final user = _auth.currentUser;
 
@@ -129,6 +159,24 @@ class ProductService {
       throw StateError('You can only delete your own products.');
     }
 
+    final status = data?['status'] as String? ?? 'Available';
+    if (status != 'Available') {
+      throw StateError('Reserved or sold products cannot be deleted.');
+    }
+
+    final rawImages = data?['imagePaths'];
+    final imageUrls = rawImages is List
+        ? rawImages.whereType<String>().toList()
+        : <String>[];
+    final legacyImage = data?['imagePath'] as String?;
+    if (legacyImage != null && legacyImage.isNotEmpty) {
+      imageUrls.add(legacyImage);
+    }
+
+    await CloudinaryService().deleteProductAssets(
+      productId: productId,
+      assetUrls: imageUrls,
+    );
     await _productsCollection.doc(productId).delete();
   }
 

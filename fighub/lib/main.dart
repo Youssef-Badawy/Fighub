@@ -4,25 +4,24 @@ import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'app_localizations.dart';
 import 'app_settings.dart';
 import 'auth_gate.dart';
+import 'auth_guard.dart';
 import 'auth_manager.dart';
 import 'add_product_page.dart';
 import 'create_offer_page.dart';
 import 'offers_page.dart';
-import 'offer_details_page.dart';
+import 'offer_service.dart';
 import 'chat_list_page.dart';
 import 'favorite_service.dart';
 import 'favorites_page.dart';
 import 'firebase_options.dart';
-import 'follow_service.dart';
 import 'interests.dart';
 import 'notification_service.dart';
 import 'notifications_page.dart';
-import 'offer_model.dart';
-import 'offer_service.dart';
 import 'product_details_page.dart';
 import 'product_model.dart';
 import 'product_service.dart';
@@ -41,6 +40,15 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Start in guest mode so browsing does not require an email account.
+  if (FirebaseAuth.instance.currentUser == null) {
+    try {
+      await FirebaseAuth.instance.signInAnonymously();
+    } catch (error) {
+      debugPrint('Anonymous sign-in is unavailable: $error');
+    }
+  }
 
   final settings = AppSettings();
   await settings.loadSettings();
@@ -94,21 +102,78 @@ class _FigHubAppState extends State<FigHubApp> {
     setState(() {});
   }
 
-  ThemeData _lightTheme() {
+  ThemeData _buildTheme(Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
+    final scheme = ColorScheme.fromSeed(
+      seedColor: const Color(0xFF246BCE),
+      brightness: brightness,
+    );
+    final roundedBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: BorderSide(
+        color: scheme.outlineVariant,
+      ),
+    );
+
     return ThemeData(
       useMaterial3: true,
-      colorSchemeSeed: Colors.blue,
-      brightness: Brightness.light,
+      colorScheme: scheme,
+      brightness: brightness,
+      visualDensity: VisualDensity.standard,
+      scaffoldBackgroundColor:
+          isDark ? const Color(0xFF101722) : const Color(0xFFF6F8FC),
+      appBarTheme: const AppBarTheme(
+        centerTitle: false,
+        scrolledUnderElevation: 0,
+        backgroundColor: Colors.transparent,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: scheme.surfaceContainerHighest.withValues(
+          alpha: isDark ? 0.35 : 0.55,
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
+        border: roundedBorder,
+        enabledBorder: roundedBorder,
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: scheme.primary,
+            width: 1.6,
+          ),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 18,
+            vertical: 13,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 13,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
     );
   }
 
-  ThemeData _darkTheme() {
-    return ThemeData(
-      useMaterial3: true,
-      colorSchemeSeed: Colors.blue,
-      brightness: Brightness.dark,
-    );
-  }
+  ThemeData _lightTheme() => _buildTheme(Brightness.light);
+
+  ThemeData _darkTheme() => _buildTheme(Brightness.dark);
 
   @override
   Widget build(BuildContext context) {
@@ -125,8 +190,9 @@ class _FigHubAppState extends State<FigHubApp> {
       ],
       localizationsDelegates: const [
         AppLocalizations.delegate,
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
       ],
       builder: (context, child) {
         return Directionality(
@@ -165,9 +231,6 @@ class _FigHubHomeState extends State<FigHubHome> {
   int _currentIndex = 0;
 
   final List<Product> _products = [];
-  final List<Offer> _recommendedOffers = [];
-  final List<Offer> _offers = [];
-  final List<String> _followingUserIds = [];
   final List<Product> _favorites = [];
   final List<String> _notifications = [];
 
@@ -177,8 +240,6 @@ class _FigHubHomeState extends State<FigHubHome> {
 
   final OneSignalService _oneSignalService =
       OneSignalService();
-  final OfferService _offerService = OfferService();
-  final FollowService _followService = FollowService();
   final FavoriteService _favoriteService = FavoriteService();
   final NotificationService _notificationService =
       NotificationService();
@@ -186,9 +247,6 @@ class _FigHubHomeState extends State<FigHubHome> {
       SellerProfileService();
 
   StreamSubscription<List<Product>>? _productsSubscription;
-  StreamSubscription<List<Offer>>? _offersSubscription;
-  StreamSubscription<List<Offer>>? _recommendedOffersSubscription;
-  StreamSubscription<List<String>>? _followingUsersSubscription;
   StreamSubscription<List<String>>? _favoritesSubscription;
   StreamSubscription<List<Map<String, dynamic>>>?
       _notificationsSubscription;
@@ -199,6 +257,9 @@ class _FigHubHomeState extends State<FigHubHome> {
   final Set<String> _loadingSellerIds = {};
 
   int _unreadNotificationsCount = 0;
+  String? _pushInitializedUserId;
+  String? _subscribedUserId;
+  String? _deletedOffersCleanupUserId;
 
   final List<String> _categories = [
     'All',
@@ -212,59 +273,11 @@ class _FigHubHomeState extends State<FigHubHome> {
   void initState() {
     super.initState();
 
+    widget.authManager.addListener(_onAuthManagerChanged);
     _initializePushNotifications();
 
-    widget.authManager.addListener(_onAuthManagerChanged);
-
-    final currentUser = FirebaseAuth.instance.currentUser;
-
-    if (currentUser != null) {
-      _followingUsersSubscription = _followService
-          .watchFollowingIds(currentUser.uid)
-          .listen((userIds) {
-        if (!mounted) {
-          return;
-        }
-
-        setState(() {
-          _followingUserIds
-            ..clear()
-            ..addAll(userIds);
-        });
-      });
-    }
-
-    _offersSubscription = _offerService
-        .watchOffers()
-        .listen((offers) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _offers
-          ..clear()
-          ..addAll(offers);
-      });
-    });
-
-    final interests = widget.authManager.interests;
-
-    if (interests.isNotEmpty) {
-      _recommendedOffersSubscription = _offerService
-          .watchRecommendedOffers(interests)
-          .listen((offers) {
-        if (!mounted) {
-          return;
-        }
-
-        setState(() {
-          _recommendedOffers
-            ..clear()
-            ..addAll(offers);
-        });
-      });
-    }
+    _subscribeToUserData();
+    unawaited(_cleanupDeletedOffers());
 
     _productsSubscription = _productService
         .watchProducts()
@@ -283,19 +296,97 @@ class _FigHubHomeState extends State<FigHubHome> {
 
       _loadSellerProfiles(products);
     });
+  }
+
+  Future<void> _loadSellerProfiles(
+    List<Product> products,
+  ) async {
+    final sellerIds = products
+        .take(40)
+        .map((product) => product.sellerId)
+        .where((sellerId) => sellerId.isNotEmpty)
+        .toSet()
+        .where((sellerId) =>
+            !_sellerProfiles.containsKey(sellerId) &&
+            !_loadingSellerIds.contains(sellerId))
+        .toList();
+
+    if (sellerIds.isEmpty) return;
+    _loadingSellerIds.addAll(sellerIds);
+
+    try {
+      final profiles = await Future.wait(
+        sellerIds.map(_sellerProfileService.getSellerProfile),
+      );
+      if (!mounted) return;
+
+      setState(() {
+        for (var index = 0; index < sellerIds.length; index++) {
+          final profile = profiles[index];
+          if (profile != null) {
+            _sellerProfiles[sellerIds[index]] = profile;
+          }
+        }
+      });
+    } catch (_) {
+      // Ignore individual seller profile errors.
+    } finally {
+      _loadingSellerIds.removeAll(sellerIds);
+    }
+  }
+
+  void _onAuthManagerChanged() {
+    _subscribeToUserData();
+    unawaited(_cleanupDeletedOffers());
+    if (FirebaseAuth.instance.currentUser?.isAnonymous == false) {
+      _initializePushNotifications();
+    }
+  }
+
+  Future<void> _cleanupDeletedOffers() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null ||
+        user.isAnonymous ||
+        _deletedOffersCleanupUserId == user.uid) {
+      return;
+    }
+
+    _deletedOffersCleanupUserId = user.uid;
+    try {
+      await OfferService().cleanupPreviouslyDeletedOffers();
+    } catch (error, stackTrace) {
+      _deletedOffersCleanupUserId = null;
+      debugPrint('FIGHUB OLD OFFER CLEANUP ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
+  void _subscribeToUserData() {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == _subscribedUserId) return;
+
+    _subscribedUserId = userId;
+    _favoritesSubscription?.cancel();
+    _notificationsSubscription?.cancel();
+
+    if (!mounted) return;
+    setState(() {
+      _favoriteIds.clear();
+      _favorites.clear();
+      _notifications.clear();
+      _unreadNotificationsCount = 0;
+    });
+
+    if (userId == null) return;
 
     _favoritesSubscription = _favoriteService
         .watchFavoriteIds()
         .listen((favoriteIds) {
-      if (!mounted) {
-        return;
-      }
-
+      if (!mounted) return;
       setState(() {
         _favoriteIds
           ..clear()
           ..addAll(favoriteIds);
-
         _refreshFavoritesList();
       });
     });
@@ -303,109 +394,34 @@ class _FigHubHomeState extends State<FigHubHome> {
     _notificationsSubscription = _notificationService
         .watchMyNotifications()
         .listen((notificationList) {
-      if (!mounted) {
-        return;
-      }
-
+      if (!mounted) return;
       final unreadCount = notificationList.where(
-        (notification) {
-          return !(notification['isRead'] as bool? ?? false);
-        },
+        (notification) => !(notification['isRead'] as bool? ?? false),
       ).length;
-
       setState(() {
+        _notifications
+          ..clear()
+          ..addAll(notificationList.map(
+            (notification) => notification['title']?.toString() ?? '',
+          ));
         _unreadNotificationsCount = unreadCount;
       });
     });
   }
 
-  void _onAuthManagerChanged() {
-    final interests = widget.authManager.interests;
-
-    _recommendedOffersSubscription?.cancel();
-    _recommendedOffersSubscription = null;
-
-    if (interests.isEmpty) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _recommendedOffers.clear();
-      });
-
+  Future<void> _initializePushNotifications() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous ||
+        _pushInitializedUserId == user.uid) {
       return;
     }
 
-    _recommendedOffersSubscription = _offerService
-        .watchRecommendedOffers(interests)
-        .listen((offers) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _recommendedOffers
-          ..clear()
-          ..addAll(offers);
-      });
-    });
-  }
-
-  Future<void> _loadSellerProfiles(
-    List<Product> products,
-  ) async {
-    final sellerIds = products
-        .map((product) => product.sellerId)
-        .where((sellerId) => sellerId.isNotEmpty)
-        .toSet();
-
-    for (final sellerId in sellerIds) {
-      if (_sellerProfiles.containsKey(sellerId) ||
-          _loadingSellerIds.contains(sellerId)) {
-        continue;
-      }
-
-      _loadingSellerIds.add(sellerId);
-
-      try {
-        final profile =
-            await _sellerProfileService.getSellerProfile(
-          sellerId,
-        );
-
-        if (!mounted) {
-          return;
-        }
-
-        if (profile != null) {
-          setState(() {
-            _sellerProfiles[sellerId] = profile;
-          });
-        }
-      } catch (_) {
-        // Ignore individual seller profile errors.
-      } finally {
-        _loadingSellerIds.remove(sellerId);
-      }
-    }
-  }
-
-  Future<void> _initializePushNotifications() async {
     try {
       await _pushNotificationService.initialize();
-
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user != null) {
-      await _oneSignalService.initialize(
-        userId: user.uid,
-      );
-    }
+      await _oneSignalService.initialize(userId: user.uid);
+      _pushInitializedUserId = user.uid;
     } catch (error) {
-      debugPrint(
-        'Push notification initialization failed: $error',
-      );
+      debugPrint('Push notification initialization failed: $error');
     }
   }
 
@@ -413,9 +429,6 @@ class _FigHubHomeState extends State<FigHubHome> {
   void dispose() {
     widget.authManager.removeListener(_onAuthManagerChanged);
     _productsSubscription?.cancel();
-    _offersSubscription?.cancel();
-    _followingUsersSubscription?.cancel();
-    _recommendedOffersSubscription?.cancel();
     _favoritesSubscription?.cancel();
     _notificationsSubscription?.cancel();
     super.dispose();
@@ -500,52 +513,6 @@ class _FigHubHomeState extends State<FigHubHome> {
     }
   }
 
-  List<Product> get _followingProducts {
-    if (_followingUserIds.isEmpty) {
-      return const [];
-    }
-
-    final followingIds = _followingUserIds.toSet();
-
-    return _products.where((product) {
-      return followingIds.contains(product.sellerId);
-    }).toList();
-  }
-
-  List<Offer> get _followingOffers {
-    if (_followingUserIds.isEmpty) {
-      return const [];
-    }
-
-    final followingIds = _followingUserIds.toSet();
-
-    return _offers.where((offer) {
-      return followingIds.contains(offer.sellerId);
-    }).toList();
-  }
-
-  List<Product> get _recommendedProducts {
-    final interests = widget.authManager.interests
-        .map((interest) => interest.trim().toLowerCase())
-        .where((interest) => interest.isNotEmpty)
-        .toSet();
-
-    if (interests.isEmpty) {
-      return const [];
-    }
-
-    return _products.where((product) {
-      return interests.any(
-        (interest) {
-          return FigHubInterests.matchesInterest(
-            interest: interest,
-            category: product.category,
-          );
-        },
-      );
-    }).toList();
-  }
-
   List<Product> get _filteredProducts {
     return _products.where((product) {
       final matchesCategory =
@@ -614,8 +581,9 @@ class _FigHubHomeState extends State<FigHubHome> {
   }
 
   Future<void> _openAddProduct() async {
-    final product = await Navigator.push<Product>(
-      context,
+    final navigator = Navigator.of(context);
+    if (!await requireRegisteredAccount(context)) return;
+    final product = await navigator.push<Product>(
       MaterialPageRoute(
         builder: (_) => const AddProductPage(),
       ),
@@ -701,6 +669,41 @@ class _FigHubHomeState extends State<FigHubHome> {
     );
   }
 
+  Future<void> _openSearch() async {
+    final localization = AppLocalizations.of(context);
+    final controller = TextEditingController(text: _searchQuery);
+    final query = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(localization.isArabic ? 'بحث' : 'Search'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            hintText: localization.search,
+            prefixIcon: const Icon(Icons.search),
+          ),
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(localization.isArabic ? 'إلغاء' : 'Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: Text(localization.isArabic ? 'بحث' : 'Search'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (query != null && mounted) {
+      setState(() => _searchQuery = query.trim());
+    }
+  }
+
   Future<void> _openUsers() async {
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -733,8 +736,9 @@ class _FigHubHomeState extends State<FigHubHome> {
   }
 
   Future<void> _openChat() async {
-    await Navigator.push(
-      context,
+    final navigator = Navigator.of(context);
+    if (!await requireRegisteredAccount(context)) return;
+    await navigator.push(
       MaterialPageRoute(
         builder: (_) => ChatListPage(
           productNames: _chatProducts,
@@ -774,6 +778,11 @@ class _FigHubHomeState extends State<FigHubHome> {
           ),
         ),
         actions: [
+          IconButton(
+            onPressed: _openSearch,
+            icon: const Icon(Icons.search),
+            tooltip: localization.isArabic ? 'بحث' : 'Search',
+          ),
           IconButton(
             onPressed: _openUsers,
             icon: const Icon(
@@ -891,483 +900,101 @@ class _FigHubHomeState extends State<FigHubHome> {
   ) {
     final products = _filteredProducts;
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        TextField(
-          onChanged: (value) {
-            setState(() {
-              _searchQuery = value;
-            });
-          },
-          decoration: InputDecoration(
-            hintText: localization.search,
-            prefixIcon: const Icon(Icons.search),
-            border: const OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: 16),
-        SizedBox(
-          height: 42,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: _categories.length,
-            separatorBuilder: (_, _) =>
-                const SizedBox(width: 8),
-            itemBuilder: (context, index) {
-              final category = _categories[index];
-
-              return ChoiceChip(
-                label: Text(
-                  _categoryLabel(
-                    context,
-                    category,
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              if (_searchQuery.isNotEmpty)
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton.icon(
+                    onPressed: () => setState(() => _searchQuery = ''),
+                    icon: const Icon(Icons.close),
+                    label: Text(localization.isArabic ? 'مسح البحث: $_searchQuery' : 'Clear search: $_searchQuery'),
                   ),
                 ),
-                selected:
-                    _selectedCategory == category,
-                onSelected: (_) {
-                  setState(() {
-                    _selectedCategory = category;
-                  });
-                },
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const OffersPage(),
-                ),
-              );
-            },
-            icon: const Icon(Icons.local_offer_outlined),
-            label: const Text('العروض الجماعية'),
-          ),
-        ),
-        const SizedBox(height: 20),
-        if ((_followingProducts.isNotEmpty ||
-                _followingOffers.isNotEmpty) &&
-            _searchQuery.trim().isEmpty &&
-            _selectedCategory == 'All') ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              16,
-              8,
-              16,
-              10,
-            ),
-            child: Text(
-              'From people you follow',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-          ),
-
-          if (_followingProducts.isNotEmpty) ...[
-            SizedBox(
-              height: 190,
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                ),
-                scrollDirection: Axis.horizontal,
-                itemCount: _followingProducts.length,
-                separatorBuilder: (_, _) =>
-                    const SizedBox(width: 12),
-                itemBuilder: (context, index) {
-                  final product =
-                      _followingProducts[index];
-
-                  return SizedBox(
-                    width: 180,
-                    child: _ProductCard(
-                      product: product,
-                      sellerProfile:
-                          _sellerProfiles[product.sellerId],
-                      isFavorite: _favoriteIds.contains(
-                        product.id,
-                      ),
-                      onFavorite: () {
-                        _toggleFavorite(product);
+              SizedBox(
+                height: 42,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _categories.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final category = _categories[index];
+                    return ChoiceChip(
+                      label: Text(_categoryLabel(context, category)),
+                      selected: _selectedCategory == category,
+                      onSelected: (_) {
+                        setState(() => _selectedCategory = category);
                       },
-                      onSellerTap: () {
-                        final seller =
-                            _sellerProfiles[product.sellerId];
-
-                        if (seller == null) {
-                          return;
-                        }
-
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                SellerProfilePage(
-                              sellerId: seller.id,
-                            ),
-                          ),
-                        );
-                      },
-                      onTap: () {
-                        _openProductDetails(product);
-                      },
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-
-          if (_followingOffers.isNotEmpty) ...[
-            const SizedBox(height: 14),
-
-            SizedBox(
-              height: 190,
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                ),
-                scrollDirection: Axis.horizontal,
-                itemCount: _followingOffers.length,
-                separatorBuilder: (_, _) =>
-                    const SizedBox(width: 12),
-                itemBuilder: (context, index) {
-                  final offer =
-                      _followingOffers[index];
-
-                  return SizedBox(
-                    width: 220,
-                    child: Card(
-                      clipBehavior: Clip.antiAlias,
-                      child: InkWell(
-                        onTap: () {
-                          if (offer.id == null ||
-                              offer.id!.isEmpty) {
-                            return;
-                          }
-
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  OfferDetailsPage(
-                                offerId: offer.id!,
-                              ),
-                            ),
-                          );
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
-                            children: [
-                              const Icon(
-                                Icons.local_offer_outlined,
-                                size: 30,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                offer.title,
-                                maxLines: 2,
-                                overflow:
-                                    TextOverflow.ellipsis,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      fontWeight:
-                                          FontWeight.bold,
-                                    ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                offer.description,
-                                maxLines: 3,
-                                overflow:
-                                    TextOverflow.ellipsis,
-                              ),
-                              const Spacer(),
-                              Text(
-                                'View offer',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelLarge,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-
-          const SizedBox(height: 8),
-        ],
-
-        if (_offers.isNotEmpty &&
-            _searchQuery.trim().isEmpty &&
-            _selectedCategory == 'All') ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              16,
-              8,
-              16,
-              10,
-            ),
-            child: Text(
-              'New offers',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-          ),
-          SizedBox(
-            height: 190,
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-              ),
-              scrollDirection: Axis.horizontal,
-              itemCount: _offers.length > 10
-                  ? 10
-                  : _offers.length,
-              separatorBuilder: (_, _) =>
-                  const SizedBox(width: 12),
-              itemBuilder: (context, index) {
-                final offer = _offers[index];
-
-                return SizedBox(
-                  width: 220,
-                  child: Card(
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      onTap: () {
-                        if (offer.id == null ||
-                            offer.id!.isEmpty) {
-                          return;
-                        }
-
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                OfferDetailsPage(
-                              offerId: offer.id!,
-                            ),
-                          ),
-                        );
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
-                          children: [
-                            const Icon(
-                              Icons.new_releases_outlined,
-                              size: 30,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              offer.title,
-                              maxLines: 2,
-                              overflow:
-                                  TextOverflow.ellipsis,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
-                                    fontWeight:
-                                        FontWeight.bold,
-                                  ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              offer.description,
-                              maxLines: 3,
-                              overflow:
-                                  TextOverflow.ellipsis,
-                            ),
-                            const Spacer(),
-                            Text(
-                              'View offer',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .labelLarge,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-
-        if (_recommendedProducts.isNotEmpty &&
-            _searchQuery.trim().isEmpty &&
-            _selectedCategory == 'All') ...[
-          Text(
-            'Recommended for you',
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 190,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: _recommendedProducts.length,
-              separatorBuilder: (_, _) =>
-                  const SizedBox(width: 12),
-              itemBuilder: (context, index) {
-                final product =
-                    _recommendedProducts[index];
-
-                return SizedBox(
-                  width: 320,
-                  child: _ProductCard(
-                    product: product,
-                    sellerProfile:
-                        _sellerProfiles[product.sellerId],
-                    isFavorite:
-                        _isFavorite(product),
-                    onFavorite: () {
-                      _toggleFavorite(product);
-                    },
-                    onTap: () {
-                      _openProductDetails(product);
-                    },
-                    onSellerTap: () {
-                      _openSellerProfile(
-                        product.sellerId,
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 24),
-        ],
-        if (_recommendedOffers.isNotEmpty &&
-            _searchQuery.trim().isEmpty &&
-            _selectedCategory == 'All') ...[
-          Text(
-            'Recommended offers',
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          const SizedBox(height: 12),
-          ..._recommendedOffers.map(
-            (offer) => Padding(
-              padding: const EdgeInsets.only(
-                bottom: 12,
-              ),
-              child: Card(
-                child: ListTile(
-                  leading: const CircleAvatar(
-                    child: Icon(
-                      Icons.local_offer_outlined,
-                    ),
-                  ),
-                  title: Text(
-                    offer.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(
-                    offer.description.isEmpty
-                        ? 'عرض جماعي مناسب لاهتماماتك'
-                        : offer.description,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: const Icon(
-                    Icons.arrow_forward_ios,
-                    size: 16,
-                  ),
-                  onTap: () {
-                    if (offer.id == null ||
-                        offer.id!.isEmpty) {
-                      return;
-                    }
-
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => OfferDetailsPage(
-                          offerId: offer.id!,
-                        ),
-                      ),
                     );
                   },
                 ),
               ),
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
-        if (products.isEmpty)
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.only(
-                top: 80,
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const OffersPage(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.local_offer_outlined),
+                  label: Text(
+                    localization.isArabic ? 'العروض الجماعية' : 'Group offers',
+                  ),
+                ),
               ),
-              child: Text(
-                localization.noProducts,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyLarge,
+              const SizedBox(height: 8),
+            ]),
+          ),
+        ),
+        if (products.isEmpty)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  localization.noProducts,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
               ),
             ),
           )
         else
-          ...products.map(
-            (product) => Padding(
-              padding: const EdgeInsets.only(
-                bottom: 12,
-              ),
-              child: _ProductCard(
-                product: product,
-                sellerProfile:
-                    _sellerProfiles[product.sellerId],
-                isFavorite: _isFavorite(product),
-                onFavorite: () {
-                  _toggleFavorite(product);
-                },
-                onTap: () {
-                  _openProductDetails(product);
-                },
-                onSellerTap: () {
-                  _openSellerProfile(
-                    product.sellerId,
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final product = products[index];
+                  if (index % 20 == 0) {
+                    _loadSellerProfiles(
+                      products.skip(index).take(20).toList(),
+                    );
+                  }
+                  return RepaintBoundary(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _ProductCard(
+                        product: product,
+                        sellerProfile: _sellerProfiles[product.sellerId],
+                        isFavorite: _isFavorite(product),
+                        onFavorite: () => _toggleFavorite(product),
+                        onTap: () => _openProductDetails(product),
+                        onSellerTap: () =>
+                            _openSellerProfile(product.sellerId),
+                      ),
+                    ),
                   );
                 },
+                childCount: products.length,
               ),
             ),
           ),
@@ -1402,7 +1029,9 @@ class _FigHubHomeState extends State<FigHubHome> {
           SizedBox(
             width: 260,
             child: FilledButton.icon(
-              onPressed: () {
+              onPressed: () async {
+                if (!await requireRegisteredAccount(context)) return;
+                if (!mounted) return;
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => const CreateOfferPage(),
@@ -1512,6 +1141,8 @@ class _ProductCard extends StatelessWidget {
           imagePath,
           width: 90,
           height: 90,
+          cacheWidth: 180,
+          cacheHeight: 180,
           fit: BoxFit.cover,
           errorBuilder: (
             context,
@@ -1530,6 +1161,8 @@ class _ProductCard extends StatelessWidget {
         File(imagePath),
         width: 90,
         height: 90,
+        cacheWidth: 180,
+        cacheHeight: 180,
         fit: BoxFit.cover,
         errorBuilder: (
           context,

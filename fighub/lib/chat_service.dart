@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 import 'notification_service.dart';
 import 'worker_push_service.dart';
 
+// Keep chat reservation updates and settlement history in one shared thread.
 class ChatService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -12,6 +14,27 @@ class ChatService {
   final NotificationService _notificationService = NotificationService();
 
   final WorkerPushService _workerPushService = WorkerPushService();
+
+  Future<void> _notifySafely({
+    required String userId,
+    required String title,
+    required String message,
+    String? productId,
+    String? chatId,
+  }) async {
+    try {
+      await _notificationService.addNotification(
+        userId: userId,
+        title: title,
+        message: message,
+        productId: productId,
+        chatId: chatId,
+      );
+    } catch (error, stackTrace) {
+      debugPrint('FIGHUB CHAT NOTIFICATION ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
 
   String? get currentUserId {
     return _auth.currentUser?.uid;
@@ -31,6 +54,44 @@ class ChatService {
     return '${productId}_${participants[0]}_${participants[1]}';
   }
 
+  Future<String> _resolveCombinedChatId({
+    required String buyerId,
+    required String sellerId,
+  }) async {
+    final participants = [buyerId, sellerId]..sort();
+    final legacyChatId = 'offer_${participants[0]}_${participants[1]}';
+    final legacySnapshot = await _firestore
+        .collection('chats')
+        .doc(legacyChatId)
+        .get();
+
+    if (!legacySnapshot.exists) return legacyChatId;
+
+    final data = legacySnapshot.data() ?? {};
+    final rawParticipants = data['participants'];
+    final hasBothParticipants =
+        rawParticipants is List &&
+        rawParticipants.contains(buyerId) &&
+        rawParticipants.contains(sellerId);
+
+    if (hasBothParticipants &&
+        data['buyerId'] == buyerId &&
+        data['sellerId'] == sellerId) {
+      return legacyChatId;
+    }
+
+    // Older pair-only chat IDs cannot represent purchases in both
+    // directions. Keep the existing conversation intact and create a
+    // separate, role-consistent thread for the opposite direction.
+    if (hasBothParticipants &&
+        data['buyerId'] == sellerId &&
+        data['sellerId'] == buyerId) {
+      return '${legacyChatId}_buyer_$buyerId';
+    }
+
+    throw StateError('Existing chat participants do not match this order.');
+  }
+
   Future<String> getOrCreateChat({
     required String productId,
     required String productName,
@@ -41,42 +102,42 @@ class ChatService {
     if (user == null) {
       throw StateError('User must be signed in.');
     }
-
     if (productId.isEmpty) {
       throw ArgumentError('Product ID is required.');
     }
-
     if (sellerId.isEmpty) {
       throw ArgumentError('Seller ID is required.');
     }
-
     if (sellerId == user.uid) {
       throw StateError('You cannot start a chat with yourself.');
     }
 
-    final chatId = createChatId(
-      productId: productId,
+    // Product inquiries and reservations from offers/products for the same
+    // buyer-seller pair must use the same conversation document.
+    final chatId = await _resolveCombinedChatId(
       buyerId: user.uid,
       sellerId: sellerId,
     );
-
     final chatReference = _firestore.collection('chats').doc(chatId);
-
     final chatDocument = await chatReference.get();
 
     if (!chatDocument.exists) {
       await chatReference.set({
-        'productId': productId,
-        'productName': productName,
+        'productId': 'combined_$chatId',
+        'productName': 'حساب المشتريات',
         'buyerId': user.uid,
         'sellerId': sellerId,
         'participants': [user.uid, sellerId],
+        'offerItems': <Map<String, dynamic>>[],
+        'settlementBuyerConfirmed': false,
+        'settlementSellerConfirmed': false,
+        'settledOrders': <Map<String, dynamic>>[],
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-        'lastMessage': '',
+        'lastMessage': 'محادثة بخصوص $productName',
       });
 
-      await _notificationService.addNotification(
+      await _notifySafely(
         userId: sellerId,
         title: 'محادثة جديدة',
         message: 'بدأ مشتري محادثة بخصوص $productName.',
@@ -84,6 +145,55 @@ class ChatService {
         chatId: chatId,
       );
     }
+
+    return chatId;
+  }
+
+  Future<String> getOrCreateDirectChat({required String otherUserId}) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw StateError('User must be signed in.');
+    }
+    if (otherUserId.isEmpty || otherUserId == user.uid) {
+      throw ArgumentError('A different user is required.');
+    }
+
+    // Direct messages and marketplace reservations must share the same
+    // role-consistent conversation for this buyer/seller pair.
+    final chatId = await _resolveCombinedChatId(
+      buyerId: user.uid,
+      sellerId: otherUserId,
+    );
+    final reference = _firestore.collection('chats').doc(chatId);
+    final snapshot = await reference.get();
+
+    if (snapshot.exists) {
+      final data = snapshot.data() ?? {};
+      final participants = data['participants'];
+      if (participants is! List ||
+          !participants.contains(user.uid) ||
+          !participants.contains(otherUserId) ||
+          data['buyerId'] != user.uid ||
+          data['sellerId'] != otherUserId) {
+        throw StateError('Chat participants do not match this conversation.');
+      }
+      return chatId;
+    }
+
+    await reference.set({
+      'productId': 'combined_$chatId',
+      'productName': 'حساب المشتريات',
+      'buyerId': user.uid,
+      'sellerId': otherUserId,
+      'participants': [user.uid, otherUserId],
+      'offerItems': <Map<String, dynamic>>[],
+      'settlementBuyerConfirmed': false,
+      'settlementSellerConfirmed': false,
+      'settledOrders': <Map<String, dynamic>>[],
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'lastMessage': '',
+    });
 
     return chatId;
   }
@@ -96,7 +206,9 @@ class ChatService {
     required String sellerId,
   }) async {
     final user = _auth.currentUser;
-    if (user == null) throw StateError('User must be signed in.');
+    if (user == null) {
+      throw StateError('User must be signed in.');
+    }
     if (productId.isEmpty || sellerId.isEmpty) {
       throw ArgumentError('Product ID and seller ID are required.');
     }
@@ -104,8 +216,10 @@ class ChatService {
       throw StateError('You cannot reserve your own product.');
     }
 
-    final participants = [user.uid, sellerId]..sort();
-    final chatId = 'offer_${participants[0]}_${participants[1]}';
+    final chatId = await _resolveCombinedChatId(
+      buyerId: user.uid,
+      sellerId: sellerId,
+    );
     final ref = _firestore.collection('chats').doc(chatId);
     final newItem = <String, dynamic>{
       'source': 'product',
@@ -156,15 +270,23 @@ class ChatService {
                 .toList()
           : <Map<String, dynamic>>[];
 
-      if (items.any(
+      final existingIndex = items.indexWhere(
         (item) => item['source'] == 'product' && item['productId'] == productId,
-      )) {
-        return;
+      );
+
+      if (existingIndex >= 0) {
+        if (items[existingIndex]['status'] != 'Cancelled') {
+          return;
+        }
+        items[existingIndex] = newItem;
+      } else {
+        items.add(newItem);
       }
 
-      items.add(newItem);
       transaction.update(ref, {
         'offerItems': items,
+        'settlementBuyerConfirmed': false,
+        'settlementSellerConfirmed': false,
         'updatedAt': FieldValue.serverTimestamp(),
         'lastMessage': 'تم حجز $productName',
       });
@@ -172,7 +294,7 @@ class ChatService {
     });
 
     if (addedNewItem) {
-      await _notificationService.addNotification(
+      await _notifySafely(
         userId: sellerId,
         title: 'حجز منتج جديد',
         message: 'تم حجز $productName بواسطة مشتري.',
@@ -182,6 +304,61 @@ class ChatService {
     }
 
     return chatId;
+  }
+
+  Future<void> removeReservedProductFromChat({
+    required String productId,
+    required String sellerId,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw StateError('User must be signed in.');
+    }
+    if (productId.isEmpty || sellerId.isEmpty || user.uid == sellerId) {
+      return;
+    }
+
+    final chatId = await _resolveCombinedChatId(
+      buyerId: user.uid,
+      sellerId: sellerId,
+    );
+    final reference = _firestore.collection('chats').doc(chatId);
+
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(reference);
+      if (!snapshot.exists) {
+        return;
+      }
+
+      final data = snapshot.data()!;
+      final rawItems = data['offerItems'];
+      final items = rawItems is List
+          ? rawItems
+                .whereType<Map>()
+                .map((item) => Map<String, dynamic>.from(item))
+                .toList()
+          : <Map<String, dynamic>>[];
+
+      var changed = false;
+      for (final item in items) {
+        if (item['source'] == 'product' &&
+            item['productId'] == productId &&
+            item['status'] == 'Reserved') {
+          item['status'] = 'Cancelled';
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        transaction.update(reference, {
+          'offerItems': items,
+          'settlementBuyerConfirmed': false,
+          'settlementSellerConfirmed': false,
+          'updatedAt': FieldValue.serverTimestamp(),
+          'lastMessage': 'تم إلغاء حجز منتج',
+        });
+      }
+    });
   }
 
   Future<String> addReservedOfferItemToChat({
@@ -201,8 +378,10 @@ class ChatService {
       throw StateError('Buyer and seller must be different.');
     }
 
-    final participants = [user.uid, sellerId]..sort();
-    final chatId = 'offer_${participants[0]}_${participants[1]}';
+    final chatId = await _resolveCombinedChatId(
+      buyerId: user.uid,
+      sellerId: sellerId,
+    );
     final ref = _firestore.collection('chats').doc(chatId);
     final newItem = <String, dynamic>{
       'source': 'offer',
@@ -298,7 +477,7 @@ class ChatService {
     });
 
     if (added) {
-      await _notificationService.addNotification(
+      await _notifySafely(
         userId: sellerId,
         title: 'حجز قطعة جديدة',
         message: 'تم حجز $itemName من العرض.',
@@ -318,10 +497,11 @@ class ChatService {
     if (user == null) throw StateError('User must be signed in.');
     if (offerId.isEmpty || itemId.isEmpty || sellerId.isEmpty) return;
 
-    final participants = [user.uid, sellerId]..sort();
-    final ref = _firestore
-        .collection('chats')
-        .doc('offer_${participants[0]}_${participants[1]}');
+    final chatId = await _resolveCombinedChatId(
+      buyerId: user.uid,
+      sellerId: sellerId,
+    );
+    final ref = _firestore.collection('chats').doc(chatId);
 
     await _firestore.runTransaction((transaction) async {
       final snapshot = await transaction.get(ref);
@@ -422,9 +602,14 @@ class ChatService {
   Future<void> markOfferItemSold({
     required String chatId,
     required String itemId,
+    required String source,
+    String? offerId,
+    String? productId,
   }) async {
     final user = _auth.currentUser;
-    if (user == null) throw StateError('User must be signed in.');
+    if (user == null) {
+      throw StateError('User must be signed in.');
+    }
     if (chatId.isEmpty || itemId.isEmpty) {
       throw ArgumentError('Chat ID and item ID are required.');
     }
@@ -433,7 +618,9 @@ class ChatService {
 
     await _firestore.runTransaction((transaction) async {
       final chatSnapshot = await transaction.get(chatRef);
-      if (!chatSnapshot.exists) throw StateError('Chat not found.');
+      if (!chatSnapshot.exists) {
+        throw StateError('Chat not found.');
+      }
 
       final chat = chatSnapshot.data()!;
       final buyerId = chat['buyerId'] as String? ?? '';
@@ -454,46 +641,77 @@ class ChatService {
                 .toList()
           : <Map<String, dynamic>>[];
 
-      final index = items.indexWhere(
-        (item) =>
-            item['itemId'] == itemId &&
-            item['source'] == 'offer' &&
-            item['status'] == 'Reserved',
-      );
+      final index = items.indexWhere((item) {
+        if (item['itemId'] != itemId ||
+            item['status'] != 'Reserved' ||
+            item['source'] != source) {
+          return false;
+        }
+        if (source == 'offer') return item['offerId'] == offerId;
+        if (source == 'product') {
+          return (item['productId'] as String? ?? item['itemId']) ==
+              (productId ?? itemId);
+        }
+        return false;
+      });
 
       if (index == -1) {
         throw StateError('This item is not actively reserved in this chat.');
       }
 
       final selected = Map<String, dynamic>.from(items[index]);
-      final offerId = selected['offerId'] as String? ?? '';
-      if (offerId.isEmpty || selected['reservedBy'] != buyerId) {
+      if (selected['reservedBy'] != buyerId) {
         throw StateError('Invalid item reservation details.');
       }
 
-      final itemRef = _firestore
-          .collection('offers')
-          .doc(offerId)
-          .collection('items')
-          .doc(itemId);
-      final reservationRef = itemRef.collection('reservations').doc(buyerId);
+      final itemSource = selected['source'];
+      DocumentReference<Map<String, dynamic>>? offerItemRef;
+      DocumentReference<Map<String, dynamic>>? reservationRef;
+      DocumentReference<Map<String, dynamic>>? productRef;
+      late DocumentSnapshot<Map<String, dynamic>> sourceSnapshot;
+      DocumentSnapshot<Map<String, dynamic>>? reservationSnapshot;
 
-      // Read all documents before writing within the transaction.
-      final itemSnapshot = await transaction.get(itemRef);
-      final reservationSnapshot = await transaction.get(reservationRef);
-
-      if (!itemSnapshot.exists || !reservationSnapshot.exists) {
-        throw StateError('Item or reservation no longer exists.');
+      if (itemSource == 'offer') {
+        final offerId = selected['offerId'] as String? ?? '';
+        if (offerId.isEmpty) {
+          throw StateError('Offer item information is incomplete.');
+        }
+        offerItemRef = _firestore
+            .collection('offers')
+            .doc(offerId)
+            .collection('items')
+            .doc(itemId);
+        reservationRef = offerItemRef.collection('reservations').doc(buyerId);
+        sourceSnapshot = await transaction.get(offerItemRef);
+        reservationSnapshot = await transaction.get(reservationRef);
+      } else if (itemSource == 'product') {
+        final productId = selected['productId'] as String? ?? itemId;
+        if (productId.isEmpty) {
+          throw StateError('Product information is incomplete.');
+        }
+        productRef = _firestore.collection('products').doc(productId);
+        sourceSnapshot = await transaction.get(productRef);
+      } else {
+        throw StateError('Unsupported reserved item type.');
       }
 
-      final sourceItem = itemSnapshot.data()!;
-      final reservation = reservationSnapshot.data()!;
+      if (!sourceSnapshot.exists) {
+        throw StateError('Reserved item no longer exists.');
+      }
 
-      if (sourceItem['status'] != 'Reserved' ||
-          sourceItem['reservedBy'] != buyerId ||
-          reservation['userId'] != buyerId ||
-          reservation['status'] != 'Active') {
+      final sourceData = sourceSnapshot.data()!;
+      if (sourceData['status'] != 'Reserved' ||
+          sourceData['reservedBy'] != buyerId) {
         throw StateError('The reservation is no longer active.');
+      }
+
+      if (itemSource == 'offer') {
+        final reservation = reservationSnapshot?.data();
+        if (reservation == null ||
+            reservation['userId'] != buyerId ||
+            reservation['status'] != 'Active') {
+          throw StateError('The offer reservation is no longer active.');
+        }
       }
 
       selected['status'] = 'Settled';
@@ -513,20 +731,29 @@ class ChatService {
         'sellerId': sellerId,
       });
 
-      transaction.update(itemRef, {
-        'status': 'Sold',
-        'soldTo': buyerId,
-        'soldAt': FieldValue.serverTimestamp(),
-      });
-
-      transaction.update(reservationRef, {
-        'status': 'Settled',
-        'settledAt': FieldValue.serverTimestamp(),
-      });
+      if (itemSource == 'offer') {
+        transaction.update(offerItemRef!, {
+          'status': 'Sold',
+          'soldTo': buyerId,
+          'soldAt': FieldValue.serverTimestamp(),
+        });
+        transaction.update(reservationRef!, {
+          'status': 'Settled',
+          'settledAt': FieldValue.serverTimestamp(),
+        });
+      } else {
+        transaction.update(productRef!, {
+          'status': 'Sold',
+          'soldTo': buyerId,
+          'soldAt': FieldValue.serverTimestamp(),
+        });
+      }
 
       transaction.update(chatRef, {
         'offerItems': items,
         'settledOrders': history,
+        'settlementBuyerConfirmed': false,
+        'settlementSellerConfirmed': false,
         'updatedAt': FieldValue.serverTimestamp(),
         'lastMessage': 'تم بيع قطعة واحدة',
       });
@@ -689,8 +916,10 @@ class ChatService {
       throw StateError('Only the seller can open this offer chat.');
     }
 
-    final participants = [buyerId, sellerId]..sort();
-    final chatId = 'offer_${participants[0]}_${participants[1]}';
+    final chatId = await _resolveCombinedChatId(
+      buyerId: buyerId,
+      sellerId: sellerId,
+    );
     final ref = _firestore.collection('chats').doc(chatId);
 
     final item = <String, dynamic>{
@@ -802,7 +1031,7 @@ class ChatService {
     });
 
     if (newlyAdded) {
-      await _notificationService.addNotification(
+      await _notifySafely(
         userId: buyerId,
         title: 'محادثة العرض',
         message: 'تم تحديث تفاصيل القطعة: $itemName.',
@@ -812,6 +1041,152 @@ class ChatService {
     }
 
     return chatId;
+  }
+
+  /// Reconciles copied reservation snapshots against their source records.
+  /// Deleted/cancelled items are hidden from the active order total; messages
+  /// and settled-order history are deliberately left untouched.
+  Future<void> reconcileChatItems(String chatId) async {
+    final user = _auth.currentUser;
+    if (user == null || chatId.isEmpty) return;
+
+    final chatRef = _firestore.collection('chats').doc(chatId);
+    try {
+      final initial = await chatRef.get();
+      if (!initial.exists) return;
+      final initialData = initial.data() ?? {};
+      final buyerId = initialData['buyerId'] as String? ?? '';
+      final sellerId = initialData['sellerId'] as String? ?? '';
+      if (user.uid != buyerId && user.uid != sellerId) return;
+
+      await _firestore.runTransaction((transaction) async {
+        final chatSnapshot = await transaction.get(chatRef);
+        if (!chatSnapshot.exists) return;
+        final chat = chatSnapshot.data() ?? {};
+        final rawItems = chat['offerItems'];
+        if (rawItems is! List) return;
+
+        final items = rawItems
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+        final currentBuyerId = chat['buyerId'] as String? ?? '';
+        if (currentBuyerId.isEmpty) return;
+
+        final offerRefs = <String, DocumentReference<Map<String, dynamic>>>{};
+        final offerItemRefs = <String, DocumentReference<Map<String, dynamic>>>{};
+        final reservationRefs = <String, DocumentReference<Map<String, dynamic>>>{};
+        final productRefs = <String, DocumentReference<Map<String, dynamic>>>{};
+
+        for (final item in items.where((item) => item['status'] == 'Reserved')) {
+          final source = item['source'] as String? ??
+              (item['offerId'] != null ? 'offer' :
+               item['productId'] != null ? 'product' : '');
+          final itemId = item['itemId'] as String? ?? '';
+          if (source == 'offer') {
+            final offerId = item['offerId'] as String? ?? '';
+            if (offerId.isEmpty || itemId.isEmpty) continue;
+            offerRefs[offerId] = _firestore.collection('offers').doc(offerId);
+            final itemRef = _firestore.collection('offers').doc(offerId)
+                .collection('items').doc(itemId);
+            offerItemRefs['$offerId::$itemId'] = itemRef;
+            reservationRefs['$offerId::$itemId'] =
+                itemRef.collection('reservations').doc(currentBuyerId);
+          } else if (source == 'product') {
+            final productId = item['productId'] as String? ?? itemId;
+            if (productId.isNotEmpty) {
+              productRefs[productId] =
+                  _firestore.collection('products').doc(productId);
+            }
+          }
+        }
+
+        final offerSnapshots = <String, DocumentSnapshot<Map<String, dynamic>>>{};
+        final itemSnapshots = <String, DocumentSnapshot<Map<String, dynamic>>>{};
+        final reservationSnapshots = <String, DocumentSnapshot<Map<String, dynamic>>>{};
+        final productSnapshots = <String, DocumentSnapshot<Map<String, dynamic>>>{};
+
+        for (final entry in offerRefs.entries) {
+          offerSnapshots[entry.key] = await transaction.get(entry.value);
+        }
+        for (final entry in offerItemRefs.entries) {
+          itemSnapshots[entry.key] = await transaction.get(entry.value);
+        }
+        for (final entry in reservationRefs.entries) {
+          reservationSnapshots[entry.key] = await transaction.get(entry.value);
+        }
+        for (final entry in productRefs.entries) {
+          productSnapshots[entry.key] = await transaction.get(entry.value);
+        }
+
+        var changed = false;
+
+        void preserveSoldItem(Map<String, dynamic> item) {
+          item['status'] = 'Settled';
+          changed = true;
+        }
+
+        for (final item in items) {
+          if (item['status'] != 'Reserved') continue;
+          final source = item['source'] as String? ??
+              (item['offerId'] != null ? 'offer' :
+               item['productId'] != null ? 'product' : '');
+          final itemId = item['itemId'] as String? ?? '';
+          if (source.isNotEmpty) item['source'] = source;
+
+          if (source == 'offer') {
+            final offerId = item['offerId'] as String? ?? '';
+            final key = '$offerId::$itemId';
+            final offerData = offerSnapshots[offerId]?.data();
+            final sourceData = itemSnapshots[key]?.data();
+            final reservationData = reservationSnapshots[key]?.data();
+            final wasSoldToBuyer = sourceData?['status'] == 'Sold' &&
+                sourceData?['soldTo'] == currentBuyerId &&
+                reservationData?['status'] == 'Settled';
+            if (wasSoldToBuyer) {
+              preserveSoldItem(item);
+              continue;
+            }
+            final isActive = offerData != null &&
+                offerData['isDeleted'] != true &&
+                sourceData != null &&
+                sourceData['status'] == 'Reserved' &&
+                sourceData['reservedBy'] == currentBuyerId &&
+                reservationData != null &&
+                reservationData['status'] == 'Active';
+            if (!isActive) {
+              item['status'] = 'Cancelled';
+              changed = true;
+            }
+          } else if (source == 'product') {
+            final productId = item['productId'] as String? ?? itemId;
+            final sourceData = productSnapshots[productId]?.data();
+            if (sourceData?['status'] == 'Sold' &&
+                sourceData?['soldTo'] == currentBuyerId) {
+              preserveSoldItem(item);
+              continue;
+            }
+            final isActive = sourceData != null &&
+                sourceData['status'] == 'Reserved' &&
+                sourceData['reservedBy'] == currentBuyerId;
+            if (!isActive) {
+              item['status'] = 'Cancelled';
+              changed = true;
+            }
+          }
+        }
+
+        if (changed) {
+          transaction.update(chatRef, {
+            'offerItems': items,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+      });
+    } catch (error, stackTrace) {
+      debugPrint('FIGHUB CHAT ITEM RECONCILIATION ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   Stream<Map<String, dynamic>?> watchChat(String chatId) {
@@ -870,7 +1245,7 @@ class ChatService {
 
     final recipientId = user.uid == buyerId ? sellerId : buyerId;
 
-    await _messagesCollection(chatId).add({
+    final messageReference = await _messagesCollection(chatId).add({
       'senderId': user.uid,
       'text': message,
       'createdAt': FieldValue.serverTimestamp(),
@@ -881,7 +1256,7 @@ class ChatService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    await _notificationService.addNotification(
+    await _notifySafely(
       userId: recipientId,
       title: 'رسالة جديدة',
       message: '$productName: $message',
@@ -892,6 +1267,8 @@ class ChatService {
     try {
       await _workerPushService.sendPush(
         userId: recipientId,
+        chatId: chatId,
+        messageId: messageReference.id,
         title: 'رسالة جديدة',
         message: '$productName: $message',
       );
@@ -944,7 +1321,7 @@ class ChatService {
         ? label
         : '$label: $trimmedCaption';
 
-    await _messagesCollection(chatId).add({
+    final messageReference = await _messagesCollection(chatId).add({
       'senderId': user.uid,
       'text': trimmedCaption,
       'type': mediaType,
@@ -957,7 +1334,7 @@ class ChatService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    await _notificationService.addNotification(
+    await _notifySafely(
       userId: recipientId,
       title: 'رسالة جديدة',
       message: '$productName: $lastMessage',
@@ -968,6 +1345,8 @@ class ChatService {
     try {
       await _workerPushService.sendPush(
         userId: recipientId,
+        chatId: chatId,
+        messageId: messageReference.id,
         title: 'رسالة جديدة',
         message: '$productName: $lastMessage',
       );
@@ -1135,7 +1514,7 @@ class ChatService {
         .orderBy('updatedAt', descending: true)
         .snapshots()
         .map((snapshot) {
-          return snapshot.docs
+          final visibleChats = snapshot.docs
               .map((document) => {'id': document.id, ...document.data()})
               .where((chat) {
                 final clearedAtMap = chat['clearedAt'];
@@ -1148,8 +1527,52 @@ class ChatService {
                   return true;
                 }
                 return updatedAt.compareTo(cutoff) > 0;
-              })
-              .toList();
+              });
+
+          // Older releases created one chat per product. Prefer the new
+          // buyer/seller combined thread without deleting legacy messages.
+          final chatsByPair = <String, Map<String, dynamic>>{};
+          int rank(Map<String, dynamic> chat) {
+            final productId = chat['productId'] as String? ?? '';
+            if (productId.startsWith('combined_')) return 3;
+            final id = chat['id'] as String? ?? '';
+            if (id.startsWith('offer_')) return 2;
+            return 1;
+          }
+
+          for (final chat in visibleChats) {
+            final buyerId = chat['buyerId'] as String? ?? '';
+            final sellerId = chat['sellerId'] as String? ?? '';
+            if (buyerId.isEmpty || sellerId.isEmpty) {
+              chatsByPair[chat['id'] as String? ?? ''] = chat;
+              continue;
+            }
+
+            final key = '$buyerId::$sellerId';
+            final previous = chatsByPair[key];
+            if (previous == null || rank(chat) > rank(previous)) {
+              chatsByPair[key] = chat;
+            } else if (rank(chat) == rank(previous)) {
+              final currentTime = chat['updatedAt'];
+              final previousTime = previous['updatedAt'];
+              if (currentTime is Timestamp &&
+                  previousTime is Timestamp &&
+                  currentTime.compareTo(previousTime) > 0) {
+                chatsByPair[key] = chat;
+              }
+            }
+          }
+
+          final result = chatsByPair.values.toList();
+          result.sort((a, b) {
+            final aTime = a['updatedAt'];
+            final bTime = b['updatedAt'];
+            if (aTime is Timestamp && bTime is Timestamp) {
+              return bTime.compareTo(aTime);
+            }
+            return 0;
+          });
+          return result;
         });
   }
 

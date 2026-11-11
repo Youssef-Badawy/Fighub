@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'seller_profile_page.dart';
+import 'app_localizations.dart';
 import 'seller_profile_service.dart';
 
 class UsersPage extends StatefulWidget {
@@ -18,21 +21,36 @@ class _UsersPageState extends State<UsersPage> {
       TextEditingController();
 
   String _searchQuery = '';
+  Timer? _searchDebounce;
+  Future<List<SellerProfile>>? _searchFuture;
 
   @override
   void initState() {
     super.initState();
+    _searchController.addListener(_onSearchChanged);
+  }
 
-    _searchController.addListener(() {
+  void _onSearchChanged() {
+    _searchDebounce?.cancel();
+    final query = _searchController.text.trim();
+    setState(() {
+      _searchQuery = query;
+      _searchFuture = null;
+    });
+
+    if (query.length < 2) return;
+
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
       setState(() {
-        _searchQuery =
-            _searchController.text.trim().toLowerCase();
+        _searchFuture = _sellerProfileService.searchSellerProfiles(query);
       });
     });
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -45,22 +63,6 @@ class _UsersPageState extends State<UsersPage> {
         ),
       ),
     );
-  }
-
-  List<SellerProfile> _filterProfiles(
-    List<SellerProfile> profiles,
-  ) {
-    if (_searchQuery.isEmpty) {
-      return profiles;
-    }
-
-    return profiles.where((profile) {
-      final name = profile.name.toLowerCase();
-      final email = profile.email.toLowerCase();
-
-      return name.contains(_searchQuery) ||
-          email.contains(_searchQuery);
-    }).toList();
   }
 
   Widget _buildProfilePhoto(SellerProfile profile) {
@@ -79,92 +81,81 @@ class _UsersPageState extends State<UsersPage> {
 
   @override
   Widget build(BuildContext context) {
+    final localization = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Users',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        title: Text(
+          localization.isArabic ? 'المستخدمون' : 'Users',
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
-      body: StreamBuilder<List<SellerProfile>>(
-        stream: _sellerProfileService.watchAllSellerProfiles(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting &&
-              !snapshot.hasData) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          }
-
-          if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  'Could not load users.\n${snapshot.error}',
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            );
-          }
-
-          final profiles = _filterProfiles(snapshot.data ?? []);
-
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  16,
-                  12,
-                  16,
-                  8,
-                ),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search users',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            onPressed: () {
-                              _searchController.clear();
-                            },
-                            icon: const Icon(Icons.clear),
-                          )
-                        : null,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: profiles.isEmpty
-                    ? Center(
-                        child: Text(
-                          _searchQuery.isEmpty
-                              ? 'No users found.'
-                              : 'No users match your search.',
-                          textAlign: TextAlign.center,
-                        ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: localization.isArabic ? 'ابحث عن مستخدم بالاسم' : 'Search users by name',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        onPressed: _searchController.clear,
+                        icon: const Icon(Icons.clear),
                       )
-                    : ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(
-                          16,
-                          8,
-                          16,
-                          24,
-                        ),
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: _searchQuery.length < 2
+                ? Center(
+                    child: Text(
+                      localization.isArabic
+                          ? 'اكتب حرفين على الأقل للبحث عن مستخدم.'
+                          : 'Type at least two letters to search for a user.',
+                    ),
+                  )
+                : FutureBuilder<List<SellerProfile>>(
+                    future: _searchFuture,
+                    builder: (context, snapshot) {
+                      if (_searchFuture == null ||
+                          snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (snapshot.hasError) {
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Text(
+                              'Could not search users.\n${snapshot.error}',
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        );
+                      }
+                      final profiles = snapshot.data ?? const <SellerProfile>[];
+                      if (profiles.isEmpty) {
+                        return Center(
+                          child: Text(
+                            localization.isArabic
+                                ? 'لا يوجد مستخدمون بهذا الاسم.'
+                                : 'No users match your search.',
+                          ),
+                        );
+                      }
+                      return ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                         itemCount: profiles.length,
-                        separatorBuilder: (_, index) =>
-                            const SizedBox(height: 8),
+                        separatorBuilder: (_, _) => const SizedBox(height: 8),
                         itemBuilder: (context, index) {
                           final profile = profiles[index];
-
                           return Card(
                             child: ListTile(
-                              contentPadding:
-                                  const EdgeInsets.symmetric(
+                              contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 12,
                                 vertical: 6,
                               ),
@@ -176,27 +167,16 @@ class _UsersPageState extends State<UsersPage> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                              subtitle: profile.email.isNotEmpty
-                                  ? Text(
-                                      profile.email,
-                                      maxLines: 1,
-                                      overflow:
-                                          TextOverflow.ellipsis,
-                                    )
-                                  : null,
-                              trailing: const Icon(
-                                Icons.chevron_right,
-                              ),
-                              onTap: () =>
-                                  _openSellerProfile(profile.id),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => _openSellerProfile(profile.id),
                             ),
                           );
                         },
-                      ),
-              ),
-            ],
-          );
-        },
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }
