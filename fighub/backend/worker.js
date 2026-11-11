@@ -48,11 +48,11 @@ function cloudinaryPublicId(assetUrl) {
   }
 
   const publicParts = parts.slice(uploadIndex + 1);
-  if (/^v\\d+$/.test(publicParts[0])) publicParts.shift();
+  if (/^v\d+$/.test(publicParts[0])) publicParts.shift();
   if (publicParts.length === 0) throw new Error('Missing public ID');
 
   const last = publicParts.length - 1;
-  publicParts[last] = publicParts[last].replace(/\\.[^/.]+$/, '');
+  publicParts[last] = publicParts[last].replace(/\.[^/.]+$/, '');
   return { resourceType, publicId: decodeURIComponent(publicParts.join('/')) };
 }
 
