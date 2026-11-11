@@ -100,7 +100,10 @@ async function readFirestoreDocument(path, idToken) {
       `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/${path}`,
       { headers: { Authorization: `Bearer ${idToken}` } },
   );
-  if (!response.ok) return null;
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error('Firestore read failed (' + response.status + ')');
+  }
   return response.json();
 }
 
@@ -141,7 +144,10 @@ async function handleCloudinaryDeletion(body, payload, idToken, env) {
       }
       requestedUrls.add(url);
     }
-    if (readStringField(fields, 'status') !== 'Available') {
+    // Older product documents may not contain a status field. The Flutter
+    // model treats those legacy products as Available, so keep the same rule.
+    const productStatus = readStringField(fields, 'status') || 'Available';
+    if (productStatus !== 'Available') {
       return new Response(JSON.stringify({ error: 'Only available products can be deleted' }), {
         status: 409,
         headers: { 'Content-Type': 'application/json' },
@@ -262,7 +268,7 @@ export default {
         } catch (error) {
           console.error('Cloudinary asset cleanup failed:', error);
           return new Response(
-              JSON.stringify({ error: 'Cloudinary asset cleanup failed' }),
+              JSON.stringify({ error: error.message || 'Cloudinary asset cleanup failed' }),
               {
                 status: 502,
                 headers: { 'Content-Type': 'application/json' },
