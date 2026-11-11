@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'interests.dart';
 import 'offer_model.dart';
 import 'chat_service.dart';
+import 'cloudinary_service.dart';
 
 class OfferService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -71,33 +72,117 @@ class OfferService {
 
   Future<void> deleteOffer(String offerId) async {
     final uid = _uid;
-
     if (offerId.isEmpty) {
       throw ArgumentError('Offer ID is required.');
     }
 
     final offerReference = _offers.doc(offerId);
     final offerSnapshot = await offerReference.get();
-
-    if (!offerSnapshot.exists) {
-      throw StateError('Offer not found.');
-    }
+    if (!offerSnapshot.exists) return;
 
     final offerData = offerSnapshot.data() ?? {};
     if (offerData['sellerId'] != uid) {
       throw StateError('You can only delete your own offers.');
     }
 
-    // Soft-delete the offer from discovery. Keep its items and reservation
-    // documents so existing chats, active reservations, and sale history
-    // continue to work without losing references.
-    if (offerData['isDeleted'] == true) return;
+    // Hide the offer first so no new reservation can race with cleanup.
+    if (offerData['isDeleted'] != true) {
+      await offerReference.update({
+        'isDeleted': true,
+        'deletedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    }
 
-    await offerReference.update({
-      'isDeleted': true,
-      'deletedAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    final itemsSnapshot =
+        await offerReference.collection('items').get();
+    final itemAssets = itemsSnapshot.docs.map((document) {
+      final data = document.data();
+      final rawImages = data['imagePaths'];
+      final urls = rawImages is List
+          ? rawImages.whereType<String>().toList()
+          : <String>[];
+      final legacyImage = data['imagePath'] as String?;
+      if (legacyImage != null && legacyImage.isNotEmpty) {
+        urls.add(legacyImage);
+      }
+      return <String, dynamic>{
+        'itemId': document.id,
+        'assetUrls': urls,
+      };
+    }).toList();
+
+    // Cloudinary is called through the authenticated Worker. Chat media URLs
+    // are never included here, so message attachments remain untouched.
+    await CloudinaryService().deleteOfferAssets(
+      offerId: offerId,
+      items: itemAssets,
+    );
+
+    // Keep conversation messages and completed sales, but remove deleted
+    // offer items from the active combined-order view.
+    final chats = await _firestore
+        .collection('chats')
+        .where('sellerId', isEqualTo: uid)
+        .get();
+    for (var offset = 0; offset < chats.docs.length; offset += 450) {
+      final batch = _firestore.batch();
+      final end = (offset + 450 < chats.docs.length)
+          ? offset + 450
+          : chats.docs.length;
+      for (final chatDocument in chats.docs.sublist(offset, end)) {
+        final chatData = chatDocument.data();
+        final rawItems = chatData['offerItems'];
+        if (rawItems is! List) continue;
+
+        var changed = false;
+        final updatedItems = rawItems.whereType<Map>().map((rawItem) {
+          final item = Map<String, dynamic>.from(rawItem);
+          if (item['offerId'] == offerId &&
+              item['status'] != 'Settled' &&
+              item['status'] != 'Cancelled') {
+            item['status'] = 'Cancelled';
+            changed = true;
+          }
+          return item;
+        }).toList();
+
+        if (changed) {
+          batch.update(chatDocument.reference, {
+            'offerItems': updatedItems,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+      }
+      await batch.commit();
+    }
+
+    // Firestore does not cascade-delete subcollections. Explicitly remove
+    // reservations and item documents after the parent is marked deleted.
+    final documentsToDelete =
+        <DocumentReference<Map<String, dynamic>>>[];
+    for (final itemDocument in itemsSnapshot.docs) {
+      final reservations = await itemDocument.reference
+          .collection('reservations')
+          .get();
+      documentsToDelete.addAll(
+        reservations.docs.map((document) => document.reference),
+      );
+      documentsToDelete.add(itemDocument.reference);
+    }
+
+    for (var offset = 0; offset < documentsToDelete.length; offset += 450) {
+      final batch = _firestore.batch();
+      final end = (offset + 450 < documentsToDelete.length)
+          ? offset + 450
+          : documentsToDelete.length;
+      for (final reference in documentsToDelete.sublist(offset, end)) {
+        batch.delete(reference);
+      }
+      await batch.commit();
+    }
+
+    await offerReference.delete();
   }
 
   Stream<List<Offer>> watchOffers() {
