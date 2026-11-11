@@ -75,15 +75,32 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
       ),
     );
     if (result != true || !mounted) return;
-    await _db.collection('print_businesses').doc(user.uid).set({
-      'ownerId': user.uid,
-      'name': name.text.trim(),
-      'phone': phone.text.trim(),
-      'description': description.text.trim(),
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-      'active': true,
-    }, SetOptions(merge: true));
+    try {
+      await _db.collection('print_businesses').doc(user.uid).set({
+        'ownerId': user.uid,
+        'name': name.text.trim(),
+        'phone': phone.text.trim(),
+        'description': description.text.trim(),
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'active': true,
+      }, SetOptions(merge: true));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم تفعيل حساب الشركة بنجاح')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر تفعيل حساب الشركة: $error')),
+        );
+      }
+    } finally {
+      name.dispose();
+      phone.dispose();
+      description.dispose();
+    }
   }
 
   @override
@@ -493,7 +510,12 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
             Expanded(child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _db.collection('print_products').where('sellerId', isEqualTo: widget.businessId).where('active', isEqualTo: true).snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                if (snapshot.hasError) {
+                  return const Center(child: Text('تعذر تحميل منتجات الشركة'));
+                }
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
                 var docs = snapshot.data!.docs;
                 if (widget.initialCategory != null) docs = docs.where((d) => d.data()['category'] == widget.initialCategory).toList();
                 if (docs.isEmpty) return const Center(child: Text('لا توجد منتجات متاحة حاليًا'));
@@ -522,7 +544,17 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
                                 IconButton(
                                   tooltip: 'إخفاء المنتج',
                                   icon: const Icon(Icons.visibility_off_outlined),
-                                  onPressed: () => doc.reference.update({'active': false}),
+                                  onPressed: () async {
+                                    try {
+                                      await doc.reference.update({'active': false});
+                                    } catch (error) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('تعذر إخفاء المنتج: $error')),
+                                        );
+                                      }
+                                    }
+                                  },
                                 ),
                               ],
                             )
@@ -571,7 +603,20 @@ class PrintRequestsPage extends StatelessWidget {
                   subtitle: Text('${data['notes'] ?? ''}\nالعميل: ${data['customerName'] ?? data['customerId']}\nالحالة: ${data['status']}'),
                   isThreeLine: true,
                   trailing: PopupMenuButton<String>(
-                    onSelected: (value) => doc.reference.update({'status': value, 'updatedAt': FieldValue.serverTimestamp()}),
+                    onSelected: (value) async {
+                      try {
+                        await doc.reference.update({
+                          'status': value,
+                          'updatedAt': FieldValue.serverTimestamp(),
+                        });
+                      } catch (error) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('تعذر تحديث حالة الطلب: $error')),
+                          );
+                        }
+                      }
+                    },
                     itemBuilder: (_) => const [
                       PopupMenuItem(value: 'in_progress', child: Text('قيد التنفيذ')),
                       PopupMenuItem(value: 'completed', child: Text('تم التنفيذ')),
