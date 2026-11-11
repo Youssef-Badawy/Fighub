@@ -341,7 +341,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
       String imageUrl = '';
       final selectedImage = result['image'] as XFile?;
       if (selectedImage != null) imageUrl = await CloudinaryService().uploadImage(selectedImage);
-      await _db.collection('print_design_requests').add({
+      final request = await _db.collection('print_design_requests').add({
         'companyId': widget.businessId,
         'companyName': business['name'] ?? '',
         'customerId': user.uid,
@@ -352,7 +352,31 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
         'status': 'new',
         'createdAt': FieldValue.serverTimestamp(),
       });
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرسال طلب التصميم للشركة')));
+      // Also deliver the request in the existing buyer/company conversation,
+      // which triggers the app's normal chat notification.
+      try {
+        final chatId = await ChatService().getOrCreateChat(
+          productId: 'design_${request.id}',
+          productName: 'طلب تصميم ${result['category']}',
+          sellerId: widget.businessId,
+        );
+        await ChatService().sendMessage(
+          chatId: chatId,
+          text: [
+            'طلب تصميم جديد',
+            'المنتج: ${result['category']}',
+            'التفاصيل: ${result['notes']}',
+            if (imageUrl.isNotEmpty) 'صورة التصميم: $imageUrl',
+          ].join('\\n'),
+        );
+      } catch (deliveryError) {
+        debugPrint('PRINT DESIGN CHAT DELIVERY ERROR: $deliveryError');
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم إرسال طلب التصميم للشركة')),
+        );
+      }
     } catch (error) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر إرسال الطلب: $error')));
     } finally {
