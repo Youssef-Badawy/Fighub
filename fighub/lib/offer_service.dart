@@ -114,10 +114,15 @@ class OfferService {
 
     // Cloudinary is called through the authenticated Worker. Chat media URLs
     // are never included here, so message attachments remain untouched.
-    await CloudinaryService().deleteOfferAssets(
-      offerId: offerId,
-      items: itemAssets,
-    );
+    for (var offset = 0; offset < itemAssets.length; offset += 25) {
+      final end = (offset + 25 < itemAssets.length)
+          ? offset + 25
+          : itemAssets.length;
+      await CloudinaryService().deleteOfferAssets(
+        offerId: offerId,
+        items: itemAssets.sublist(offset, end),
+      );
+    }
 
     // Keep conversation messages and completed sales, but remove deleted
     // offer items from the active combined-order view.
