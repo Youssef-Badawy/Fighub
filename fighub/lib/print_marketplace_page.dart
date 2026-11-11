@@ -447,7 +447,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('متجر ${widget.businessId.substring(0, widget.businessId.length > 8 ? 8 : widget.businessId.length)}')),
+      appBar: AppBar(title: const Text('متجر 3D PRINTING')),
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
         stream: _db.collection('print_businesses').doc(widget.businessId).snapshots(),
         builder: (context, businessSnapshot) {
