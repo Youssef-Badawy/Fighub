@@ -834,8 +834,8 @@ class _FigHubHomeState extends State<FigHubHome> {
             label: localization.sell,
           ),
           const NavigationDestination(
-            icon: Icon(Icons.view_in_ar_outlined),
-            selectedIcon: Icon(Icons.view_in_ar),
+            icon: Icon(Icons.print_outlined),
+            selectedIcon: Icon(Icons.print),
             label: '3D PRINTING',
           ),
           NavigationDestination(
