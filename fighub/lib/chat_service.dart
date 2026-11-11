@@ -1043,6 +1043,133 @@ class ChatService {
     return chatId;
   }
 
+  /// Reconciles copied reservation snapshots against their source records.
+  /// Deleted/cancelled items are hidden from the active order total; messages
+  /// and settled-order history are deliberately left untouched.
+  Future<void> reconcileChatItems(String chatId) async {
+    final user = _auth.currentUser;
+    if (user == null || chatId.isEmpty) return;
+
+    final chatRef = _firestore.collection('chats').doc(chatId);
+    try {
+      final initial = await chatRef.get();
+      if (!initial.exists) return;
+      final initialData = initial.data() ?? {};
+      final buyerId = initialData['buyerId'] as String? ?? '';
+      final sellerId = initialData['sellerId'] as String? ?? '';
+      if (user.uid != buyerId && user.uid != sellerId) return;
+
+      await _firestore.runTransaction((transaction) async {
+        final chatSnapshot = await transaction.get(chatRef);
+        if (!chatSnapshot.exists) return;
+        final chat = chatSnapshot.data() ?? {};
+        final rawItems = chat['offerItems'];
+        if (rawItems is! List) return;
+
+        final items = rawItems
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+        final currentBuyerId = chat['buyerId'] as String? ?? '';
+        if (currentBuyerId.isEmpty) return;
+
+        final offerRefs = <String, DocumentReference<Map<String, dynamic>>>{};
+        final offerItemRefs = <String, DocumentReference<Map<String, dynamic>>>{};
+        final reservationRefs = <String, DocumentReference<Map<String, dynamic>>>{};
+        final productRefs = <String, DocumentReference<Map<String, dynamic>>>{};
+
+        for (final item in items.where((item) => item['status'] == 'Reserved')) {
+          final source = item['source'] as String? ??
+              (item['offerId'] != null ? 'offer' :
+               item['productId'] != null ? 'product' : '');
+          final itemId = item['itemId'] as String? ?? '';
+          if (source == 'offer') {
+            final offerId = item['offerId'] as String? ?? '';
+            if (offerId.isEmpty || itemId.isEmpty) continue;
+            offerRefs[offerId] = _firestore.collection('offers').doc(offerId);
+            final itemRef = _firestore.collection('offers').doc(offerId)
+                .collection('items').doc(itemId);
+            offerItemRefs['$offerId::$itemId'] = itemRef;
+            reservationRefs['$offerId::$itemId'] =
+                itemRef.collection('reservations').doc(currentBuyerId);
+          } else if (source == 'product') {
+            final productId = item['productId'] as String? ?? itemId;
+            if (productId.isNotEmpty) {
+              productRefs[productId] =
+                  _firestore.collection('products').doc(productId);
+            }
+          }
+        }
+
+        final offerSnapshots = <String, DocumentSnapshot<Map<String, dynamic>>>{};
+        final itemSnapshots = <String, DocumentSnapshot<Map<String, dynamic>>>{};
+        final reservationSnapshots = <String, DocumentSnapshot<Map<String, dynamic>>>{};
+        final productSnapshots = <String, DocumentSnapshot<Map<String, dynamic>>>{};
+
+        for (final entry in offerRefs.entries) {
+          offerSnapshots[entry.key] = await transaction.get(entry.value);
+        }
+        for (final entry in offerItemRefs.entries) {
+          itemSnapshots[entry.key] = await transaction.get(entry.value);
+        }
+        for (final entry in reservationRefs.entries) {
+          reservationSnapshots[entry.key] = await transaction.get(entry.value);
+        }
+        for (final entry in productRefs.entries) {
+          productSnapshots[entry.key] = await transaction.get(entry.value);
+        }
+
+        var changed = false;
+        for (final item in items) {
+          if (item['status'] != 'Reserved') continue;
+          final source = item['source'] as String? ??
+              (item['offerId'] != null ? 'offer' :
+               item['productId'] != null ? 'product' : '');
+          final itemId = item['itemId'] as String? ?? '';
+
+          if (source == 'offer') {
+            final offerId = item['offerId'] as String? ?? '';
+            final key = '$offerId::$itemId';
+            final offerData = offerSnapshots[offerId]?.data();
+            final sourceData = itemSnapshots[key]?.data();
+            final reservationData = reservationSnapshots[key]?.data();
+            final isActive = offerData != null &&
+                offerData['isDeleted'] != true &&
+                sourceData != null &&
+                sourceData['status'] == 'Reserved' &&
+                sourceData['reservedBy'] == currentBuyerId &&
+                reservationData != null &&
+                reservationData['status'] == 'Active';
+            if (!isActive) {
+              item['status'] = 'Cancelled';
+              changed = true;
+            }
+          } else if (source == 'product') {
+            final productId = item['productId'] as String? ?? itemId;
+            final sourceData = productSnapshots[productId]?.data();
+            final isActive = sourceData != null &&
+                sourceData['status'] == 'Reserved' &&
+                sourceData['reservedBy'] == currentBuyerId;
+            if (!isActive) {
+              item['status'] = 'Cancelled';
+              changed = true;
+            }
+          }
+        }
+
+        if (changed) {
+          transaction.update(chatRef, {
+            'offerItems': items,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+      });
+    } catch (error, stackTrace) {
+      debugPrint('FIGHUB CHAT ITEM RECONCILIATION ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
   Stream<Map<String, dynamic>?> watchChat(String chatId) {
     if (chatId.isEmpty) {
       return Stream.value(null);
@@ -1368,7 +1495,7 @@ class ChatService {
         .orderBy('updatedAt', descending: true)
         .snapshots()
         .map((snapshot) {
-          return snapshot.docs
+          final visibleChats = snapshot.docs
               .map((document) => {'id': document.id, ...document.data()})
               .where((chat) {
                 final clearedAtMap = chat['clearedAt'];
@@ -1381,8 +1508,52 @@ class ChatService {
                   return true;
                 }
                 return updatedAt.compareTo(cutoff) > 0;
-              })
-              .toList();
+              });
+
+          // Older releases created one chat per product. Prefer the new
+          // buyer/seller combined thread without deleting legacy messages.
+          final chatsByPair = <String, Map<String, dynamic>>{};
+          int rank(Map<String, dynamic> chat) {
+            final productId = chat['productId'] as String? ?? '';
+            if (productId.startsWith('combined_')) return 3;
+            final id = chat['id'] as String? ?? '';
+            if (id.startsWith('offer_')) return 2;
+            return 1;
+          }
+
+          for (final chat in visibleChats) {
+            final buyerId = chat['buyerId'] as String? ?? '';
+            final sellerId = chat['sellerId'] as String? ?? '';
+            if (buyerId.isEmpty || sellerId.isEmpty) {
+              chatsByPair[chat['id'] as String? ?? ''] = chat;
+              continue;
+            }
+
+            final key = '$buyerId::$sellerId';
+            final previous = chatsByPair[key];
+            if (previous == null || rank(chat) > rank(previous)) {
+              chatsByPair[key] = chat;
+            } else if (rank(chat) == rank(previous)) {
+              final currentTime = chat['updatedAt'];
+              final previousTime = previous['updatedAt'];
+              if (currentTime is Timestamp &&
+                  previousTime is Timestamp &&
+                  currentTime.compareTo(previousTime) > 0) {
+                chatsByPair[key] = chat;
+              }
+            }
+          }
+
+          final result = chatsByPair.values.toList();
+          result.sort((a, b) {
+            final aTime = a['updatedAt'];
+            final bTime = b['updatedAt'];
+            if (aTime is Timestamp && bTime is Timestamp) {
+              return bTime.compareTo(aTime);
+            }
+            return 0;
+          });
+          return result;
         });
   }
 
