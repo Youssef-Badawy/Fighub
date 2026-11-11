@@ -141,9 +141,13 @@ class OfferService {
         final participants = chatData['participants'];
         if (chatData['sellerId'] != uid ||
             participants is! List ||
-            !participants.contains(uid)) continue;
+            !participants.contains(uid)) {
+          continue;
+        }
         final rawItems = chatData['offerItems'];
-        if (rawItems is! List) continue;
+        if (rawItems is! List) {
+          continue;
+        }
 
         var changed = false;
         final updatedItems = rawItems.whereType<Map>().map((rawItem) {
@@ -165,7 +169,9 @@ class OfferService {
           });
         }
       }
-      if (hasWrites) await batch.commit();
+      if (hasWrites) {
+        await batch.commit();
+      }
     }
 
     // Firestore does not cascade-delete subcollections. Explicitly remove
