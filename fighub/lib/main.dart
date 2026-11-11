@@ -14,6 +14,7 @@ import 'auth_manager.dart';
 import 'add_product_page.dart';
 import 'create_offer_page.dart';
 import 'offers_page.dart';
+import 'offer_service.dart';
 import 'chat_list_page.dart';
 import 'favorite_service.dart';
 import 'favorites_page.dart';
@@ -258,6 +259,7 @@ class _FigHubHomeState extends State<FigHubHome> {
   int _unreadNotificationsCount = 0;
   String? _pushInitializedUserId;
   String? _subscribedUserId;
+  String? _deletedOffersCleanupUserId;
 
   final List<String> _categories = [
     'All',
@@ -275,6 +277,7 @@ class _FigHubHomeState extends State<FigHubHome> {
     _initializePushNotifications();
 
     _subscribeToUserData();
+    unawaited(_cleanupDeletedOffers());
 
     _productsSubscription = _productService
         .watchProducts()
@@ -334,8 +337,27 @@ class _FigHubHomeState extends State<FigHubHome> {
 
   void _onAuthManagerChanged() {
     _subscribeToUserData();
+    unawaited(_cleanupDeletedOffers());
     if (FirebaseAuth.instance.currentUser?.isAnonymous == false) {
       _initializePushNotifications();
+    }
+  }
+
+  Future<void> _cleanupDeletedOffers() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null ||
+        user.isAnonymous ||
+        _deletedOffersCleanupUserId == user.uid) {
+      return;
+    }
+
+    _deletedOffersCleanupUserId = user.uid;
+    try {
+      await OfferService().cleanupPreviouslyDeletedOffers();
+    } catch (error, stackTrace) {
+      _deletedOffersCleanupUserId = null;
+      debugPrint('FIGHUB OLD OFFER CLEANUP ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
     }
   }
 
