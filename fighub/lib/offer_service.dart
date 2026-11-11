@@ -301,7 +301,13 @@ class OfferService {
         final offerData = offerSnapshot.data() ?? {};
         final itemData = itemSnapshot.data() ?? {};
         final sellerId = offerData['sellerId'] as String? ?? '';
-        if (sellerId.isEmpty || sellerId == buyerId) return;
+        if (sellerId.isEmpty ||
+            sellerId == buyerId ||
+            offerData['isDeleted'] == true ||
+            itemData['status'] != 'Reserved' ||
+            itemData['reservedBy'] != buyerId) {
+          return;
+        }
 
         final imagesRaw = itemData['imagePaths'];
         final images = imagesRaw is List
