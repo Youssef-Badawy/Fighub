@@ -89,9 +89,19 @@ async function deleteCloudinaryAsset(assetUrl, env) {
         body: form,
       },
   );
-  const result = await response.json();
+  let result;
+  try {
+    result = await response.json();
+  } catch (_) {
+    throw new Error(
+        'Cloudinary returned an unreadable response (' + response.status + ')',
+    );
+  }
   if (!response.ok || !['ok', 'not found'].includes(result.result)) {
-    throw new Error('Cloudinary asset deletion failed');
+    const detail = result.error?.message || result.result || 'Unknown Cloudinary error';
+    throw new Error(
+        'Cloudinary asset deletion failed (' + response.status + '): ' + detail,
+    );
   }
 }
 
