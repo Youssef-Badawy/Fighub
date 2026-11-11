@@ -152,23 +152,48 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
         final sellerIds = productsSnapshot.data!.docs.map((d) => d.data()['sellerId'] as String? ?? '').where((id) => id.isNotEmpty).toSet().toList();
         if (sellerIds.isEmpty) return const Center(child: Text('لا توجد منتجات في هذا القسم حاليًا'));
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: _db.collection('print_businesses').where(FieldPath.documentId, whereIn: sellerIds.take(10).toList()).snapshots(),
+          // Avoid Firestore whereIn limits: show all active businesses in this category.
+          stream: _db.collection('print_businesses')
+              .where('active', isEqualTo: true)
+              .snapshots(),
           builder: (context, businessesSnapshot) {
-            if (!businessesSnapshot.hasData) return const Center(child: CircularProgressIndicator());
-            final businesses = businessesSnapshot.data!.docs;
+            if (businessesSnapshot.hasError) {
+              return const Center(child: Text('تعذر تحميل الشركات'));
+            }
+            if (!businessesSnapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final businesses = businessesSnapshot.data!.docs
+                .where((business) => sellerIds.contains(business.id))
+                .toList();
+            if (businesses.isEmpty) {
+              return const Center(child: Text('لا توجد شركات في هذا القسم حاليًا'));
+            }
             return ListView(
               padding: const EdgeInsets.all(12),
               children: businesses.map((business) {
                 final data = business.data();
-                final count = productsSnapshot.data!.docs.where((p) => p.data()['sellerId'] == business.id).length;
+                final count = productsSnapshot.data!.docs
+                    .where((p) => p.data()['sellerId'] == business.id)
+                    .length;
                 return Card(
                   child: ListTile(
                     leading: const CircleAvatar(child: Icon(Icons.storefront)),
                     title: Text(data['name']?.toString() ?? 'شركة'),
-                    subtitle: Text('${data['description'] ?? ''}\n$count منتج في قسم $_selectedCategory'),
+                    subtitle: Text(
+                      '${data['description'] ?? ''}\\n$count منتج في قسم $_selectedCategory',
+                    ),
                     isThreeLine: true,
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PrintBusinessPage(businessId: business.id, initialCategory: _selectedCategory))),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => PrintBusinessPage(
+                          businessId: business.id,
+                          initialCategory: _selectedCategory,
+                        ),
+                      ),
+                    ),
                   ),
                 );
               }).toList(),
