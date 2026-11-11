@@ -17,7 +17,6 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   bool notificationsEnabled = true;
-  bool darkModeEnabled = false;
 
   AppLocalizations get l10n => AppLocalizations.of(context);
 
@@ -93,7 +92,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
           SwitchListTile(
             secondary: Icon(
-              darkModeEnabled
+              widget.settings.isDarkMode
                   ? Icons.dark_mode
                   : Icons.light_mode_outlined,
             ),
@@ -103,12 +102,11 @@ class _SettingsPageState extends State<SettingsPage> {
                   ? 'تفعيل الوضع الداكن للتطبيق'
                   : 'Enable dark mode for the app',
             ),
-            value: darkModeEnabled,
-            onChanged: (value) {
-              setState(() {
-                darkModeEnabled = value;
-              });
+            value: widget.settings.isDarkMode,
+            onChanged: (value) async {
+              await widget.settings.setDarkMode(value);
 
+              if (!mounted) return;
               _showInfo(
                 value
                     ? (widget.settings.isArabic
