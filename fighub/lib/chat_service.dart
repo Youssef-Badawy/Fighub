@@ -1120,42 +1120,9 @@ class ChatService {
         }
 
         var changed = false;
-        var historyChanged = false;
-        final rawHistory = chat['settledOrders'];
-        final history = rawHistory is List
-            ? List<dynamic>.from(rawHistory)
-            : <dynamic>[];
-
-        bool historyContains(Map<String, dynamic> item) {
-          for (final rawOrder in history.whereType<Map>()) {
-            final orderItems = rawOrder['items'];
-            if (orderItems is! List) continue;
-            for (final rawSettled in orderItems.whereType<Map>()) {
-              if (item['source'] == 'offer' &&
-                  rawSettled['offerId'] == item['offerId'] &&
-                  rawSettled['itemId'] == item['itemId']) {
-                return true;
-              }
-              if (item['source'] == 'product' &&
-                  rawSettled['productId'] == item['productId']) {
-                return true;
-              }
-            }
-          }
-          return false;
-        }
 
         void preserveSoldItem(Map<String, dynamic> item) {
           item['status'] = 'Settled';
-          if (!historyContains(item)) {
-            history.add({
-              'items': [Map<String, dynamic>.from(item)],
-              'settledAt': FieldValue.serverTimestamp(),
-              'buyerId': currentBuyerId,
-              'sellerId': chat['sellerId'],
-            });
-            historyChanged = true;
-          }
           changed = true;
         }
 
@@ -1165,6 +1132,7 @@ class ChatService {
               (item['offerId'] != null ? 'offer' :
                item['productId'] != null ? 'product' : '');
           final itemId = item['itemId'] as String? ?? '';
+          if (source.isNotEmpty) item['source'] = source;
 
           if (source == 'offer') {
             final offerId = item['offerId'] as String? ?? '';
@@ -1211,7 +1179,6 @@ class ChatService {
         if (changed) {
           transaction.update(chatRef, {
             'offerItems': items,
-            if (historyChanged) 'settledOrders': history,
             'updatedAt': FieldValue.serverTimestamp(),
           });
         }
