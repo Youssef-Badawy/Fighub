@@ -339,12 +339,19 @@ service cloud.firestore {
                       );
 
         allow delete: if request.auth != null
-                      && resource.data.status == 'Available'
-                      && resource.data.get('waitingUsers', []).size() == 0
                       && get(
                         /databases/$(database)/documents/offers/$(offerId)
-                      ).data.sellerId
-                         == request.auth.uid;
+                      ).data.sellerId == request.auth.uid
+                      && (
+                        get(
+                          /databases/$(database)/documents/offers/$(offerId)
+                        ).data.get('isDeleted', false) == true
+                        ||
+                        (
+                          resource.data.status == 'Available'
+                          && resource.data.get('waitingUsers', []).size() == 0
+                        )
+                      );
 
         match /reservations/{reservationId} {
 
@@ -470,11 +477,15 @@ service cloud.firestore {
                         );
 
           allow delete: if request.auth != null
-                        && resource.data.status == 'Cancelled'
                         && get(
                           /databases/$(database)/documents/offers/$(offerId)
-                        ).data.sellerId
-                           == request.auth.uid;
+                        ).data.sellerId == request.auth.uid
+                        && (
+                          get(
+                            /databases/$(database)/documents/offers/$(offerId)
+                          ).data.get('isDeleted', false) == true
+                          || resource.data.status == 'Cancelled'
+                        );
         }
       }
     }
