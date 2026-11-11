@@ -28,6 +28,7 @@ import 'product_service.dart';
 import 'push_notification_service.dart';
 import 'one_signal_service.dart';
 import 'profile_page.dart';
+import 'print_marketplace_page.dart';
 import 'search_service.dart';
 import 'seller_dashboard_page.dart';
 import 'seller_profile_page.dart';
@@ -766,6 +767,7 @@ class _FigHubHomeState extends State<FigHubHome> {
       _buildHome(localization),
       _buildFavoritesTab(),
       _buildSellTab(localization),
+      const PrintMarketplacePage(),
       _buildChatTab(localization),
     ];
 
@@ -806,7 +808,7 @@ class _FigHubHomeState extends State<FigHubHome> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) {
-          if (index == 3) {
+          if (index == 4) {
             _openChat();
             return;
           }
@@ -830,6 +832,11 @@ class _FigHubHomeState extends State<FigHubHome> {
             icon: const Icon(Icons.sell_outlined),
             selectedIcon: const Icon(Icons.sell),
             label: localization.sell,
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.view_in_ar_outlined),
+            selectedIcon: Icon(Icons.view_in_ar),
+            label: '3D PRINTING',
           ),
           NavigationDestination(
             icon: const Icon(
