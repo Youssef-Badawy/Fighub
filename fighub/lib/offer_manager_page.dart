@@ -43,7 +43,7 @@ class OfferManagerPage extends StatelessWidget {
                   return AlertDialog(
                     title: const Text('حذف العرض؟'),
                     content: const Text(
-                      'سيختفي العرض من قائمة العروض. ستظل المحادثات والحجوزات السابقة محفوظة. هل تريد المتابعة؟',
+                      'سيختفي العرض، وسيتم حذف القطع والحجوزات التابعة له من بيانات العرض. ستظل رسائل المحادثات وسجل المبيعات المكتمل محفوظين. هل تريد المتابعة؟',
                     ),
                     actions: [
                       TextButton(
