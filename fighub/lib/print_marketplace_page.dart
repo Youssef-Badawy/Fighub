@@ -250,6 +250,66 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
     }
   }
 
+  Future<void> _editStock(
+    DocumentReference<Map<String, dynamic>> reference,
+    int currentStock,
+  ) async {
+    final controller = TextEditingController(text: currentStock.toString());
+    final formKey = GlobalKey<FormState>();
+    final shouldSave = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('تعديل الكمية المتوفرة'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'عدد القطع'),
+            validator: (value) {
+              final quantity = int.tryParse(value ?? '');
+              return quantity == null || quantity < 0
+                  ? 'اكتب كمية صحيحة'
+                  : null;
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.pop(dialogContext, true);
+              }
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+    if (shouldSave != true || !mounted) {
+      controller.dispose();
+      return;
+    }
+    try {
+      await reference.update({
+        'stockQuantity': int.parse(controller.text),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر تحديث الكمية: $error')),
+        );
+      }
+    } finally {
+      controller.dispose();
+    }
+  }
+
   Future<void> _requestDesign(Map<String, dynamic> business) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || user.isAnonymous) {
@@ -396,7 +456,28 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
                       title: Text(data['name']?.toString() ?? ''),
                       subtitle: Text('${data['price']} جنيه • المتاح: $stock\n${data['description'] ?? ''}'),
                       isThreeLine: true,
-                      trailing: _isOwner ? IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => doc.reference.update({'active': false})) : FilledButton(onPressed: stock > 0 && !_busy ? () => _buyProduct(doc.id, data) : null, child: const Text('اطلب')),
+                      trailing: _isOwner
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  tooltip: 'تعديل الكمية',
+                                  icon: const Icon(Icons.inventory_2_outlined),
+                                  onPressed: () => _editStock(doc.reference, stock),
+                                ),
+                                IconButton(
+                                  tooltip: 'إخفاء المنتج',
+                                  icon: const Icon(Icons.visibility_off_outlined),
+                                  onPressed: () => doc.reference.update({'active': false}),
+                                ),
+                              ],
+                            )
+                          : FilledButton(
+                              onPressed: stock > 0 && !_busy
+                                  ? () => _buyProduct(doc.id, data)
+                                  : null,
+                              child: const Text('اطلب'),
+                            ),
                     ));
                   },
                 );
