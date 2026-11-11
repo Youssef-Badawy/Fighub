@@ -350,12 +350,11 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => ChatPage(chatId: chatId, productName: 'حساب المشتريات')));
       }
     } catch (error) {
-      try {
-        final current = await productRef.get();
-        if (current.exists) await productRef.update({'stockQuantity': FieldValue.increment(1)});
-        await orderRef.delete();
-      } catch (_) {}
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر إتمام الطلب: $error')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر إتمام الطلب: $error')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
