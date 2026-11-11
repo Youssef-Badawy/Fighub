@@ -54,9 +54,12 @@ jobs:
         run: flutter analyze --no-fatal-infos
 
       - name: Build Android debug APK
+        id: build_apk
+        if: always()
         run: flutter build apk --debug
 
       - name: Upload Android debug APK
+        if: always() && steps.build_apk.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: fighub-debug-apk-${{ github.sha }}
