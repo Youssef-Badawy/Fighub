@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'chat_service.dart';
+import 'chat_page.dart';
 import 'cloudinary_service.dart';
 
 const printCategories = <Map<String, dynamic>>[
@@ -346,7 +347,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تسجيل الطلب وإضافته للمحادثات. بيانات الشحن متاحة من المحادثة.')));
-        Navigator.of(context).pushNamed('/chat', arguments: chatId);
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => ChatPage(chatId: chatId, productName: 'حساب المشتريات')));
       }
     } catch (error) {
       try {
