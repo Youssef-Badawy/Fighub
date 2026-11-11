@@ -257,7 +257,18 @@ export default {
       const body = await request.json();
 
       if (body.action === 'deleteCloudinaryAssets') {
-        return await handleCloudinaryDeletion(body, payload, idToken, env);
+        try {
+          return await handleCloudinaryDeletion(body, payload, idToken, env);
+        } catch (error) {
+          console.error('Cloudinary asset cleanup failed:', error);
+          return new Response(
+              JSON.stringify({ error: 'Cloudinary asset cleanup failed' }),
+              {
+                status: 502,
+                headers: { 'Content-Type': 'application/json' },
+              },
+          );
+        }
       }
 
       const {
