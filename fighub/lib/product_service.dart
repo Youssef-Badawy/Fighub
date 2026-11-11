@@ -199,7 +199,11 @@ class ProductService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-          return snapshot.docs.map(Product.fromFirestore).toList();
+          return snapshot.docs
+              .where((document) =>
+                  document.data()['productType'] != 'print_order')
+              .map(Product.fromFirestore)
+              .toList();
         });
   }
 
@@ -236,7 +240,11 @@ class ProductService {
         .where('sellerId', isEqualTo: sellerId)
         .snapshots()
         .map((snapshot) {
-          final products = snapshot.docs.map(Product.fromFirestore).toList();
+          final products = snapshot.docs
+              .where((document) =>
+                  document.data()['productType'] != 'print_order')
+              .map(Product.fromFirestore)
+              .toList();
 
           products.sort((a, b) {
             final aId = a.id ?? '';
