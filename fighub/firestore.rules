@@ -8,7 +8,28 @@ service cloud.firestore {
       allow read: if request.auth != null;
 
       allow create: if request.auth != null
-                    && request.resource.data.sellerId == request.auth.uid;
+                    && (
+                      request.resource.data.sellerId == request.auth.uid
+                      || (
+                        request.resource.data.productType == 'print_order'
+                        && request.resource.data.buyerId == request.auth.uid
+                        && request.resource.data.reservedBy == request.auth.uid
+                        && request.resource.data.status == 'Reserved'
+                        && request.resource.data.sourcePrintProductId is string
+                        && exists(
+                          /databases/$(database)/documents/print_products/$(request.resource.data.sourcePrintProductId)
+                        )
+                        && get(
+                          /databases/$(database)/documents/print_products/$(request.resource.data.sourcePrintProductId)
+                        ).data.sellerId == request.resource.data.sellerId
+                        && getAfter(
+                          /databases/$(database)/documents/print_products/$(request.resource.data.sourcePrintProductId)
+                        ).data.stockQuantity
+                           == get(
+                             /databases/$(database)/documents/print_products/$(request.resource.data.sourcePrintProductId)
+                           ).data.stockQuantity - 1
+                      )
+                    );
 
       allow update: if request.auth != null
                     && (
@@ -571,6 +592,65 @@ service cloud.firestore {
                     && request.resource.data.userId
                        == resource.data.userId;
 
+      allow delete: if false;
+    }
+
+    match /print_businesses/{businessId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+                    && request.auth.uid == businessId
+                    && request.resource.data.ownerId == request.auth.uid;
+      allow update: if request.auth != null
+                    && request.auth.uid == businessId
+                    && request.resource.data.ownerId == resource.data.ownerId;
+      allow delete: if false;
+    }
+
+    match /print_products/{printProductId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+                    && request.resource.data.sellerId == request.auth.uid
+                    && exists(
+                      /databases/$(database)/documents/print_businesses/$(request.auth.uid)
+                    );
+      allow update: if request.auth != null
+                    && (
+                      (
+                        resource.data.sellerId == request.auth.uid
+                        && request.resource.data.sellerId == resource.data.sellerId
+                      )
+                      || (
+                        request.auth.uid != resource.data.sellerId
+                        && resource.data.active == true
+                        && resource.data.stockQuantity is int
+                        && request.resource.data.stockQuantity
+                           == resource.data.stockQuantity - 1
+                        && request.resource.data.diff(resource.data)
+                           .affectedKeys().hasOnly(['stockQuantity', 'updatedAt'])
+                      )
+                    );
+      allow delete: if false;
+    }
+
+    match /print_design_requests/{requestId} {
+      allow create: if request.auth != null
+                    && request.resource.data.customerId == request.auth.uid
+                    && request.resource.data.companyId is string
+                    && exists(
+                      /databases/$(database)/documents/print_businesses/$(request.resource.data.companyId)
+                    )
+                    && request.resource.data.status == 'new';
+      allow read: if request.auth != null
+                  && (
+                    resource.data.customerId == request.auth.uid
+                    || resource.data.companyId == request.auth.uid
+                  );
+      allow update: if request.auth != null
+                    && resource.data.companyId == request.auth.uid
+                    && request.resource.data.companyId == resource.data.companyId
+                    && request.resource.data.diff(resource.data)
+                       .affectedKeys().hasOnly(['status', 'updatedAt'])
+                    && request.resource.data.status in ['in_progress', 'completed'];
       allow delete: if false;
     }
 
