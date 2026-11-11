@@ -181,7 +181,7 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
                     leading: const CircleAvatar(child: Icon(Icons.storefront)),
                     title: Text(data['name']?.toString() ?? 'شركة'),
                     subtitle: Text(
-                      '${data['description'] ?? ''}\\n$count منتج في قسم $_selectedCategory',
+                      '${data['description'] ?? ''}\n$count منتج في قسم $_selectedCategory',
                     ),
                     isThreeLine: true,
                     trailing: const Icon(Icons.chevron_right),
@@ -392,7 +392,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
             'المنتج: ${result['category']}',
             'التفاصيل: ${result['notes']}',
             if (imageUrl.isNotEmpty) 'صورة التصميم: $imageUrl',
-          ].join('\\n'),
+          ].join('\n'),
         );
       } catch (deliveryError) {
         debugPrint('PRINT DESIGN CHAT DELIVERY ERROR: $deliveryError');
