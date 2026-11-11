@@ -602,7 +602,10 @@ service cloud.firestore {
                     && request.resource.data.ownerId == request.auth.uid;
       allow update: if request.auth != null
                     && request.auth.uid == businessId
-                    && request.resource.data.ownerId == resource.data.ownerId;
+                    && request.resource.data.ownerId == resource.data.ownerId
+                    && request.resource.data.diff(resource.data)
+                       .affectedKeys()
+                       .hasOnly(['name', 'phone', 'description', 'active', 'updatedAt']);
       allow delete: if false;
     }
 
@@ -618,6 +621,14 @@ service cloud.firestore {
                       (
                         resource.data.sellerId == request.auth.uid
                         && request.resource.data.sellerId == resource.data.sellerId
+                        && request.resource.data.diff(resource.data)
+                           .affectedKeys()
+                           .hasOnly([
+                             'name', 'price', 'stockQuantity', 'category',
+                             'description', 'imageUrl', 'active', 'updatedAt'
+                           ])
+                        && request.resource.data.stockQuantity is int
+                        && request.resource.data.stockQuantity >= 0
                       )
                       || (
                         request.auth.uid != resource.data.sellerId
@@ -640,7 +651,10 @@ service cloud.firestore {
                     && exists(
                       /databases/$(database)/documents/print_businesses/$(request.resource.data.companyId)
                     )
-                    && request.resource.data.status == 'new';
+                    && request.resource.data.status == 'new'
+                    && request.resource.data.category is string
+                    && request.resource.data.imageUrl is string
+                    && request.resource.data.imageUrl.size() > 0;
       allow read: if request.auth != null
                   && (
                     resource.data.customerId == request.auth.uid
