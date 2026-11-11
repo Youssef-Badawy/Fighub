@@ -46,7 +46,7 @@ jobs:
         run: flutter pub get
 
       - name: Format changed Dart files
-        run: dart format lib/main.dart lib/settings_page.dart lib/chat_service.dart lib/chat_page.dart lib/auth_profile_header.dart lib/offer_service.dart lib/product_service.dart lib/cloudinary_service.dart lib/offer_manager_page.dart lib/worker_push_service.dart lib/print_marketplace_page.dart
+        run: dart format lib/main.dart lib/settings_page.dart lib/chat_service.dart lib/chat_page.dart lib/auth_profile_header.dart lib/offer_service.dart lib/product_service.dart lib/cloudinary_service.dart lib/offer_manager_page.dart lib/worker_push_service.dart lib/print_marketplace_page.dart lib/seller_dashboard_page.dart
 
       - name: Analyze entire Flutter app
         run: flutter analyze
