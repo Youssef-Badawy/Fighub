@@ -127,11 +127,14 @@ class OfferService {
         .get();
     for (var offset = 0; offset < chats.docs.length; offset += 450) {
       final batch = _firestore.batch();
+      var hasWrites = false;
       final end = (offset + 450 < chats.docs.length)
           ? offset + 450
           : chats.docs.length;
       for (final chatDocument in chats.docs.sublist(offset, end)) {
         final chatData = chatDocument.data();
+        final participants = chatData['participants'];
+        if (participants is! List || !participants.contains(uid)) continue;
         final rawItems = chatData['offerItems'];
         if (rawItems is! List) continue;
 
@@ -148,13 +151,14 @@ class OfferService {
         }).toList();
 
         if (changed) {
+          hasWrites = true;
           batch.update(chatDocument.reference, {
             'offerItems': updatedItems,
             'updatedAt': FieldValue.serverTimestamp(),
           });
         }
       }
-      await batch.commit();
+      if (hasWrites) await batch.commit();
     }
 
     // Firestore does not cascade-delete subcollections. Explicitly remove
