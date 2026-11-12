@@ -35,34 +35,114 @@ import 'seller_profile_page.dart';
 import 'seller_profile_service.dart';
 import 'users_page.dart';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  runApp(const FigHubBootstrap());
+}
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+class FigHubBootstrap extends StatefulWidget {
+  const FigHubBootstrap({super.key});
 
-  // Start in guest mode so browsing does not require an email account.
-  if (FirebaseAuth.instance.currentUser == null) {
-    try {
-      await FirebaseAuth.instance.signInAnonymously();
-    } catch (error) {
-      debugPrint('Anonymous sign-in is unavailable: $error');
+  @override
+  State<FigHubBootstrap> createState() => _FigHubBootstrapState();
+}
+
+class _FigHubBootstrapState extends State<FigHubBootstrap> {
+  late final Future<({AppSettings settings, AuthManager authManager})> _startup =
+      _initializeApp();
+
+  Future<({AppSettings settings, AuthManager authManager})> _initializeApp() async {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+
+    // Start in guest mode so browsing does not require an email account.
+    if (FirebaseAuth.instance.currentUser == null) {
+      try {
+        await FirebaseAuth.instance.signInAnonymously();
+      } catch (error) {
+        debugPrint('Anonymous sign-in is unavailable: $error');
+      }
     }
+
+    final settings = AppSettings();
+    await settings.loadSettings();
+
+    final authManager = AuthManager();
+    await authManager.load();
+
+    return (settings: settings, authManager: authManager);
   }
 
-  final settings = AppSettings();
-  await settings.loadSettings();
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<({AppSettings settings, AuthManager authManager})>(
+      future: _startup,
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          return FigHubApp(
+            settings: snapshot.data!.settings,
+            authManager: snapshot.data!.authManager,
+          );
+        }
 
-  final authManager = AuthManager();
-  await authManager.load();
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(
+            useMaterial3: true,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: const Color(0xFF246BCE),
+            ),
+          ),
+          home: const FigHubWelcomeScreen(),
+        );
+      },
+    );
+  }
+}
 
-  runApp(
-    FigHubApp(
-      settings: settings,
-      authManager: authManager,
-    ),
-  );
+class FigHubWelcomeScreen extends StatelessWidget {
+  const FigHubWelcomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: Color(0xFF246BCE),
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.toys_outlined, size: 76, color: Colors.white),
+            SizedBox(height: 22),
+            Text(
+              'أهلاً بكم في FigHub',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 25,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 12),
+            Text(
+              'كل ما تحبه من عالم المقتنيات',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white70, fontSize: 15),
+            ),
+            SizedBox(height: 28),
+            SizedBox(
+              width: 26,
+              height: 26,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class FigHubApp extends StatefulWidget {
@@ -230,6 +310,38 @@ class FigHubHome extends StatefulWidget {
 
 class _FigHubHomeState extends State<FigHubHome> {
   int _currentIndex = 0;
+  DateTime? _lastBackPressAt;
+
+  void _handleBackPress() {
+    if (_currentIndex != 0) {
+      setState(() => _currentIndex = 0);
+      return;
+    }
+
+    final now = DateTime.now();
+    final isSecondPress = _lastBackPressAt != null &&
+        now.difference(_lastBackPressAt!) <= const Duration(seconds: 2);
+
+    if (isSecondPress) {
+      SystemNavigator.pop();
+      return;
+    }
+
+    _lastBackPressAt = now;
+    final localization = AppLocalizations.of(context);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            localization.isArabic
+                ? 'اضغط رجوع مرة أخرى للخروج'
+                : 'Press back again to exit',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+  }
 
   final List<Product> _products = [];
   final List<Product> _favorites = [];
@@ -792,7 +904,12 @@ class _FigHubHomeState extends State<FigHubHome> {
       _buildChatTab(localization),
     ];
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _handleBackPress();
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: const Text(
           'FigHub',
@@ -869,6 +986,7 @@ class _FigHubHomeState extends State<FigHubHome> {
             label: localization.messages,
           ),
         ],
+      ),
       ),
     );
   }
