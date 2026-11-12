@@ -20,8 +20,8 @@ class ChatListPage extends StatelessWidget {
         : 'No conversations yet.';
 
     final emptySubtitle = localization.isArabic
-        ? 'ستظهر محادثات المنتجات هنا.'
-        : 'Your product conversations will appear here.';
+        ? 'ستظهر محادثات المنتجات والعروض والطباعة هنا.'
+        : 'Product, offer, and 3D printing conversations will appear here.';
 
     final openConversation = localization.isArabic
         ? 'اضغط لفتح المحادثة'
