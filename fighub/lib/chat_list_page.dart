@@ -12,29 +12,13 @@ class ChatListPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final localization = AppLocalizations.of(context);
-
-    final title = localization.isArabic ? 'المحادثات' : 'Messages';
-
-    final emptyTitle = localization.isArabic
-        ? 'لا توجد محادثات حتى الآن.'
-        : 'No conversations yet.';
-
-    final emptySubtitle = localization.isArabic
-        ? 'ستظهر محادثات المنتجات هنا.'
-        : 'Your product conversations will appear here.';
-
-    final openConversation = localization.isArabic
-        ? 'اضغط لفتح المحادثة'
-        : 'Tap to open conversation';
-
-    final loadingText = localization.isArabic
-        ? 'جاري تحميل المحادثات...'
-        : 'Loading conversations...';
-
+    final isArabic = localization.isArabic;
     final chatService = ChatService();
 
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(
+        title: Text(isArabic ? 'المحادثات' : 'Messages'),
+      ),
       body: StreamBuilder<List<Map<String, dynamic>>>(
         stream: chatService.watchMyChats(),
         builder: (context, snapshot) {
@@ -45,42 +29,44 @@ class ChatListPage extends StatelessWidget {
                 children: [
                   const CircularProgressIndicator(),
                   const SizedBox(height: 14),
-                  Text(loadingText),
+                  Text(isArabic ? 'جاري تحميل المحادثات...' : 'Loading conversations...'),
                 ],
               ),
             );
           }
 
           if (snapshot.hasError) {
-            final error = snapshot.error.toString();
-
             return Center(
-              child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  '${isArabic ? 'تعذر تحميل المحادثات' : 'Could not load conversations'}\n${snapshot.error}',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          }
+
+          final chats = snapshot.data ?? const <Map<String, dynamic>>[];
+          if (chats.isEmpty) {
+            return Center(
+              child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(
-                      Icons.error_outline,
-                      size: 70,
-                      color: Colors.red,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      localization.isArabic
-                          ? 'حدث خطأ أثناء تحميل المحادثات'
-                          : 'An error occurred while loading conversations',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    const Icon(Icons.chat_bubble_outline, size: 70, color: Colors.grey),
                     const SizedBox(height: 14),
-                    SelectableText(
-                      error,
+                    Text(
+                      isArabic ? 'لا توجد محادثات حتى الآن' : 'No conversations yet',
+                      style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      isArabic
+                          ? 'ستظهر محادثات العروض والمنتجات والطباعة هنا.'
+                          : 'Offer, product, and printing chats will appear here.',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 14),
                     ),
                   ],
                 ),
@@ -88,176 +74,202 @@ class ChatListPage extends StatelessWidget {
             );
           }
 
-          final chats = snapshot.data ?? const [];
+          final offers = chats.where((chat) => chatService.chatTypeFor(chat) == 'offers').toList();
+          final products = chats.where((chat) {
+            final type = chatService.chatTypeFor(chat);
+            return type == 'ordinary' || type == 'products';
+          }).toList();
+          final printing = chats.where((chat) => chatService.chatTypeFor(chat) == 'printing').toList();
+          final other = chats.where((chat) {
+            final type = chatService.chatTypeFor(chat);
+            return type != 'offers' && type != 'ordinary' && type != 'products' && type != 'printing';
+          }).toList();
 
-          if (chats.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.chat_bubble_outline,
-                    size: 75,
-                    color: Colors.grey,
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    emptyTitle,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 19,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(emptySubtitle, textAlign: TextAlign.center),
-                ],
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+            children: [
+              _section(
+                context,
+                title: isArabic ? 'محادثات العروض الجماعية' : 'Group offer chats',
+                icon: Icons.local_offer_outlined,
+                chats: offers,
+                service: chatService,
+                isArabic: isArabic,
               ),
-            );
-          }
-
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: chats.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 10),
-            itemBuilder: (context, index) {
-              final chat = chats[index];
-
-              final chatId = chat['id'] as String? ?? '';
-
-              final productName = chat['productName'] as String? ?? '';
-
-              final lastMessage = chat['lastMessage'] as String? ?? '';
-
-              return StreamBuilder<Map<String, dynamic>?>(
-                stream: chatService.watchChatPartner(chatId),
-                builder: (context, partnerSnapshot) {
-                  final partner = partnerSnapshot.data;
-
-                  final partnerName = partner?['name'] as String? ?? '';
-
-                  final partnerPhoto = partner?['photoUrl'] as String? ?? '';
-
-                  return Card(
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                      leading: CircleAvatar(
-                        radius: 25,
-                        backgroundImage: partnerPhoto.isNotEmpty
-                            ? NetworkImage(partnerPhoto)
-                            : null,
-                        child: partnerPhoto.isEmpty
-                            ? const Icon(Icons.person_outline)
-                            : null,
-                      ),
-                      title: Text(
-                        partnerName.isEmpty
-                            ? (productName.isEmpty
-                                  ? (localization.isArabic ? 'مستخدم' : 'User')
-                                  : productName)
-                            : partnerName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Text(
-                        lastMessage.isEmpty ? openConversation : lastMessage,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                      onLongPress: chatId.isEmpty
-                          ? null
-                          : () async {
-                              final confirmed = await showDialog<bool>(
-                                context: context,
-                                builder: (dialogContext) => AlertDialog(
-                                  title: Text(
-                                    localization.isArabic
-                                        ? 'مسح سجل المحادثة عندك؟'
-                                        : 'Clear chat history for you?',
-                                  ),
-                                  content: Text(
-                                    localization.isArabic
-                                        ? 'سيتم إخفاء الرسائل القديمة عندك فقط. الطرف الآخر سيحتفظ بالمحادثة، وستظهر لك الرسائل الجديدة فقط.'
-                                        : 'This hides old messages only for you. The other participant keeps the conversation, and new messages will still appear.',
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(dialogContext, false),
-                                      child: Text(
-                                        localization.isArabic
-                                            ? 'إلغاء'
-                                            : 'Cancel',
-                                      ),
-                                    ),
-                                    FilledButton(
-                                      onPressed: () =>
-                                          Navigator.pop(dialogContext, true),
-                                      child: Text(
-                                        localization.isArabic
-                                            ? 'حذف'
-                                            : 'Delete',
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-
-                              if (confirmed != true || !context.mounted) {
-                                return;
-                              }
-
-                              try {
-                                await chatService.deleteChat(chatId);
-                                if (!context.mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      localization.isArabic
-                                          ? 'تم مسح سجل المحادثة عندك'
-                                          : 'Chat history cleared for you',
-                                    ),
-                                  ),
-                                );
-                              } catch (error) {
-                                if (!context.mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      localization.isArabic
-                                          ? 'تعذر حذف المحادثة: $error'
-                                          : 'Could not delete conversation: $error',
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
-                      onTap: chatId.isEmpty
-                          ? null
-                          : () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => ChatPage(
-                                    chatId: chatId,
-                                    productName: productName,
-                                  ),
-                                ),
-                              );
-                            },
-                    ),
-                  );
-                },
-              );
-            },
+              _section(
+                context,
+                title: isArabic ? 'محادثات المنتجات العادية' : 'Regular product chats',
+                icon: Icons.shopping_bag_outlined,
+                chats: products,
+                service: chatService,
+                isArabic: isArabic,
+              ),
+              _section(
+                context,
+                title: isArabic ? 'محادثات 3D Printing' : '3D Printing chats',
+                icon: Icons.print_outlined,
+                chats: printing,
+                service: chatService,
+                isArabic: isArabic,
+              ),
+              if (other.isNotEmpty)
+                _section(
+                  context,
+                  title: isArabic ? 'محادثات أخرى وسابقة' : 'Other and legacy chats',
+                  icon: Icons.chat_outlined,
+                  chats: other,
+                  service: chatService,
+                  isArabic: isArabic,
+                ),
+            ],
           );
         },
       ),
+    );
+  }
+
+  Widget _section(
+    BuildContext context, {
+    required String title,
+    required IconData icon,
+    required List<Map<String, dynamic>> chats,
+    required ChatService service,
+    required bool isArabic,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+              ),
+              Text(
+                chats.length.toString(),
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (chats.isEmpty)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Text(
+                  isArabic ? 'لا توجد محادثات في هذا القسم' : 'No chats in this section',
+                  style: TextStyle(color: Theme.of(context).colorScheme.outline),
+                ),
+              ),
+            )
+          else
+            ...chats.map((chat) => _chatTile(context, chat, service, isArabic)),
+        ],
+      ),
+    );
+  }
+
+  Widget _chatTile(
+    BuildContext context,
+    Map<String, dynamic> chat,
+    ChatService service,
+    bool isArabic,
+  ) {
+    final chatId = chat['id'] as String? ?? '';
+    final productName = chat['productName'] as String? ?? '';
+    final lastMessage = chat['lastMessage'] as String? ?? '';
+
+    return StreamBuilder<Map<String, dynamic>?>(
+      stream: service.watchChatPartner(chatId),
+      builder: (context, partnerSnapshot) {
+        final partner = partnerSnapshot.data;
+        final partnerName = partner?['name'] as String? ?? '';
+        final photo = partner?['photoUrl'] as String? ?? '';
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            leading: CircleAvatar(
+              radius: 24,
+              backgroundImage: photo.isNotEmpty ? NetworkImage(photo) : null,
+              child: photo.isEmpty ? const Icon(Icons.person_outline) : null,
+            ),
+            title: Text(
+              partnerName.isNotEmpty
+                  ? partnerName
+                  : (productName.isNotEmpty ? productName : (isArabic ? 'مستخدم' : 'User')),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(
+              lastMessage.isEmpty
+                  ? (isArabic ? 'اضغط لفتح المحادثة' : 'Tap to open conversation')
+                  : lastMessage,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+            onLongPress: chatId.isEmpty
+                ? null
+                : () async {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (dialogContext) => AlertDialog(
+                        title: Text(isArabic ? 'مسح سجل المحادثة عندك؟' : 'Clear chat history for you?'),
+                        content: Text(
+                          isArabic
+                              ? 'سيتم إخفاء الرسائل القديمة عندك فقط، وسيحتفظ الطرف الآخر بالمحادثة.'
+                              : 'Old messages will be hidden only for you. The other participant keeps the conversation.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(dialogContext, false),
+                            child: Text(isArabic ? 'إلغاء' : 'Cancel'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(dialogContext, true),
+                            child: Text(isArabic ? 'مسح' : 'Clear'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmed != true || !context.mounted) return;
+                    try {
+                      await service.deleteChat(chatId);
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(isArabic ? 'تم مسح سجل المحادثة عندك' : 'Chat history cleared for you')),
+                      );
+                    } catch (error) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('${isArabic ? 'تعذر مسح المحادثة' : 'Could not clear chat'}: $error')),
+                      );
+                    }
+                  },
+            onTap: chatId.isEmpty
+                ? null
+                : () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ChatPage(chatId: chatId, productName: productName),
+                      ),
+                    );
+                  },
+          ),
+        );
+      },
     );
   }
 }

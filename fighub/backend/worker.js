@@ -47,8 +47,21 @@ function cloudinaryPublicId(assetUrl) {
     throw new Error('Unsupported Cloudinary asset URL');
   }
 
-  const publicParts = parts.slice(uploadIndex + 1);
-  if (/^v\d+$/.test(publicParts[0])) publicParts.shift();
+  let publicParts = parts.slice(uploadIndex + 1);
+
+  // Cloudinary delivery URLs may contain transformation segments before the
+  // version marker. Everything after the version is the actual public ID.
+  const versionIndex = publicParts.findIndex((part) => /^v\d+$/.test(part));
+  if (versionIndex >= 0) {
+    publicParts = publicParts.slice(versionIndex + 1);
+  } else {
+    const isTransformation = (part) =>
+      /^(?:a|b|c|d|e|f|fl|g|h|q|r|t|w|x|y|z|ar|ac|bo|br|co|cs|dl|dn|dpr|du|eo|if|ki|l|o|pg|p|so|sp|u|vc|vs|zoom)_[^/]+$/.test(part);
+    while (publicParts.length > 1 && isTransformation(publicParts[0])) {
+      publicParts.shift();
+    }
+  }
+
   if (publicParts.length === 0) throw new Error('Missing public ID');
 
   const last = publicParts.length - 1;
@@ -89,9 +102,19 @@ async function deleteCloudinaryAsset(assetUrl, env) {
         body: form,
       },
   );
-  const result = await response.json();
+  let result;
+  try {
+    result = await response.json();
+  } catch (_) {
+    throw new Error(
+        'Cloudinary returned an unreadable response (' + response.status + ')',
+    );
+  }
   if (!response.ok || !['ok', 'not found'].includes(result.result)) {
-    throw new Error('Cloudinary asset deletion failed');
+    const detail = result.error?.message || result.result || 'Unknown Cloudinary error';
+    throw new Error(
+        'Cloudinary asset deletion failed (' + response.status + '): ' + detail,
+    );
   }
 }
 
@@ -100,7 +123,10 @@ async function readFirestoreDocument(path, idToken) {
       `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/${path}`,
       { headers: { Authorization: `Bearer ${idToken}` } },
   );
-  if (!response.ok) return null;
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error('Firestore read failed (' + response.status + ')');
+  }
   return response.json();
 }
 
@@ -141,7 +167,10 @@ async function handleCloudinaryDeletion(body, payload, idToken, env) {
       }
       requestedUrls.add(url);
     }
-    if (readStringField(fields, 'status') !== 'Available') {
+    // Older product documents may not contain a status field. The Flutter
+    // model treats those legacy products as Available, so keep the same rule.
+    const productStatus = readStringField(fields, 'status') || 'Available';
+    if (productStatus !== 'Available') {
       return new Response(JSON.stringify({ error: 'Only available products can be deleted' }), {
         status: 409,
         headers: { 'Content-Type': 'application/json' },
@@ -262,7 +291,7 @@ export default {
         } catch (error) {
           console.error('Cloudinary asset cleanup failed:', error);
           return new Response(
-              JSON.stringify({ error: 'Cloudinary asset cleanup failed' }),
+              JSON.stringify({ error: error.message || 'Cloudinary asset cleanup failed' }),
               {
                 status: 502,
                 headers: { 'Content-Type': 'application/json' },

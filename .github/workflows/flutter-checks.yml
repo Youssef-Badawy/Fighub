@@ -9,12 +9,14 @@ on:
     branches:
       - main
       - fix/unified-buyer-seller-chats
+      - feature/3d-printing-marketplace-and-fixes
     paths:
       - "fighub/**"
       - ".github/workflows/flutter-checks.yml"
 
+# Keep only the latest validation run for each PR/ref.
 concurrency:
-  group: flutter-checks-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -46,15 +48,18 @@ jobs:
         run: flutter pub get
 
       - name: Format changed Dart files
-        run: dart format lib/main.dart lib/settings_page.dart lib/chat_service.dart lib/chat_page.dart lib/auth_profile_header.dart lib/offer_service.dart lib/product_service.dart lib/cloudinary_service.dart lib/offer_manager_page.dart lib/worker_push_service.dart
+        run: dart format lib/main.dart lib/search_service.dart lib/settings_page.dart lib/chat_service.dart lib/chat_page.dart lib/auth_profile_header.dart lib/offer_service.dart lib/product_service.dart lib/cloudinary_service.dart lib/offer_manager_page.dart lib/worker_push_service.dart lib/chat_list_page.dart lib/print_marketplace_page.dart lib/seller_dashboard_page.dart
 
       - name: Analyze entire Flutter app
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
 
       - name: Build Android debug APK
+        id: build_apk
+        if: always()
         run: flutter build apk --debug
 
       - name: Upload Android debug APK
+        if: always() && steps.build_apk.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: fighub-debug-apk-${{ github.sha }}

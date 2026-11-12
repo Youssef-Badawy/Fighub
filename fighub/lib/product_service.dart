@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -173,10 +174,19 @@ class ProductService {
       imageUrls.add(legacyImage);
     }
 
-    await CloudinaryService().deleteProductAssets(
-      productId: productId,
-      assetUrls: imageUrls,
-    );
+    // Try cleanup while the Firestore listing still exists because the Worker
+    // verifies ownership against that document. A stale Worker must not block
+    // the seller from removing the listing itself.
+    try {
+      await CloudinaryService().deleteProductAssets(
+        productId: productId,
+        assetUrls: imageUrls,
+      );
+    } catch (error, stackTrace) {
+      debugPrint('FIGHUB PRODUCT IMAGE CLEANUP PENDING ($productId): $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+
     await _productsCollection.doc(productId).delete();
   }
 
@@ -199,7 +209,11 @@ class ProductService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-          return snapshot.docs.map(Product.fromFirestore).toList();
+          return snapshot.docs
+              .where((document) =>
+                  document.data()['productType'] != 'print_order')
+              .map(Product.fromFirestore)
+              .toList();
         });
   }
 
@@ -236,7 +250,11 @@ class ProductService {
         .where('sellerId', isEqualTo: sellerId)
         .snapshots()
         .map((snapshot) {
-          final products = snapshot.docs.map(Product.fromFirestore).toList();
+          final products = snapshot.docs
+              .where((document) =>
+                  document.data()['productType'] != 'print_order')
+              .map(Product.fromFirestore)
+              .toList();
 
           products.sort((a, b) {
             final aId = a.id ?? '';

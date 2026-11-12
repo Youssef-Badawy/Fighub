@@ -829,34 +829,64 @@ class _ChatPageState extends State<ChatPage> {
     return Scaffold(
       appBar: AppBar(
         title: StreamBuilder<Map<String, dynamic>?>(
-          stream: _chatService.watchChatPartner(widget.chatId),
-          builder: (context, snapshot) {
-            final partner = snapshot.data;
+          stream: _chatService.watchChat(widget.chatId),
+          builder: (context, chatSnapshot) {
+            final chatData = {
+              ...?chatSnapshot.data,
+              'id': widget.chatId,
+            };
+            final chatType = _chatService.chatTypeFor(chatData);
+            final typeLabel = switch (chatType) {
+              'offers' => isArabic ? 'العروض الجماعية' : 'Group offers',
+              'printing' => isArabic ? 'الطباعة ثلاثية الأبعاد' : '3D Printing',
+              'direct' => isArabic ? 'محادثة مباشرة' : 'Direct message',
+              'legacy' => isArabic ? 'محادثة سابقة مشتركة' : 'Previous combined chat',
+              _ => isArabic ? 'المنتجات العادية' : 'Regular products',
+            };
 
-            final partnerName = partner?['name'] as String? ?? '';
+            return StreamBuilder<Map<String, dynamic>?>(
+              stream: _chatService.watchChatPartner(widget.chatId),
+              builder: (context, partnerSnapshot) {
+                final partner = partnerSnapshot.data;
+                final partnerName = partner?['name'] as String? ?? '';
+                final partnerPhoto = partner?['photoUrl'] as String? ?? '';
 
-            final partnerPhoto = partner?['photoUrl'] as String? ?? '';
-
-            return Row(
-              children: [
-                CircleAvatar(
-                  radius: 19,
-                  backgroundImage: partnerPhoto.isNotEmpty
-                      ? NetworkImage(partnerPhoto)
-                      : null,
-                  child: partnerPhoto.isEmpty
-                      ? const Icon(Icons.person_outline, size: 21)
-                      : null,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    partnerName.isEmpty ? widget.productName : partnerName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+                return Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 19,
+                      backgroundImage: partnerPhoto.isNotEmpty
+                          ? NetworkImage(partnerPhoto)
+                          : null,
+                      child: partnerPhoto.isEmpty
+                          ? const Icon(Icons.person_outline, size: 21)
+                          : null,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            partnerName.isEmpty
+                                ? (chatData['productName'] as String? ?? widget.productName)
+                                : partnerName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            typeLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
             );
           },
         ),
@@ -1155,6 +1185,18 @@ class _ChatPageState extends State<ChatPage> {
               final data = snapshot.data;
               if (data == null) return const SizedBox.shrink();
 
+              final chatType = _chatService.chatTypeFor({
+                ...data,
+                'id': widget.chatId,
+              });
+              final accountLabel = switch (chatType) {
+                'offers' => isArabic ? 'حساب العروض الجماعية' : 'Group offers account',
+                'printing' => isArabic ? 'حساب مشتريات الطباعة' : '3D Printing account',
+                'direct' => isArabic ? 'المحادثة المباشرة' : 'Direct conversation',
+                'legacy' => isArabic ? 'الحساب السابق المشترك' : 'Previous combined account',
+                _ => isArabic ? 'حساب مشتريات المنتجات' : 'Regular products account',
+              };
+
               final rawItems = data['offerItems'];
               final items = rawItems is List
                   ? rawItems
@@ -1207,7 +1249,7 @@ class _ChatPageState extends State<ChatPage> {
                   children: [
                     if (items.isNotEmpty)
                       Text(
-                        '${isArabic ? 'إجمالي القطع المحجوزة' : 'Active reserved total'}: '
+                        '${isArabic ? 'إجمالي' : 'Total'} $accountLabel: '
                         '${total.toStringAsFixed(total == total.roundToDouble() ? 0 : 2)} '
                         '${isArabic ? 'جنيه' : 'EGP'}',
                         style: const TextStyle(

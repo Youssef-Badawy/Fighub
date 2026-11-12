@@ -66,12 +66,19 @@ class OfferManagerPage extends StatelessWidget {
               if (confirmed != true || !context.mounted) return;
 
               try {
-                await offerService.deleteOffer(offerId);
+                final fullyDeleted = await offerService.deleteOffer(offerId);
                 if (!context.mounted) return;
 
+                final messenger = ScaffoldMessenger.of(context);
                 Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('تم حذف العرض بنجاح')),
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      fullyDeleted
+                          ? 'تم حذف العرض بنجاح'
+                          : 'تم إخفاء العرض، وسيتم تنظيف صوره تلقائيًا عند توفر الاتصال',
+                    ),
+                  ),
                 );
               } catch (error) {
                 if (!context.mounted) return;

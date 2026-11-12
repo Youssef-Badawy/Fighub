@@ -228,10 +228,11 @@ class _SellerDashboardPageState
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          duration: const Duration(seconds: 10),
           content: Text(
             localization.isArabic
-                ? 'حدث خطأ أثناء حذف المنتج'
-                : 'An error occurred while deleting the product',
+                ? 'تعذر حذف المنتج: $error'
+                : 'Could not delete product: $error',
           ),
         ),
       );

@@ -1,0 +1,55 @@
+name: FigHub debug APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/3d-printing-marketplace-and-fixes
+  pull_request:
+    paths:
+      - "fighub/**"
+      - ".github/workflows/flutter-debug-apk.yml"
+
+permissions:
+  contents: read
+
+# Avoid building outdated APKs when newer commits are pushed to the same PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fighub
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Android debug APK
+        run: flutter build apk --debug
+
+      - name: Upload Android debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: fighub-debug-apk-${{ github.sha }}
+          path: fighub/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7

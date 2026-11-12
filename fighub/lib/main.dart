@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'app_localizations.dart';
@@ -28,40 +29,121 @@ import 'product_service.dart';
 import 'push_notification_service.dart';
 import 'one_signal_service.dart';
 import 'profile_page.dart';
+import 'print_marketplace_page.dart';
 import 'search_service.dart';
 import 'seller_dashboard_page.dart';
 import 'seller_profile_page.dart';
 import 'seller_profile_service.dart';
 import 'users_page.dart';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  runApp(const FigHubBootstrap());
+}
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+class FigHubBootstrap extends StatefulWidget {
+  const FigHubBootstrap({super.key});
 
-  // Start in guest mode so browsing does not require an email account.
-  if (FirebaseAuth.instance.currentUser == null) {
-    try {
-      await FirebaseAuth.instance.signInAnonymously();
-    } catch (error) {
-      debugPrint('Anonymous sign-in is unavailable: $error');
+  @override
+  State<FigHubBootstrap> createState() => _FigHubBootstrapState();
+}
+
+class _FigHubBootstrapState extends State<FigHubBootstrap> {
+  late final Future<({AppSettings settings, AuthManager authManager})> _startup =
+      _initializeApp();
+
+  Future<({AppSettings settings, AuthManager authManager})> _initializeApp() async {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+
+    // Start in guest mode so browsing does not require an email account.
+    if (FirebaseAuth.instance.currentUser == null) {
+      try {
+        await FirebaseAuth.instance.signInAnonymously();
+      } catch (error) {
+        debugPrint('Anonymous sign-in is unavailable: $error');
+      }
     }
+
+    final settings = AppSettings();
+    await settings.loadSettings();
+
+    final authManager = AuthManager();
+    await authManager.load();
+
+    return (settings: settings, authManager: authManager);
   }
 
-  final settings = AppSettings();
-  await settings.loadSettings();
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<({AppSettings settings, AuthManager authManager})>(
+      future: _startup,
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          return FigHubApp(
+            settings: snapshot.data!.settings,
+            authManager: snapshot.data!.authManager,
+          );
+        }
 
-  final authManager = AuthManager();
-  await authManager.load();
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(
+            useMaterial3: true,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: const Color(0xFF246BCE),
+            ),
+          ),
+          home: const FigHubWelcomeScreen(),
+        );
+      },
+    );
+  }
+}
 
-  runApp(
-    FigHubApp(
-      settings: settings,
-      authManager: authManager,
-    ),
-  );
+class FigHubWelcomeScreen extends StatelessWidget {
+  const FigHubWelcomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: Color(0xFF246BCE),
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.toys_outlined, size: 76, color: Colors.white),
+            SizedBox(height: 22),
+            Text(
+              'أهلاً بكم في FigHub',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 25,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 12),
+            Text(
+              'كل ما تحبه من عالم المقتنيات',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white70, fontSize: 15),
+            ),
+            SizedBox(height: 28),
+            SizedBox(
+              width: 26,
+              height: 26,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class FigHubApp extends StatefulWidget {
@@ -229,6 +311,38 @@ class FigHubHome extends StatefulWidget {
 
 class _FigHubHomeState extends State<FigHubHome> {
   int _currentIndex = 0;
+  DateTime? _lastBackPressAt;
+
+  void _handleBackPress() {
+    if (_currentIndex != 0) {
+      setState(() => _currentIndex = 0);
+      return;
+    }
+
+    final now = DateTime.now();
+    final isSecondPress = _lastBackPressAt != null &&
+        now.difference(_lastBackPressAt!) <= const Duration(seconds: 2);
+
+    if (isSecondPress) {
+      SystemNavigator.pop();
+      return;
+    }
+
+    _lastBackPressAt = now;
+    final localization = AppLocalizations.of(context);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            localization.isArabic
+                ? 'اضغط رجوع مرة أخرى للخروج'
+                : 'Press back again to exit',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+  }
 
   final List<Product> _products = [];
   final List<Product> _favorites = [];
@@ -264,7 +378,7 @@ class _FigHubHomeState extends State<FigHubHome> {
   final List<String> _categories = [
     'All',
     ...FigHubInterests.all,
-  ];
+  ].toSet().toList();
 
   String _selectedCategory = 'All';
   String _searchQuery = '';
@@ -513,6 +627,16 @@ class _FigHubHomeState extends State<FigHubHome> {
     }
   }
 
+  bool _matchesSearchText(String value) {
+    try {
+      return SearchService.matches(value, _searchQuery);
+    } catch (error, stackTrace) {
+      debugPrint('FIGHUB SEARCH MATCH ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      return value.toLowerCase().contains(_searchQuery.toLowerCase());
+    }
+  }
+
   List<Product> get _filteredProducts {
     return _products.where((product) {
       final matchesCategory =
@@ -533,17 +657,8 @@ class _FigHubHomeState extends State<FigHubHome> {
       final sellerName =
           sellerProfile?.name ?? '';
 
-      final matchesProduct =
-          SearchService.matches(
-        product.name,
-        _searchQuery,
-      );
-
-      final matchesSeller =
-          SearchService.matches(
-        sellerName,
-        _searchQuery,
-      );
+      final matchesProduct = _matchesSearchText(product.name);
+      final matchesSeller = _matchesSearchText(sellerName);
 
       return matchesProduct || matchesSeller;
     }).toList();
@@ -575,8 +690,28 @@ class _FigHubHomeState extends State<FigHubHome> {
         return localization.starWars;
       case 'Other':
         return localization.other;
+      case 'Disney':
+        return localization.isArabic ? 'ديزني' : category;
+      case 'Transformers':
+        return localization.isArabic ? 'ترانسفورمرز' : category;
+      case 'Pokémon':
+        return localization.isArabic ? 'بوكيمون' : category;
+      case 'Harry Potter':
+        return localization.isArabic ? 'هاري بوتر' : category;
+      case 'Gaming':
+        return localization.isArabic ? 'ألعاب' : category;
+      case 'Movies & TV':
+        return localization.isArabic ? 'أفلام ومسلسلات' : category;
+      case 'Horror':
+        return localization.isArabic ? 'رعب' : category;
+      case 'Sci-Fi':
+        return localization.isArabic ? 'خيال علمي' : category;
+      case 'Fantasy':
+        return localization.isArabic ? 'فانتازيا' : category;
+      case 'WWE':
+        return localization.isArabic ? 'مصارعة' : category;
       default:
-        return localization.all;
+        return category;
     }
   }
 
@@ -766,10 +901,16 @@ class _FigHubHomeState extends State<FigHubHome> {
       _buildHome(localization),
       _buildFavoritesTab(),
       _buildSellTab(localization),
+      const PrintMarketplacePage(),
       _buildChatTab(localization),
     ];
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _handleBackPress();
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: const Text(
           'FigHub',
@@ -806,7 +947,7 @@ class _FigHubHomeState extends State<FigHubHome> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) {
-          if (index == 3) {
+          if (index == 4) {
             _openChat();
             return;
           }
@@ -831,6 +972,11 @@ class _FigHubHomeState extends State<FigHubHome> {
             selectedIcon: const Icon(Icons.sell),
             label: localization.sell,
           ),
+          const NavigationDestination(
+            icon: Icon(Icons.print_outlined),
+            selectedIcon: Icon(Icons.print),
+            label: '3D PRINTING',
+          ),
           NavigationDestination(
             icon: const Icon(
               Icons.chat_bubble_outline,
@@ -841,6 +987,7 @@ class _FigHubHomeState extends State<FigHubHome> {
             label: localization.messages,
           ),
         ],
+      ),
       ),
     );
   }
@@ -955,14 +1102,45 @@ class _FigHubHomeState extends State<FigHubHome> {
           ),
         ),
         if (products.isEmpty)
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  localization.noProducts,
-                  style: Theme.of(context).textTheme.bodyLarge,
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 280,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _searchQuery.isNotEmpty
+                            ? Icons.search_off_outlined
+                            : Icons.inventory_2_outlined,
+                        size: 58,
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        _searchQuery.isNotEmpty
+                            ? (localization.isArabic
+                                ? 'ملقيناش منتجات مطابقة لبحثك'
+                                : 'No products match your search')
+                            : localization.noProducts,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                      if (_searchQuery.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        TextButton.icon(
+                          onPressed: () => setState(() => _searchQuery = ''),
+                          icon: const Icon(Icons.close),
+                          label: Text(
+                            localization.isArabic ? 'مسح البحث' : 'Clear search',
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ),
