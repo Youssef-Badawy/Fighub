@@ -987,9 +987,38 @@ class _FigHubHomeState extends State<FigHubHome> {
             child: Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Text(
-                  localization.noProducts,
-                  style: Theme.of(context).textTheme.bodyLarge,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _searchQuery.isNotEmpty
+                          ? Icons.search_off_outlined
+                          : Icons.inventory_2_outlined,
+                      size: 58,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      _searchQuery.isNotEmpty
+                          ? (localization.isArabic
+                              ? 'ملقيناش منتجات مطابقة لبحثك'
+                              : 'No products match your search')
+                          : localization.noProducts,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                    if (_searchQuery.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      TextButton.icon(
+                        onPressed: () => setState(() => _searchQuery = ''),
+                        icon: const Icon(Icons.close),
+                        label: Text(
+                          localization.isArabic ? 'مسح البحث' : 'Clear search',
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),
