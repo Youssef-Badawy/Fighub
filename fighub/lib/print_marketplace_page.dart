@@ -49,51 +49,105 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
 
   Future<void> _createBusiness() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null || user.isAnonymous) return;
+    if (user == null || user.isAnonymous) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('سجّل الدخول بحسابك أولًا لتفعيل حساب شركة أو محل')),
+      );
+      return;
+    }
+
     final name = TextEditingController();
     final phone = TextEditingController();
     final description = TextEditingController();
     final formKey = GlobalKey<FormState>();
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('تفعيل حساب شركة / محل'),
-        content: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextFormField(controller: name, decoration: const InputDecoration(labelText: 'اسم الشركة أو المحل'), validator: (v) => v == null || v.trim().isEmpty ? 'اكتب اسم الشركة' : null),
-              TextFormField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'رقم التواصل'), validator: (v) => v == null || v.trim().isEmpty ? 'اكتب رقم التواصل' : null),
-              TextFormField(controller: description, maxLines: 3, decoration: const InputDecoration(labelText: 'نبذة عن الشركة')),
-            ]),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
-          FilledButton(onPressed: () { if (formKey.currentState!.validate()) Navigator.pop(dialogContext, true); }, child: const Text('حفظ')),
-        ],
-      ),
-    );
-    if (result != true || !mounted) return;
+
     try {
-      await _db.collection('print_businesses').doc(user.uid).set({
-        'ownerId': user.uid,
+      final result = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('تفعيل حساب شركة / محل'),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                TextFormField(
+                  controller: name,
+                  decoration: const InputDecoration(labelText: 'اسم الشركة أو المحل'),
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'اكتب اسم الشركة'
+                      : null,
+                ),
+                TextFormField(
+                  controller: phone,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(labelText: 'رقم التواصل'),
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'اكتب رقم التواصل'
+                      : null,
+                ),
+                TextFormField(
+                  controller: description,
+                  maxLines: 3,
+                  decoration: const InputDecoration(labelText: 'نبذة عن الشركة'),
+                ),
+              ]),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (formKey.currentState!.validate()) {
+                  Navigator.pop(dialogContext, true);
+                }
+              },
+              child: const Text('حفظ'),
+            ),
+          ],
+        ),
+      );
+
+      if (result != true || !mounted) return;
+
+      final reference = _db.collection('print_businesses').doc(user.uid);
+      final existing = await reference.get();
+      final businessData = <String, dynamic>{
         'name': name.text.trim(),
         'phone': phone.text.trim(),
         'description': description.text.trim(),
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
         'active': true,
-      }, SetOptions(merge: true));
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      if (existing.exists) {
+        // Firestore rules intentionally restrict updates to editable profile fields.
+        // Do not resend ownerId or createdAt when editing an existing business.
+        await reference.update(businessData);
+      } else {
+        await reference.set({
+          ...businessData,
+          'ownerId': user.uid,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تم تفعيل حساب الشركة بنجاح')),
         );
       }
     } catch (error) {
+      debugPrint('PRINT BUSINESS REGISTRATION ERROR: $error');
       if (mounted) {
+        final details = error.toString();
+        final message = details.contains('permission-denied')
+            ? 'تعذر التسجيل بسبب صلاحيات قاعدة البيانات. يلزم نشر قواعد Firestore الخاصة بـ 3D PRINTING.'
+            : 'تعذر تفعيل حساب الشركة: $details';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('تعذر تفعيل حساب الشركة: $error')),
+          SnackBar(content: Text(message)),
         );
       }
     } finally {
