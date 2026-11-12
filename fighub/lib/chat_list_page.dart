@@ -126,6 +126,14 @@ class ChatListPage extends StatelessWidget {
               final chatId = chat['id'] as String? ?? '';
 
               final productName = chat['productName'] as String? ?? '';
+              final chatType = chatService.chatTypeFor(chat);
+              final chatTypeLabel = switch (chatType) {
+                'offers' => localization.isArabic ? 'العروض الجماعية' : 'Group offers',
+                'printing' => localization.isArabic ? 'الطباعة ثلاثية الأبعاد' : '3D Printing',
+                'direct' => localization.isArabic ? 'محادثة مباشرة' : 'Direct message',
+                'legacy' => localization.isArabic ? 'محادثة سابقة مشتركة' : 'Previous combined chat',
+                _ => localization.isArabic ? 'المنتجات العادية' : 'Regular products',
+              };
 
               final lastMessage = chat['lastMessage'] as String? ?? '';
 
@@ -163,11 +171,25 @@ class ChatListPage extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      subtitle: Text(
-                        lastMessage.isEmpty ? openConversation : lastMessage,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            chatTypeLabel,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            lastMessage.isEmpty ? openConversation : lastMessage,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
+                      isThreeLine: true,
                       trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                       onLongPress: chatId.isEmpty
                           ? null
