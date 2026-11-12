@@ -136,7 +136,9 @@ class ChatService {
     if (!chatDocument.exists) {
       await chatReference.set({
         'productId': 'combined_$chatId',
-        'productName': 'حساب المشتريات',
+        'productName': chatType == 'printing'
+            ? 'حساب مشتريات الطباعة'
+            : 'حساب مشتريات المنتجات',
         'chatType': chatType,
         'buyerId': user.uid,
         'sellerId': sellerId,
@@ -256,7 +258,9 @@ class ChatService {
       if (!snapshot.exists) {
         transaction.set(ref, {
           'productId': 'combined_$chatId',
-          'productName': 'حساب مشتريات المنتجات',
+          'productName': chatType == 'printing'
+              ? 'حساب مشتريات الطباعة'
+              : 'حساب مشتريات المنتجات',
           'chatType': chatType,
           'buyerId': user.uid,
           'sellerId': sellerId,
