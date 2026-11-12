@@ -793,7 +793,6 @@ class ChatService {
     if (chatId.isEmpty) throw ArgumentError('Chat ID is required.');
 
     final chatRef = _firestore.collection('chats').doc(chatId);
-
     await _firestore.runTransaction((transaction) async {
       final chatSnapshot = await transaction.get(chatRef);
       if (!chatSnapshot.exists) throw StateError('Chat not found.');
@@ -801,7 +800,6 @@ class ChatService {
       final data = chatSnapshot.data()!;
       final buyerId = data['buyerId'] as String? ?? '';
       final sellerId = data['sellerId'] as String? ?? '';
-
       if (user.uid != sellerId) {
         throw StateError('Only the seller can finalize the sale.');
       }
@@ -811,69 +809,74 @@ class ChatService {
         throw StateError('Both parties must confirm before finalization.');
       }
 
+      final chatType = _chatTypeOf({...data, 'id': chatId});
+      if (chatType == 'direct' || chatType == 'legacy') {
+        throw StateError('Settlement is unavailable for this conversation type.');
+      }
+      final expectedSource = chatType == 'offers' ? 'offer' : 'product';
+
       final rawItems = data['offerItems'];
       final items = rawItems is List
-          ? rawItems
-                .whereType<Map>()
-                .map((item) => Map<String, dynamic>.from(item))
-                .toList()
+          ? rawItems.whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item)).toList()
           : <Map<String, dynamic>>[];
-      final activeItems = items
-          .where(
-            (item) => item['source'] == 'offer' && item['status'] == 'Reserved',
-          )
-          .toList();
-
+      final activeItems = items.where((item) =>
+          item['source'] == expectedSource && item['status'] == 'Reserved').toList();
       if (activeItems.isEmpty) {
-        throw StateError('There are no active reserved items to settle.');
+        throw StateError('There are no active reserved items in this account.');
       }
 
-      final itemRefs = <DocumentReference<Map<String, dynamic>>>[];
-      final reservationRefs = <DocumentReference<Map<String, dynamic>>>[];
-
+      final sourceRefs = <DocumentReference<Map<String, dynamic>>>[];
+      final reservationRefs = <DocumentReference<Map<String, dynamic>>?>[];
       for (final item in activeItems) {
-        final offerId = item['offerId'] as String? ?? '';
         final itemId = item['itemId'] as String? ?? '';
-        if (offerId.isEmpty || itemId.isEmpty || item['source'] != 'offer') {
-          throw StateError('Invalid offer item in settlement.');
+        if (itemId.isEmpty || item['reservedBy'] != buyerId) {
+          throw StateError('Invalid reserved item in this account.');
         }
-
-        final itemRef = _firestore
-            .collection('offers')
-            .doc(offerId)
-            .collection('items')
-            .doc(itemId);
-        itemRefs.add(itemRef);
-        reservationRefs.add(itemRef.collection('reservations').doc(buyerId));
+        if (expectedSource == 'offer') {
+          final offerId = item['offerId'] as String? ?? '';
+          if (offerId.isEmpty) throw StateError('Offer item information is incomplete.');
+          final offerItemRef = _firestore.collection('offers').doc(offerId)
+              .collection('items').doc(itemId);
+          sourceRefs.add(offerItemRef);
+          reservationRefs.add(offerItemRef.collection('reservations').doc(buyerId));
+        } else {
+          final productId = item['productId'] as String? ?? itemId;
+          sourceRefs.add(_firestore.collection('products').doc(productId));
+          reservationRefs.add(null);
+        }
       }
 
-      // Read every document before writing anything in the transaction.
-      final itemSnapshots = <DocumentSnapshot<Map<String, dynamic>>>[];
-      final reservationSnapshots = <DocumentSnapshot<Map<String, dynamic>>>[];
-
-      for (final ref in itemRefs) {
-        itemSnapshots.add(await transaction.get(ref));
+      // Complete every read before writing, as required by Firestore transactions.
+      final sourceSnapshots = <DocumentSnapshot<Map<String, dynamic>>>[];
+      final reservationSnapshots = <DocumentSnapshot<Map<String, dynamic>>?>[];
+      for (final sourceRef in sourceRefs) {
+        sourceSnapshots.add(await transaction.get(sourceRef));
       }
-      for (final ref in reservationRefs) {
-        reservationSnapshots.add(await transaction.get(ref));
+      for (final reservationRef in reservationRefs) {
+        reservationSnapshots.add(
+          reservationRef == null ? null : await transaction.get(reservationRef),
+        );
       }
 
       for (var i = 0; i < activeItems.length; i++) {
-        final itemSnapshot = itemSnapshots[i];
-        final reservationSnapshot = reservationSnapshots[i];
-
-        if (!itemSnapshot.exists || !reservationSnapshot.exists) {
-          throw StateError('A reserved item or reservation no longer exists.');
+        final sourceSnapshot = sourceSnapshots[i];
+        if (!sourceSnapshot.exists) {
+          throw StateError('A reserved item no longer exists.');
         }
-
-        final itemData = itemSnapshot.data()!;
-        final reservationData = reservationSnapshot.data()!;
-
-        if (itemData['status'] != 'Reserved' ||
-            itemData['reservedBy'] != buyerId ||
-            reservationData['status'] != 'Active' ||
-            reservationData['userId'] != buyerId) {
+        final sourceData = sourceSnapshot.data()!;
+        if (sourceData['status'] != 'Reserved' ||
+            (sourceData['reservedBy'] ?? sourceData['buyerId']) != buyerId) {
           throw StateError('A reservation is no longer active.');
+        }
+        final reservationSnapshot = reservationSnapshots[i];
+        if (reservationSnapshot != null) {
+          final reservationData = reservationSnapshot.data();
+          if (!reservationSnapshot.exists ||
+              reservationData?['status'] != 'Active' ||
+              reservationData?['userId'] != buyerId) {
+            throw StateError('A reservation is no longer active.');
+          }
         }
       }
 
@@ -888,24 +891,26 @@ class ChatService {
           ? List<dynamic>.from(historyRaw)
           : <dynamic>[];
       history.add({
-        'items': activeItems
-            .map((item) => Map<String, dynamic>.from(item))
-            .toList(),
+        'items': activeItems.map((item) => Map<String, dynamic>.from(item)).toList(),
         'settledAt': Timestamp.now(),
         'buyerId': buyerId,
         'sellerId': sellerId,
+        'chatType': chatType,
       });
 
       for (var i = 0; i < activeItems.length; i++) {
-        transaction.update(itemRefs[i], {
+        transaction.update(sourceRefs[i], {
           'status': 'Sold',
           'soldTo': buyerId,
           'soldAt': FieldValue.serverTimestamp(),
         });
-        transaction.update(reservationRefs[i], {
-          'status': 'Settled',
-          'settledAt': FieldValue.serverTimestamp(),
-        });
+        final reservationRef = reservationRefs[i];
+        if (reservationRef != null) {
+          transaction.update(reservationRef, {
+            'status': 'Settled',
+            'settledAt': FieldValue.serverTimestamp(),
+          });
+        }
       }
 
       transaction.update(chatRef, {
