@@ -1185,6 +1185,18 @@ class _ChatPageState extends State<ChatPage> {
               final data = snapshot.data;
               if (data == null) return const SizedBox.shrink();
 
+              final chatType = _chatService.chatTypeFor({
+                ...data,
+                'id': widget.chatId,
+              });
+              final accountLabel = switch (chatType) {
+                'offers' => isArabic ? 'حساب العروض الجماعية' : 'Group offers account',
+                'printing' => isArabic ? 'حساب مشتريات الطباعة' : '3D Printing account',
+                'direct' => isArabic ? 'المحادثة المباشرة' : 'Direct conversation',
+                'legacy' => isArabic ? 'الحساب السابق المشترك' : 'Previous combined account',
+                _ => isArabic ? 'حساب مشتريات المنتجات' : 'Regular products account',
+              };
+
               final rawItems = data['offerItems'];
               final items = rawItems is List
                   ? rawItems
@@ -1237,7 +1249,7 @@ class _ChatPageState extends State<ChatPage> {
                   children: [
                     if (items.isNotEmpty)
                       Text(
-                        '${isArabic ? 'إجمالي القطع المحجوزة' : 'Active reserved total'}: '
+                        '${isArabic ? 'إجمالي' : 'Total'} $accountLabel: '
                         '${total.toStringAsFixed(total == total.roundToDouble() ? 0 : 2)} '
                         '${isArabic ? 'جنيه' : 'EGP'}',
                         style: const TextStyle(
