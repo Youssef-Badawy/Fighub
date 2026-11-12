@@ -3,7 +3,7 @@ class SearchService {
     return value
         .toLowerCase()
         .trim()
-        .replaceAll(RegExp(r'\\s+'), ' ');
+        .replaceAll(RegExp(r'\s+'), ' ');
   }
 
   static bool matches(String text, String query) {
