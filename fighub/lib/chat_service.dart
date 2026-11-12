@@ -59,7 +59,6 @@ class ChatService {
     required String sellerId,
     required String chatType,
   }) {
-    final participants = [buyerId, sellerId]..sort();
     final prefix = switch (chatType) {
       'offers' => 'offers',
       'printing' => 'printing',
@@ -67,11 +66,8 @@ class ChatService {
       _ => 'products',
     };
 
-    // Marketplace conversations are directional: the same two users may
+    // Keep each buyer-to-seller direction separate. The same two users may
     // buy from each other, and those orders must not share one account.
-    if (chatType == 'direct') {
-      return '${prefix}_${participants[0]}_${participants[1]}';
-    }
     return '${prefix}_${buyerId}_${sellerId}';
   }
 
