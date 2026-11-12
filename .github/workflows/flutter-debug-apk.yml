@@ -1,6 +1,7 @@
 name: FigHub debug APK
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - "fighub/**"
