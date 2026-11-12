@@ -47,8 +47,21 @@ function cloudinaryPublicId(assetUrl) {
     throw new Error('Unsupported Cloudinary asset URL');
   }
 
-  const publicParts = parts.slice(uploadIndex + 1);
-  if (/^v\d+$/.test(publicParts[0])) publicParts.shift();
+  let publicParts = parts.slice(uploadIndex + 1);
+
+  // Cloudinary delivery URLs may contain transformation segments before the
+  // version marker. Everything after the version is the actual public ID.
+  const versionIndex = publicParts.findIndex((part) => /^v\d+$/.test(part));
+  if (versionIndex >= 0) {
+    publicParts = publicParts.slice(versionIndex + 1);
+  } else {
+    const isTransformation = (part) =>
+      /^(?:a|b|c|d|e|f|fl|g|h|q|r|t|w|x|y|z|ar|ac|bo|br|co|cs|dl|dn|dpr|du|eo|if|ki|l|o|pg|p|so|sp|u|vc|vs|zoom)_[^/]+$/.test(part);
+    while (publicParts.length > 1 && isTransformation(publicParts[0])) {
+      publicParts.shift();
+    }
+  }
+
   if (publicParts.length === 0) throw new Error('Missing public ID');
 
   const last = publicParts.length - 1;
