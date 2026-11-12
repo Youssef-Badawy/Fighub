@@ -265,7 +265,7 @@ class _FigHubHomeState extends State<FigHubHome> {
   final List<String> _categories = [
     'All',
     ...FigHubInterests.all,
-  ];
+  ].toSet().toList();
 
   String _selectedCategory = 'All';
   String _searchQuery = '';
@@ -576,8 +576,28 @@ class _FigHubHomeState extends State<FigHubHome> {
         return localization.starWars;
       case 'Other':
         return localization.other;
+      case 'Disney':
+        return localization.isArabic ? 'ديزني' : category;
+      case 'Transformers':
+        return localization.isArabic ? 'ترانسفورمرز' : category;
+      case 'Pokémon':
+        return localization.isArabic ? 'بوكيمون' : category;
+      case 'Harry Potter':
+        return localization.isArabic ? 'هاري بوتر' : category;
+      case 'Gaming':
+        return localization.isArabic ? 'ألعاب' : category;
+      case 'Movies & TV':
+        return localization.isArabic ? 'أفلام ومسلسلات' : category;
+      case 'Horror':
+        return localization.isArabic ? 'رعب' : category;
+      case 'Sci-Fi':
+        return localization.isArabic ? 'خيال علمي' : category;
+      case 'Fantasy':
+        return localization.isArabic ? 'فانتازيا' : category;
+      case 'WWE':
+        return localization.isArabic ? 'مصارعة' : category;
       default:
-        return localization.all;
+        return category;
     }
   }
 
