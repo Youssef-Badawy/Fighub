@@ -419,6 +419,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
           productId: 'design_${request.id}',
           productName: 'طلب تصميم ${result['category']}',
           sellerId: widget.businessId,
+          chatType: 'printing',
         );
         await ChatService().sendMessage(
           chatId: chatId,
@@ -491,6 +492,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
         price: data['price'] as String,
         imagePaths: (data['imagePaths'] as List? ?? []).whereType<String>().toList(),
         sellerId: widget.businessId,
+        chatType: 'printing',
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تسجيل الطلب وإضافته للمحادثات. بيانات الشحن متاحة من المحادثة.')));
