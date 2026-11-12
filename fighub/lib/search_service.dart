@@ -21,6 +21,12 @@ class SearchService {
       return true;
     }
 
+    // Fuzzy matching long phrases is expensive and unnecessary once the
+    // exact substring check has failed.
+    if (normalizedQuery.length > 24) {
+      return false;
+    }
+
     return _hasCloseMatch(
       normalizedText,
       normalizedQuery,
