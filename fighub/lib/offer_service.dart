@@ -78,7 +78,7 @@ class OfferService {
 
     final offerReference = _offers.doc(offerId);
     final offerSnapshot = await offerReference.get();
-    if (!offerSnapshot.exists) return;
+    if (!offerSnapshot.exists) return true;
 
     final offerData = offerSnapshot.data() ?? {};
     if (offerData['sellerId'] != uid) {
