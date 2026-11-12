@@ -869,7 +869,9 @@ class _ChatPageState extends State<ChatPage> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            partnerName.isEmpty ? widget.productName : partnerName,
+                            partnerName.isEmpty
+                                ? (chatData['productName'] as String? ?? widget.productName)
+                                : partnerName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
