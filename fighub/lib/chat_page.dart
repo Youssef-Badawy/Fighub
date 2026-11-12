@@ -829,34 +829,62 @@ class _ChatPageState extends State<ChatPage> {
     return Scaffold(
       appBar: AppBar(
         title: StreamBuilder<Map<String, dynamic>?>(
-          stream: _chatService.watchChatPartner(widget.chatId),
-          builder: (context, snapshot) {
-            final partner = snapshot.data;
+          stream: _chatService.watchChat(widget.chatId),
+          builder: (context, chatSnapshot) {
+            final chatData = {
+              ...?chatSnapshot.data,
+              'id': widget.chatId,
+            };
+            final chatType = _chatService.chatTypeFor(chatData);
+            final typeLabel = switch (chatType) {
+              'offers' => isArabic ? 'العروض الجماعية' : 'Group offers',
+              'printing' => isArabic ? 'الطباعة ثلاثية الأبعاد' : '3D Printing',
+              'direct' => isArabic ? 'محادثة مباشرة' : 'Direct message',
+              'legacy' => isArabic ? 'محادثة سابقة مشتركة' : 'Previous combined chat',
+              _ => isArabic ? 'المنتجات العادية' : 'Regular products',
+            };
 
-            final partnerName = partner?['name'] as String? ?? '';
+            return StreamBuilder<Map<String, dynamic>?>(
+              stream: _chatService.watchChatPartner(widget.chatId),
+              builder: (context, partnerSnapshot) {
+                final partner = partnerSnapshot.data;
+                final partnerName = partner?['name'] as String? ?? '';
+                final partnerPhoto = partner?['photoUrl'] as String? ?? '';
 
-            final partnerPhoto = partner?['photoUrl'] as String? ?? '';
-
-            return Row(
-              children: [
-                CircleAvatar(
-                  radius: 19,
-                  backgroundImage: partnerPhoto.isNotEmpty
-                      ? NetworkImage(partnerPhoto)
-                      : null,
-                  child: partnerPhoto.isEmpty
-                      ? const Icon(Icons.person_outline, size: 21)
-                      : null,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    partnerName.isEmpty ? widget.productName : partnerName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+                return Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 19,
+                      backgroundImage: partnerPhoto.isNotEmpty
+                          ? NetworkImage(partnerPhoto)
+                          : null,
+                      child: partnerPhoto.isEmpty
+                          ? const Icon(Icons.person_outline, size: 21)
+                          : null,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            partnerName.isEmpty ? widget.productName : partnerName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            typeLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
             );
           },
         ),
