@@ -54,48 +54,52 @@ class ChatService {
     return '${productId}_${participants[0]}_${participants[1]}';
   }
 
-  Future<String> _resolveCombinedChatId({
+  String _resolveTypedChatId({
     required String buyerId,
     required String sellerId,
-  }) async {
+    required String chatType,
+  }) {
     final participants = [buyerId, sellerId]..sort();
-    final legacyChatId = 'offer_${participants[0]}_${participants[1]}';
-    final legacySnapshot = await _firestore
-        .collection('chats')
-        .doc(legacyChatId)
-        .get();
+    final prefix = switch (chatType) {
+      'offers' => 'offers',
+      'printing' => 'printing',
+      'direct' => 'direct',
+      _ => 'products',
+    };
+    return '${prefix}_${participants[0]}_${participants[1]}';
+  }
 
-    if (!legacySnapshot.exists) return legacyChatId;
-
-    final data = legacySnapshot.data() ?? {};
-    final rawParticipants = data['participants'];
-    final hasBothParticipants =
-        rawParticipants is List &&
-        rawParticipants.contains(buyerId) &&
-        rawParticipants.contains(sellerId);
-
-    if (hasBothParticipants &&
-        data['buyerId'] == buyerId &&
-        data['sellerId'] == sellerId) {
-      return legacyChatId;
+  String _chatTypeOf(Map<String, dynamic> chat) {
+    final explicitType = chat['chatType'];
+    if (explicitType is String && explicitType.isNotEmpty) {
+      return explicitType;
     }
 
-    // Older pair-only chat IDs cannot represent purchases in both
-    // directions. Keep the existing conversation intact and create a
-    // separate, role-consistent thread for the opposite direction.
-    if (hasBothParticipants &&
-        data['buyerId'] == sellerId &&
-        data['sellerId'] == buyerId) {
-      return '${legacyChatId}_buyer_$buyerId';
+    final rawItems = chat['offerItems'];
+    final sources = <String>{};
+    if (rawItems is List) {
+      for (final rawItem in rawItems.whereType<Map>()) {
+        final source = rawItem['source'];
+        if (source is String) sources.add(source);
+      }
     }
+    if (sources.contains('offer') && sources.contains('product')) {
+      return 'legacy';
+    }
+    if (sources.contains('offer')) return 'offers';
+    if (sources.contains('product')) return 'ordinary';
 
-    throw StateError('Existing chat participants do not match this order.');
+    final id = chat['id'] as String? ?? '';
+    if (id.startsWith('direct_')) return 'direct';
+    if (id.startsWith('offer_')) return 'legacy';
+    return 'ordinary';
   }
 
   Future<String> getOrCreateChat({
     required String productId,
     required String productName,
     required String sellerId,
+    String chatType = 'ordinary',
   }) async {
     final user = _auth.currentUser;
 
@@ -112,11 +116,11 @@ class ChatService {
       throw StateError('You cannot start a chat with yourself.');
     }
 
-    // Product inquiries and reservations from offers/products for the same
-    // buyer-seller pair must use the same conversation document.
-    final chatId = await _resolveCombinedChatId(
+    // Keep each marketplace type in its own buyer-seller conversation.
+    final chatId = _resolveTypedChatId(
       buyerId: user.uid,
       sellerId: sellerId,
+      chatType: chatType,
     );
     final chatReference = _firestore.collection('chats').doc(chatId);
     final chatDocument = await chatReference.get();
@@ -125,6 +129,7 @@ class ChatService {
       await chatReference.set({
         'productId': 'combined_$chatId',
         'productName': 'حساب المشتريات',
+        'chatType': chatType,
         'buyerId': user.uid,
         'sellerId': sellerId,
         'participants': [user.uid, sellerId],
@@ -158,11 +163,11 @@ class ChatService {
       throw ArgumentError('A different user is required.');
     }
 
-    // Direct messages and marketplace reservations must share the same
-    // role-consistent conversation for this buyer/seller pair.
-    final chatId = await _resolveCombinedChatId(
+    // Direct messages have their own thread, separate from marketplace orders.
+    final chatId = _resolveTypedChatId(
       buyerId: user.uid,
       sellerId: otherUserId,
+      chatType: 'direct',
     );
     final reference = _firestore.collection('chats').doc(chatId);
     final snapshot = await reference.get();
@@ -182,7 +187,8 @@ class ChatService {
 
     await reference.set({
       'productId': 'combined_$chatId',
-      'productName': 'حساب المشتريات',
+      'productName': 'رسائل مباشرة',
+      'chatType': 'direct',
       'buyerId': user.uid,
       'sellerId': otherUserId,
       'participants': [user.uid, otherUserId],
@@ -204,6 +210,7 @@ class ChatService {
     required String price,
     required List<String> imagePaths,
     required String sellerId,
+    String chatType = 'ordinary',
   }) async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -216,9 +223,10 @@ class ChatService {
       throw StateError('You cannot reserve your own product.');
     }
 
-    final chatId = await _resolveCombinedChatId(
+    final chatId = _resolveTypedChatId(
       buyerId: user.uid,
       sellerId: sellerId,
+      chatType: chatType,
     );
     final ref = _firestore.collection('chats').doc(chatId);
     final newItem = <String, dynamic>{
@@ -240,7 +248,8 @@ class ChatService {
       if (!snapshot.exists) {
         transaction.set(ref, {
           'productId': 'combined_$chatId',
-          'productName': 'حساب المشتريات',
+          'productName': 'حساب مشتريات المنتجات',
+          'chatType': chatType,
           'buyerId': user.uid,
           'sellerId': sellerId,
           'participants': [user.uid, sellerId],
@@ -318,9 +327,10 @@ class ChatService {
       return;
     }
 
-    final chatId = await _resolveCombinedChatId(
+    final chatId = _resolveTypedChatId(
       buyerId: user.uid,
       sellerId: sellerId,
+      chatType: 'ordinary',
     );
     final reference = _firestore.collection('chats').doc(chatId);
 
@@ -378,9 +388,10 @@ class ChatService {
       throw StateError('Buyer and seller must be different.');
     }
 
-    final chatId = await _resolveCombinedChatId(
+    final chatId = _resolveTypedChatId(
       buyerId: user.uid,
       sellerId: sellerId,
+      chatType: 'offers',
     );
     final ref = _firestore.collection('chats').doc(chatId);
     final newItem = <String, dynamic>{
@@ -402,7 +413,8 @@ class ChatService {
       if (!snapshot.exists) {
         transaction.set(ref, {
           'productId': 'combined_$chatId',
-          'productName': 'حساب المشتريات',
+          'productName': 'حساب مشتريات العروض',
+          'chatType': 'offers',
           'buyerId': user.uid,
           'sellerId': sellerId,
           'participants': [user.uid, sellerId],
@@ -497,9 +509,10 @@ class ChatService {
     if (user == null) throw StateError('User must be signed in.');
     if (offerId.isEmpty || itemId.isEmpty || sellerId.isEmpty) return;
 
-    final chatId = await _resolveCombinedChatId(
+    final chatId = _resolveTypedChatId(
       buyerId: user.uid,
       sellerId: sellerId,
+      chatType: 'offers',
     );
     final ref = _firestore.collection('chats').doc(chatId);
 
@@ -916,9 +929,10 @@ class ChatService {
       throw StateError('Only the seller can open this offer chat.');
     }
 
-    final chatId = await _resolveCombinedChatId(
+    final chatId = _resolveTypedChatId(
       buyerId: buyerId,
       sellerId: sellerId,
+      chatType: 'offers',
     );
     final ref = _firestore.collection('chats').doc(chatId);
 
@@ -941,7 +955,8 @@ class ChatService {
       if (!snapshot.exists) {
         transaction.set(ref, {
           'productId': 'combined_$chatId',
-          'productName': 'حساب المشتريات',
+          'productName': 'حساب مشتريات العروض',
+          'chatType': 'offers',
           'buyerId': buyerId,
           'sellerId': sellerId,
           'participants': [buyerId, sellerId],
@@ -1548,7 +1563,7 @@ class ChatService {
               continue;
             }
 
-            final key = '$buyerId::$sellerId';
+            final key = '$buyerId::$sellerId::${_chatTypeOf(chat)}';
             final previous = chatsByPair[key];
             if (previous == null || rank(chat) > rank(previous)) {
               chatsByPair[key] = chat;
