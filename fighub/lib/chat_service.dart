@@ -66,7 +66,13 @@ class ChatService {
       'direct' => 'direct',
       _ => 'products',
     };
-    return '${prefix}_${participants[0]}_${participants[1]}';
+
+    // Marketplace conversations are directional: the same two users may
+    // buy from each other, and those orders must not share one account.
+    if (chatType == 'direct') {
+      return '${prefix}_${participants[0]}_${participants[1]}';
+    }
+    return '${prefix}_${buyerId}_${sellerId}';
   }
 
   String chatTypeFor(Map<String, dynamic> chat) => _chatTypeOf(chat);
