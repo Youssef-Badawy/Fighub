@@ -585,26 +585,26 @@ class ChatService {
         throw StateError('Only chat participants can confirm settlement.');
       }
 
+      final chatType = _chatTypeOf({...data, 'id': chatId});
+      if (chatType == 'direct' || chatType == 'legacy') {
+        throw StateError('Settlement is unavailable for this conversation type.');
+      }
+
+      final expectedSource = chatType == 'offers' ? 'offer' : 'product';
       final rawItems = data['offerItems'];
       final items = rawItems is List
-          ? rawItems
-                .whereType<Map>()
-                .map((item) => Map<String, dynamic>.from(item))
-                .toList()
+          ? rawItems.whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item)).toList()
           : <Map<String, dynamic>>[];
-      final activeItems = items
-          .where(
-            (item) => item['source'] == 'offer' && item['status'] == 'Reserved',
-          )
-          .toList();
+      final activeItems = items.where((item) =>
+          item['source'] == expectedSource && item['status'] == 'Reserved').toList();
 
       if (activeItems.isEmpty) {
-        throw StateError('There are no active reserved items to settle.');
+        throw StateError('There are no active reserved items in this account.');
       }
 
       var buyerConfirmed = data['settlementBuyerConfirmed'] == true;
       var sellerConfirmed = data['settlementSellerConfirmed'] == true;
-
       if (user.uid == buyerId) {
         if (buyerConfirmed) throw StateError('Buyer already confirmed.');
         buyerConfirmed = true;
@@ -612,10 +612,8 @@ class ChatService {
         if (sellerConfirmed) throw StateError('Seller already confirmed.');
         sellerConfirmed = true;
       }
-
       bothConfirmed = buyerConfirmed && sellerConfirmed;
 
-      // Each participant may update only their own confirmation.
       transaction.update(ref, {
         if (user.uid == buyerId)
           'settlementBuyerConfirmed': true
