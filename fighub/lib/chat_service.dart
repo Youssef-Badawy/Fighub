@@ -69,6 +69,8 @@ class ChatService {
     return '${prefix}_${participants[0]}_${participants[1]}';
   }
 
+  String chatTypeFor(Map<String, dynamic> chat) => _chatTypeOf(chat);
+
   String _chatTypeOf(Map<String, dynamic> chat) {
     final explicitType = chat['chatType'];
     if (explicitType is String && explicitType.isNotEmpty) {
