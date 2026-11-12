@@ -514,6 +514,16 @@ class _FigHubHomeState extends State<FigHubHome> {
     }
   }
 
+  bool _matchesSearchText(String value) {
+    try {
+      return SearchService.matches(value, _searchQuery);
+    } catch (error, stackTrace) {
+      debugPrint('FIGHUB SEARCH MATCH ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      return value.toLowerCase().contains(_searchQuery.toLowerCase());
+    }
+  }
+
   List<Product> get _filteredProducts {
     return _products.where((product) {
       final matchesCategory =
@@ -534,17 +544,8 @@ class _FigHubHomeState extends State<FigHubHome> {
       final sellerName =
           sellerProfile?.name ?? '';
 
-      final matchesProduct =
-          SearchService.matches(
-        product.name,
-        _searchQuery,
-      );
-
-      final matchesSeller =
-          SearchService.matches(
-        sellerName,
-        _searchQuery,
-      );
+      final matchesProduct = _matchesSearchText(product.name);
+      final matchesSeller = _matchesSearchText(sellerName);
 
       return matchesProduct || matchesSeller;
     }).toList();
