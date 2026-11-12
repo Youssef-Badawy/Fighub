@@ -70,7 +70,7 @@ class OfferService {
     return itemReference.id;
   }
 
-  Future<void> deleteOffer(String offerId) async {
+  Future<bool> deleteOffer(String offerId) async {
     final uid = _uid;
     if (offerId.isEmpty) {
       throw ArgumentError('Offer ID is required.');
@@ -114,14 +114,22 @@ class OfferService {
 
     // Cloudinary is called through the authenticated Worker. Chat media URLs
     // are never included here, so message attachments remain untouched.
-    for (var offset = 0; offset < itemAssets.length; offset += 25) {
-      final end = (offset + 25 < itemAssets.length)
-          ? offset + 25
-          : itemAssets.length;
-      await CloudinaryService().deleteOfferAssets(
-        offerId: offerId,
-        items: itemAssets.sublist(offset, end),
-      );
+    try {
+      for (var offset = 0; offset < itemAssets.length; offset += 25) {
+        final end = (offset + 25 < itemAssets.length)
+            ? offset + 25
+            : itemAssets.length;
+        await CloudinaryService().deleteOfferAssets(
+          offerId: offerId,
+          items: itemAssets.sublist(offset, end),
+        );
+      }
+    } catch (error, stackTrace) {
+      // The offer is already hidden from the marketplace. Keep its source
+      // documents so cleanup can safely retry on the next app launch.
+      debugPrint('FIGHUB OFFER IMAGE CLEANUP PENDING: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      return false;
     }
 
     // Keep conversation messages and completed sales, but remove deleted
@@ -200,6 +208,7 @@ class OfferService {
     }
 
     await offerReference.delete();
+    return true;
   }
 
   /// Finishes cleanup for offers that older app versions only soft-deleted.
