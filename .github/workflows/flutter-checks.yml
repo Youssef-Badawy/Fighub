@@ -13,11 +13,10 @@ on:
       - "fighub/**"
       - ".github/workflows/flutter-checks.yml"
 
-# Give each run its own group so a stale queued/in-progress run cannot block
-# validation of the latest pull-request commit.
+# Keep only the latest validation run for each PR/ref.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.run_id }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   analyze:
