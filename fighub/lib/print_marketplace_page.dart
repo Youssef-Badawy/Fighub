@@ -123,9 +123,12 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
       };
 
       if (existing.exists) {
-        // Firestore rules intentionally restrict updates to editable profile fields.
-        // Do not resend ownerId or createdAt when editing an existing business.
-        await reference.update(businessData);
+        // Repair legacy records that were created without a matching ownerId.
+        // The document ID is the authenticated user's UID.
+        await reference.update({
+          ...businessData,
+          'ownerId': user.uid,
+        });
       } else {
         await reference.set({
           ...businessData,
