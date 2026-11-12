@@ -126,6 +126,12 @@ class ChatService {
     );
     final chatReference = _firestore.collection('chats').doc(chatId);
     final chatDocument = await chatReference.get();
+    if (chatDocument.exists) {
+      final existingType = chatDocument.data()?['chatType'];
+      if (existingType != null && existingType != chatType) {
+        throw StateError('This conversation belongs to another marketplace type.');
+      }
+    }
 
     if (!chatDocument.exists) {
       await chatReference.set({
@@ -265,7 +271,8 @@ class ChatService {
       }
 
       final data = snapshot.data()!;
-      if (data['buyerId'] != user.uid ||
+      if ((data['chatType'] != null && data['chatType'] != chatType) ||
+          data['buyerId'] != user.uid ||
           data['sellerId'] != sellerId ||
           data['participants'] is! List ||
           !(data['participants'] as List).contains(user.uid) ||
@@ -434,7 +441,8 @@ class ChatService {
 
       final data = snapshot.data()!;
       final rawParticipants = data['participants'];
-      if (data['buyerId'] != user.uid ||
+      if ((data['chatType'] != null && data['chatType'] != 'offers') ||
+          data['buyerId'] != user.uid ||
           data['sellerId'] != sellerId ||
           rawParticipants is! List ||
           !rawParticipants.contains(user.uid) ||
@@ -976,7 +984,8 @@ class ChatService {
 
       final data = snapshot.data()!;
       final rawParticipants = data['participants'];
-      if (data['buyerId'] != buyerId ||
+      if ((data['chatType'] != null && data['chatType'] != 'offers') ||
+          data['buyerId'] != buyerId ||
           data['sellerId'] != sellerId ||
           rawParticipants is! List ||
           !rawParticipants.contains(buyerId) ||
