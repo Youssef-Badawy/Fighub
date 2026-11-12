@@ -173,11 +173,20 @@ class ProductService {
       imageUrls.add(legacyImage);
     }
 
-    await CloudinaryService().deleteProductAssets(
-      productId: productId,
-      assetUrls: imageUrls,
-    );
+    // Delete the Firestore listing even if the Cloudinary Worker is temporarily
+    // outdated or unavailable. Asset cleanup is best-effort and must not block
+    // the seller from removing their product from the marketplace.
     await _productsCollection.doc(productId).delete();
+
+    try {
+      await CloudinaryService().deleteProductAssets(
+        productId: productId,
+        assetUrls: imageUrls,
+      );
+    } catch (error, stackTrace) {
+      debugPrint('FIGHUB PRODUCT IMAGE CLEANUP PENDING ($productId): $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   Future<Product?> getProduct(String productId) async {
