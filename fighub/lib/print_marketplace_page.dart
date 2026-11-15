@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'fighub_image_picker.dart';
+
 import 'chat_service.dart';
 import 'chat_page.dart';
 import 'cloudinary_service.dart';
@@ -315,7 +317,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
             DropdownButtonFormField<String>(value: category, decoration: const InputDecoration(labelText: 'القسم'), items: printCategories.map((c) => DropdownMenuItem(value: c['name'] as String, child: Text(c['name'] as String))).toList(), onChanged: (v) => refresh(() => category = v ?? category)),
             TextFormField(controller: description, maxLines: 2, decoration: const InputDecoration(labelText: 'وصف المنتج')),
             const SizedBox(height: 10),
-            OutlinedButton.icon(onPressed: () async { final files = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85); if (files != null) refresh(() => image = files); }, icon: const Icon(Icons.image), label: Text(image == null ? 'اختيار صورة' : 'تم اختيار الصورة')),
+            OutlinedButton.icon(onPressed: () async { final files = await FigHubImagePicker.pickAndCrop(context, imageQuality: 85, maxWidth: 2500, maxHeight: 2500); if (files != null) refresh(() => image = files); }, icon: const Icon(Icons.image), label: Text(image == null ? 'اختيار صورة' : 'تم اختيار الصورة')),
           ])),
         ),
         actions: [
