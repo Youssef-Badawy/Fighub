@@ -428,7 +428,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
           DropdownButtonFormField<String>(value: category, decoration: const InputDecoration(labelText: 'عايز التصميم على إيه؟'), items: printCategories.map((c) => DropdownMenuItem(value: c['name'] as String, child: Text(c['name'] as String))).toList(), onChanged: (v) => refresh(() => category = v ?? category)),
           TextField(controller: notes, maxLines: 3, decoration: const InputDecoration(labelText: 'تفاصيل أو ملاحظات عن التصميم')),
           const SizedBox(height: 10),
-          OutlinedButton.icon(onPressed: () async { final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85); if (file != null) refresh(() => image = file); }, icon: const Icon(Icons.upload_file), label: Text(image == null ? 'ارفع صورة التصميم' : 'تم اختيار الصورة')),
+          OutlinedButton.icon(onPressed: () async { final file = await FigHubImagePicker.pickAndCrop(context, imageQuality: 85, maxWidth: 2500, maxHeight: 2500); if (file != null) refresh(() => image = file); }, icon: const Icon(Icons.upload_file), label: Text(image == null ? 'ارفع صورة التصميم' : 'تم اختيار الصورة')),
         ])),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
@@ -760,7 +760,49 @@ class PrintRequestsPage extends StatelessWidget {
               return Card(
                 margin: const EdgeInsets.all(10),
                 child: ListTile(
-                  leading: (data['imageUrl'] as String? ?? '').isEmpty ? const Icon(Icons.design_services) : Image.network(data['imageUrl'] as String, width: 56, height: 56, fit: BoxFit.cover),
+                  leading: (data['imageUrl'] as String? ?? '').isEmpty
+                      ? const Icon(Icons.design_services, size: 36)
+                      : InkWell(
+                          onTap: () {
+                            final imageUrl = data['imageUrl'] as String;
+                            showDialog<void>(
+                              context: context,
+                              builder: (dialogContext) => Dialog(
+                                insetPadding: const EdgeInsets.all(12),
+                                child: Stack(
+                                  alignment: Alignment.topRight,
+                                  children: [
+                                    InteractiveViewer(
+                                      minScale: 0.7,
+                                      maxScale: 5,
+                                      child: Image.network(
+                                        imageUrl,
+                                        fit: BoxFit.contain,
+                                        errorBuilder: (_, _, _) => const Padding(
+                                          padding: EdgeInsets.all(32),
+                                          child: Icon(Icons.broken_image_outlined, size: 48),
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton.filledTonal(
+                                      onPressed: () => Navigator.pop(dialogContext),
+                                      icon: const Icon(Icons.close),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Image.network(
+                              data['imageUrl'] as String,
+                              width: 88,
+                              height: 88,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
                   title: Text('طلب ${data['category'] ?? 'تصميم'}'),
                   subtitle: Text('${data['notes'] ?? ''}\nالعميل: ${data['customerName'] ?? data['customerId']}\nالحالة: ${data['status']}'),
                   isThreeLine: true,
