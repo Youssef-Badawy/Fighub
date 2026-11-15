@@ -1224,6 +1224,29 @@ class ChatService {
     }
   }
 
+  Future<void> markMessagesDelivered({
+    required String chatId,
+    required List<Map<String, dynamic>> messages,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null || chatId.isEmpty || messages.isEmpty) return;
+
+    final pending = messages.where((message) {
+      return message['senderId'] != user.uid &&
+          message['deliveredAt'] == null &&
+          (message['id'] as String? ?? '').isNotEmpty;
+    }).take(400).toList();
+    if (pending.isEmpty) return;
+
+    final batch = _firestore.batch();
+    for (final message in pending) {
+      batch.update(_messagesCollection(chatId).doc(message['id'] as String), {
+        'deliveredAt': FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
+
   Future<void> markMessagesRead({
     required String chatId,
     required List<Map<String, dynamic>> messages,
