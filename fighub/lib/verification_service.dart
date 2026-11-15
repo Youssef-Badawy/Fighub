@@ -194,13 +194,23 @@ class VerificationService {
       now.microsecond,
     );
 
-    await reference.update({
+    final batch = _firestore.batch();
+    batch.update(reference, {
       'status': 'Approved',
       'reviewedAt': FieldValue.serverTimestamp(),
       'startsAt': Timestamp.fromDate(now),
       'expiresAt': Timestamp.fromDate(expiresAt),
       'rejectionReason': '',
     });
+    batch.set(
+      _firestore.collection('seller_profiles').doc(request.userId),
+      {
+        'isVerified': true,
+        'verifiedUntil': Timestamp.fromDate(expiresAt),
+      },
+      SetOptions(merge: true),
+    );
+    await batch.commit();
   }
 
   Future<void> rejectRequest({
@@ -247,8 +257,16 @@ class VerificationService {
       return;
     }
 
-    await reference.update({
-      'status': 'Expired',
-    });
+    final batch = _firestore.batch();
+    batch.update(reference, {'status': 'Expired'});
+    batch.set(
+      _firestore.collection('seller_profiles').doc(request.userId),
+      {
+        'isVerified': false,
+        'verifiedUntil': FieldValue.delete(),
+      },
+      SetOptions(merge: true),
+    );
+    await batch.commit();
   }
 }

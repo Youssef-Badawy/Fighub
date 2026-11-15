@@ -13,6 +13,7 @@ import 'auth_guard.dart';
 import 'interests_page.dart';
 import 'verification_page.dart';
 import 'admin_verification_page.dart';
+import 'seller_rating_service.dart';
 
 class ProfilePage extends StatelessWidget {
   final List<Product> products;
@@ -64,7 +65,18 @@ class ProfilePage extends StatelessWidget {
                 ),
               ),
               Expanded(
-                child: _ProfileStat(title: localization.reviews, value: '0'),
+                child: StreamBuilder<SellerRatingSummary>(
+                  stream: SellerRatingService().watchSummary(
+                    FirebaseAuth.instance.currentUser?.uid ?? '',
+                  ),
+                  builder: (context, snapshot) {
+                    final count = snapshot.data?.count ?? 0;
+                    return _ProfileStat(
+                      title: localization.reviews,
+                      value: count.toString(),
+                    );
+                  },
+                ),
               ),
             ],
           ),

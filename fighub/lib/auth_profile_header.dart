@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'fighub_image_picker.dart';
 
 import 'auth_manager.dart';
 
@@ -16,7 +18,6 @@ class AuthProfileHeader extends StatefulWidget {
 }
 
 class _AuthProfileHeaderState extends State<AuthProfileHeader> {
-  final ImagePicker _imagePicker = ImagePicker();
   late final TextEditingController _bioController;
   bool _isUploadingPhoto = false;
   bool _isUploadingCover = false;
@@ -37,8 +38,8 @@ class _AuthProfileHeaderState extends State<AuthProfileHeader> {
   Future<void> _changeProfilePhoto() async {
     if (_isUploadingPhoto) return;
     try {
-      final image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
+      final image = await FigHubImagePicker.pickAndCrop(
+        context,
         imageQuality: 85,
         maxWidth: 900,
         maxHeight: 900,
@@ -60,8 +61,8 @@ class _AuthProfileHeaderState extends State<AuthProfileHeader> {
   Future<void> _changeCoverPhoto() async {
     if (_isUploadingCover) return;
     try {
-      final image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
+      final image = await FigHubImagePicker.pickAndCrop(
+        context,
         imageQuality: 82,
         maxWidth: 1800,
         maxHeight: 1000,
@@ -78,6 +79,36 @@ class _AuthProfileHeaderState extends State<AuthProfileHeader> {
     } finally {
       if (mounted) setState(() => _isUploadingCover = false);
     }
+  }
+
+  Future<void> _editBio() async {
+    _bioController.text = widget.authManager.bio;
+    final shouldSave = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('تعديل النبذة الشخصية'),
+        content: TextField(
+          controller: _bioController,
+          maxLength: 240,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            hintText: 'اكتب نبذة قصيرة عنك واهتماماتك...',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+    if (shouldSave == true && mounted) await _saveBio();
   }
 
   Future<void> _saveBio() async {
@@ -167,74 +198,106 @@ class _AuthProfileHeaderState extends State<AuthProfileHeader> {
               Positioned(
                 top: 8,
                 right: 8,
-                child: FilledButton.tonalIcon(
-                  onPressed: _isUploadingCover ? null : _changeCoverPhoto,
-                  icon: _isUploadingCover
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.photo_camera_back_outlined),
-                  label: const Text('تغيير الغلاف'),
-                ),
-              ),
-              Positioned(
-                bottom: 10,
-                left: 14,
-                child: GestureDetector(
-                  onTap: _isUploadingPhoto ? null : _changeProfilePhoto,
-                  child: Stack(
-                    alignment: Alignment.bottomRight,
-                    children: [
-                      _buildAvatar(colors.primary, colors.onPrimary),
-                      CircleAvatar(
-                        radius: 13,
-                        backgroundColor: colors.primary,
-                        child: Icon(
-                          Icons.camera_alt,
-                          size: 14,
-                          color: colors.onPrimary,
+                child: Material(
+                  color: colors.surface.withValues(alpha: 0.92),
+                  shape: const CircleBorder(),
+                  child: PopupMenuButton<String>(
+                    tooltip: 'إعدادات الملف الشخصي',
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'cover':
+                          _changeCoverPhoto();
+                          break;
+                        case 'photo':
+                          _changeProfilePhoto();
+                          break;
+                        case 'bio':
+                          _editBio();
+                          break;
+                      }
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'cover',
+                        child: ListTile(
+                          dense: true,
+                          leading: Icon(Icons.photo_camera_back_outlined),
+                          title: Text('تغيير صورة الغلاف'),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'photo',
+                        child: ListTile(
+                          dense: true,
+                          leading: Icon(Icons.account_circle_outlined),
+                          title: Text('تغيير الصورة الشخصية'),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'bio',
+                        child: ListTile(
+                          dense: true,
+                          leading: Icon(Icons.edit_note),
+                          title: Text('تعديل النبذة'),
                         ),
                       ),
                     ],
                   ),
                 ),
               ),
+              Positioned(
+                bottom: 10,
+                left: 14,
+                child: _buildAvatar(colors.primary, colors.onPrimary),
+              ),
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            name,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  name,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
+              ),
+              if (FirebaseAuth.instance.currentUser != null)
+                StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseFirestore.instance
+                      .collection('seller_profiles')
+                      .doc(FirebaseAuth.instance.currentUser!.uid)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    final data = snapshot.data?.data() ?? {};
+                    final isAdmin = data['isAdmin'] == true;
+                    final expiresAt = data['verifiedUntil'];
+                    final isPaidVerified = data['isVerified'] == true &&
+                        expiresAt is Timestamp &&
+                        DateTime.now().isBefore(expiresAt.toDate());
+                    if (!isAdmin && !isPaidVerified) {
+                      return const SizedBox.shrink();
+                    }
+                    return const Padding(
+                      padding: EdgeInsetsDirectional.only(start: 6),
+                      child: Icon(
+                        Icons.verified,
+                        color: Color(0xFF1D9BF0),
+                        size: 22,
+                      ),
+                    );
+                  },
+                ),
+            ],
           ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _bioController,
-            maxLength: 240,
-            maxLines: 3,
-            minLines: 2,
-            decoration: const InputDecoration(
-              labelText: 'نبذة عنك (Bio)',
-              hintText: 'اكتب نبذة قصيرة عنك واهتماماتك...',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          Align(
-            alignment: AlignmentDirectional.centerEnd,
-            child: FilledButton.icon(
-              onPressed: _isSavingBio ? null : _saveBio,
-              icon: _isSavingBio
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.save_outlined),
-              label: const Text('حفظ النبذة'),
-            ),
+          const SizedBox(height: 8),
+          Text(
+            widget.authManager.bio.isEmpty
+                ? 'أضف نبذة قصيرة عنك من قائمة الإعدادات'
+                : widget.authManager.bio,
+            style: Theme.of(context).textTheme.bodyMedium,
           ),
         ],
       ),

@@ -1224,6 +1224,53 @@ class ChatService {
     }
   }
 
+  Future<void> markMessagesDelivered({
+    required String chatId,
+    required List<Map<String, dynamic>> messages,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null || chatId.isEmpty || messages.isEmpty) return;
+
+    final pending = messages.where((message) {
+      return message['senderId'] != user.uid &&
+          message['deliveredAt'] == null &&
+          (message['id'] as String? ?? '').isNotEmpty;
+    }).take(400).toList();
+    if (pending.isEmpty) return;
+
+    final batch = _firestore.batch();
+    for (final message in pending) {
+      batch.update(_messagesCollection(chatId).doc(message['id'] as String), {
+        'deliveredAt': FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
+
+  Future<void> markMessagesRead({
+    required String chatId,
+    required List<Map<String, dynamic>> messages,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null || chatId.isEmpty || messages.isEmpty) return;
+    final batch = _firestore.batch();
+    var writes = 0;
+    for (final message in messages) {
+      if (message['senderId'] == user.uid || message['readAt'] != null) {
+        continue;
+      }
+      final id = message['id'] as String? ?? '';
+      if (id.isEmpty) continue;
+      batch.update(_messagesCollection(chatId).doc(id), {
+        'deliveredAt': message['deliveredAt'] ?? FieldValue.serverTimestamp(),
+        'readAt': FieldValue.serverTimestamp(),
+      });
+      writes++;
+      if (writes >= 400) break;
+    }
+    if (writes > 0) await batch.commit();
+  }
+
   Stream<Map<String, dynamic>?> watchChat(String chatId) {
     if (chatId.isEmpty) {
       return Stream.value(null);
@@ -1480,6 +1527,20 @@ class ChatService {
         'photoUrl': profile['photoUrl'] as String? ?? '',
       };
     });
+  }
+
+  Stream<List<Map<String, dynamic>>> watchRecentMessages(String chatId) {
+    final user = _auth.currentUser;
+    if (chatId.isEmpty || user == null) {
+      return Stream.value(const <Map<String, dynamic>>[]);
+    }
+    return _messagesCollection(chatId)
+        .orderBy('createdAt', descending: true)
+        .limit(50)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((document) => {'id': document.id, ...document.data()})
+            .toList());
   }
 
   Stream<List<Map<String, dynamic>>> watchMessages(String chatId) {

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'fighub_image_picker.dart';
+
 import 'interests.dart';
 
 import 'cloudinary_service.dart';
@@ -25,7 +27,6 @@ class _AddOfferItemPageState extends State<AddOfferItemPage> {
   final _priceController = TextEditingController();
   final _descriptionController = TextEditingController();
 
-  final ImagePicker _imagePicker = ImagePicker();
   final CloudinaryService _cloudinaryService = CloudinaryService();
   final OfferService _offerService = OfferService();
 
@@ -52,8 +53,11 @@ class _AddOfferItemPageState extends State<AddOfferItemPage> {
   }
 
   Future<void> _pickImages() async {
-    final images = await _imagePicker.pickMultiImage(
+    final images = await FigHubImagePicker.pickAndCropMultiple(
+      context,
       imageQuality: 85,
+      maxWidth: 2500,
+      maxHeight: 2500,
     );
 
     if (!mounted || images.isEmpty) {

@@ -392,12 +392,15 @@ class AuthManager extends ChangeNotifier {
     }
 
     try {
+      final userDocument = await _firestore.collection('users').doc(user.uid).get();
+      final isAdmin = userDocument.data()?['role'] == 'admin';
       await _sellerProfileService.saveMyProfile(
         name: _name,
         phone: _phone,
         photoUrl: _photoUrl,
         bio: _bio,
         coverUrl: _coverUrl,
+        isAdmin: isAdmin,
       );
     } catch (_) {
       // Keep authentication working even if

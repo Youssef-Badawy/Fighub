@@ -9,6 +9,12 @@ class SellerProfile {
   final String photoUrl;
   final String bio;
   final String coverUrl;
+  final bool isAdmin;
+  final bool isVerified;
+  final DateTime? verifiedUntil;
+
+  bool get hasVerifiedBadge => isAdmin ||
+      (isVerified && verifiedUntil != null && DateTime.now().isBefore(verifiedUntil!));
 
   const SellerProfile({
     required this.id,
@@ -18,6 +24,9 @@ class SellerProfile {
     required this.photoUrl,
     this.bio = '',
     this.coverUrl = '',
+    this.isAdmin = false,
+    this.isVerified = false,
+    this.verifiedUntil,
   });
 
   factory SellerProfile.fromFirestore(
@@ -33,6 +42,11 @@ class SellerProfile {
       photoUrl: data['photoUrl'] as String? ?? '',
       bio: data['bio'] as String? ?? '',
       coverUrl: data['coverUrl'] as String? ?? '',
+      isAdmin: data['isAdmin'] == true,
+      isVerified: data['isVerified'] == true,
+      verifiedUntil: data['verifiedUntil'] is Timestamp
+          ? (data['verifiedUntil'] as Timestamp).toDate()
+          : null,
     );
   }
 }
@@ -54,6 +68,7 @@ class SellerProfileService {
     required String photoUrl,
     String bio = '',
     String coverUrl = '',
+    bool isAdmin = false,
   }) async {
     final user = _auth.currentUser;
 
@@ -61,7 +76,7 @@ class SellerProfileService {
       throw StateError('User must be signed in.');
     }
 
-    await _sellerProfilesCollection.doc(user.uid).set({
+    final profileData = <String, dynamic>{
       'name': name,
       'nameSearch': name.trim().toLowerCase(),
       'email': FieldValue.delete(),
@@ -70,7 +85,12 @@ class SellerProfileService {
       'bio': bio,
       'coverUrl': coverUrl,
       'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    };
+    if (isAdmin) profileData['isAdmin'] = true;
+    await _sellerProfilesCollection.doc(user.uid).set(
+      profileData,
+      SetOptions(merge: true),
+    );
   }
 
   Future<SellerProfile?> getSellerProfile(

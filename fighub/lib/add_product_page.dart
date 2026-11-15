@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'interests.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'fighub_image_picker.dart';
+
 import 'app_localizations.dart';
 import 'cloudinary_service.dart';
 import 'product_model.dart';
@@ -32,7 +34,6 @@ class _AddProductPageState extends State<AddProductPage> {
   final TextEditingController _descriptionController =
       TextEditingController();
 
-  final ImagePicker _imagePicker = ImagePicker();
   final ProductService _productService = ProductService();
   final CloudinaryService _cloudinaryService =
       CloudinaryService();
@@ -54,8 +55,11 @@ class _AddProductPageState extends State<AddProductPage> {
 
   Future<void> _pickImages() async {
     try {
-      final images = await _imagePicker.pickMultiImage(
+      final images = await FigHubImagePicker.pickAndCropMultiple(
+        context,
         imageQuality: 85,
+        maxWidth: 2500,
+        maxHeight: 2500,
       );
 
       if (images.isEmpty) {

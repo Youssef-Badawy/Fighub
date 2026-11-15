@@ -11,6 +11,7 @@ import 'product_details_page.dart';
 import 'product_model.dart';
 import 'product_service.dart';
 import 'seller_profile_service.dart';
+import 'seller_rating_service.dart';
 
 class SellerProfilePage extends StatefulWidget {
   final String sellerId;
@@ -36,12 +37,15 @@ class _SellerProfilePageState
   final FollowService _followService =
       FollowService();
 
+  final SellerRatingService _ratingService = SellerRatingService();
+
   SellerProfile? _sellerProfile;
 
   bool _isLoadingProfile = true;
   String? _profileError;
   bool _isFollowLoading = false;
   bool _isOpeningChat = false;
+  bool _isRatingLoading = false;
 
   final ChatService _chatService = ChatService();
 
@@ -143,6 +147,100 @@ class _SellerProfilePageState
     }
   }
 
+  Future<void> _rateSeller() async {
+    if (_isRatingLoading || !await requireRegisteredAccount(context)) return;
+    setState(() => _isRatingLoading = true);
+    try {
+      final productId = await _ratingService.findEligibleProduct(widget.sellerId);
+      if (!mounted) return;
+      if (productId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('التقييم متاح بعد إتمام شراء منتج من هذا البائع فقط، ويمكنك التقييم مرة واحدة.'),
+          ),
+        );
+        return;
+      }
+
+      var selectedRating = 5;
+      final commentController = TextEditingController();
+      final result = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, refresh) => AlertDialog(
+            title: const Text('قيّم البائع'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('اختار تقييمك من نجمة إلى خمس نجوم'),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(
+                    5,
+                    (index) => IconButton(
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => refresh(() => selectedRating = index + 1),
+                      icon: Icon(
+                        index < selectedRating ? Icons.star : Icons.star_border,
+                        color: Colors.amber,
+                        size: 30,
+                      ),
+                    ),
+                  ),
+                ),
+                TextField(
+                  controller: commentController,
+                  maxLength: 300,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'تعليق اختياري',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('إلغاء'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, {
+                  'rating': selectedRating,
+                  'comment': commentController.text.trim(),
+                }),
+                child: const Text('إرسال التقييم'),
+              ),
+            ],
+          ),
+        ),
+      );
+      commentController.dispose();
+      if (result == null || !mounted) return;
+
+      await _ratingService.submitRating(
+        sellerId: widget.sellerId,
+        productId: productId,
+        rating: result['rating'] as int,
+        comment: result['comment'] as String,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم إرسال تقييمك بنجاح')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر إرسال التقييم: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isRatingLoading = false);
+    }
+  }
+
   Future<void> _toggleFollow() async {
     if (_isFollowLoading) {
       return;
@@ -237,12 +335,44 @@ class _SellerProfilePageState
               child: _buildProfilePhoto(),
             ),
             const SizedBox(height: 12),
-            Text(
-              sellerName,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
+                    sellerName,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                if (_sellerProfile?.hasVerifiedBadge == true) ...[
+                  const SizedBox(width: 5),
+                  const Icon(Icons.verified, color: Color(0xFF1D9BF0), size: 22),
+                ],
+              ],
+            ),
+            const SizedBox(height: 8),
+            StreamBuilder<SellerRatingSummary>(
+              stream: _ratingService.watchSummary(widget.sellerId),
+              builder: (context, snapshot) {
+                final summary = snapshot.data ??
+                    const SellerRatingSummary(average: 0, count: 0);
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.star, color: Colors.amber, size: 20),
+                    const SizedBox(width: 4),
+                    Text(
+                      summary.count == 0
+                          ? 'لا توجد تقييمات بعد'
+                          : '${summary.average.toStringAsFixed(1)} / 5  •  ${summary.count} تقييم',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ],
+                );
+              },
             ),
             if (_sellerProfile?.bio.trim().isNotEmpty == true) ...[
               const SizedBox(height: 8),
@@ -348,38 +478,54 @@ class _SellerProfilePageState
                   final isFollowing =
                       snapshot.data ?? false;
 
-                  return Row(
+                  return Column(
                     children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: _isFollowLoading ? null : _toggleFollow,
-                          icon: _isFollowLoading
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : Icon(
-                                  isFollowing
-                                      ? Icons.person_remove_outlined
-                                      : Icons.person_add_outlined,
-                                ),
-                          label: Text(isFollowing ? 'Following' : 'Follow'),
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: _isFollowLoading ? null : _toggleFollow,
+                              icon: _isFollowLoading
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : Icon(
+                                      isFollowing
+                                          ? Icons.person_remove_outlined
+                                          : Icons.person_add_outlined,
+                                    ),
+                              label: Text(isFollowing ? 'Following' : 'Follow'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _isOpeningChat ? null : _openDirectChat,
+                              icon: _isOpeningChat
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.chat_bubble_outline),
+                              label: const Text('Message'),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _isOpeningChat ? null : _openDirectChat,
-                          icon: _isOpeningChat
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.chat_bubble_outline),
-                          label: const Text('Message'),
-                        ),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: _isRatingLoading ? null : _rateSeller,
+                        icon: _isRatingLoading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.star_outline),
+                        label: const Text('قيّم البائع'),
                       ),
                     ],
                   );

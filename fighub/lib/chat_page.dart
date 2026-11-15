@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:record/record.dart';
 import 'package:image_picker/image_picker.dart';
+
+import 'fighub_image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -32,6 +34,21 @@ class _ChatPageState extends State<ChatPage> {
   bool _isSending = false;
   bool _isRecording = false;
   final AudioRecorder _audioRecorder = AudioRecorder();
+  final Stopwatch _recordingStopwatch = Stopwatch();
+  Timer? _recordingTimer;
+
+  String get _recordingElapsed {
+    final elapsed = _recordingStopwatch.elapsed;
+    final minutes = elapsed.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = elapsed.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  void _stopRecordingClock() {
+    _recordingTimer?.cancel();
+    _recordingTimer = null;
+    _recordingStopwatch.stop();
+  }
 
   @override
   void initState() {
@@ -42,6 +59,7 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void dispose() {
     _messageController.dispose();
+    _stopRecordingClock();
     unawaited(_audioRecorder.dispose());
     super.dispose();
   }
@@ -78,6 +96,13 @@ class _ChatPageState extends State<ChatPage> {
         return;
       }
 
+      _recordingStopwatch
+        ..reset()
+        ..start();
+      _recordingTimer?.cancel();
+      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
       setState(() => _isRecording = true);
     } catch (_) {
       if (!mounted) return;
@@ -101,6 +126,7 @@ class _ChatPageState extends State<ChatPage> {
     } catch (_) {
       // Best effort cleanup when cancelling a recording.
     } finally {
+      _stopRecordingClock();
       if (mounted) setState(() => _isRecording = false);
     }
   }
@@ -111,6 +137,7 @@ class _ChatPageState extends State<ChatPage> {
     if (!_isRecording || _isSending) return;
     String? path;
 
+    _stopRecordingClock();
     setState(() {
       _isRecording = false;
       _isSending = true;
@@ -129,14 +156,7 @@ class _ChatPageState extends State<ChatPage> {
         mediaType: 'audio',
       );
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            isArabic ? 'تم إرسال الرسالة الصوتية.' : 'Voice message sent.',
-          ),
-        ),
-      );
+      // Successful voice messages are confirmed by the message checkmarks.
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -229,7 +249,7 @@ class _ChatPageState extends State<ChatPage> {
     try {
       final picker = ImagePicker();
       final file = selectedType == 'image'
-          ? await picker.pickImage(source: ImageSource.gallery)
+          ? await FigHubImagePicker.pickAndCrop(context)
           : await picker.pickVideo(source: ImageSource.gallery);
 
       if (!mounted || file == null) return;
@@ -246,14 +266,7 @@ class _ChatPageState extends State<ChatPage> {
         mediaType: selectedType,
       );
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            isArabic ? 'تم إرسال الوسائط بنجاح.' : 'Media sent successfully.',
-          ),
-        ),
-      );
+      // Successful media messages are confirmed by the message checkmarks.
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -727,9 +740,20 @@ class _ChatPageState extends State<ChatPage> {
   ) {
     final senderId = message['senderId'] as String? ?? '';
 
-    final text = message['text'] as String? ?? '';
-    final type = message['type'] as String? ?? 'text';
-    final mediaUrl = message['mediaUrl'] as String? ?? '';
+    final rawText = message['text'] as String? ?? '';
+    final rawType = message['type'] as String? ?? 'text';
+    final rawMediaUrl = message['mediaUrl'] as String? ?? '';
+    final looksLikeImageUrl = rawType == 'text' &&
+        rawText.startsWith('http') &&
+        (rawText.contains('res.cloudinary.com') ||
+            rawText.contains('.jpg') || rawText.contains('.jpeg') ||
+            rawText.contains('.png') || rawText.contains('.webp') ||
+            rawText.contains('.gif'));
+    final type = looksLikeImageUrl ? 'image' : rawType;
+    final mediaUrl = rawMediaUrl.isNotEmpty
+        ? rawMediaUrl
+        : (looksLikeImageUrl ? rawText : '');
+    final text = looksLikeImageUrl ? '' : rawText;
 
     final currentUserId = _chatService.currentUserId;
 
@@ -761,6 +785,7 @@ class _ChatPageState extends State<ChatPage> {
                 child: Image.network(
                   mediaUrl,
                   width: 230,
+                  cacheWidth: 690,
                   fit: BoxFit.cover,
                   loadingBuilder: (context, child, progress) {
                     if (progress == null) return child;
@@ -797,11 +822,30 @@ class _ChatPageState extends State<ChatPage> {
       return bubble;
     }
 
+    final readAt = message['readAt'];
+    final deliveredAt = message['deliveredAt'];
+    final statusIcon = readAt != null || deliveredAt != null
+        ? Icons.done_all
+        : Icons.done;
+    final statusColor = readAt != null
+        ? Colors.green
+        : Theme.of(context).colorScheme.onSurfaceVariant;
+
     return GestureDetector(
       onLongPress: () {
         _confirmDeleteMessage(message);
       },
-      child: bubble,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          bubble,
+          Padding(
+            padding: const EdgeInsetsDirectional.only(end: 14, bottom: 5),
+            child: Icon(statusIcon, size: 16, color: statusColor),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1316,6 +1360,13 @@ class _ChatPageState extends State<ChatPage> {
                 }
 
                 final messages = snapshot.data ?? const [];
+                if (messages.isNotEmpty) {
+                  // Messages visible in the open conversation are read.
+                  unawaited(_chatService.markMessagesRead(
+                    chatId: widget.chatId,
+                    messages: messages,
+                  ));
+                }
 
                 if (messages.isEmpty) {
                   return Center(
@@ -1420,66 +1471,87 @@ class _ChatPageState extends State<ChatPage> {
                   ),
                   Row(
                     children: [
-                      IconButton(
-                        tooltip: isArabic
-                            ? 'إرفاق صورة أو فيديو'
-                            : 'Attach photo or video',
-                        onPressed: _isSending ? null : _pickAndSendMedia,
-                        icon: const Icon(Icons.attach_file),
-                      ),
-                      Expanded(
-                        child: TextField(
-                          controller: _messageController,
-                          textInputAction: TextInputAction.send,
-                          onSubmitted: (_) => _sendMessage(),
-                          decoration: InputDecoration(
-                            hintText: sendMessageHint,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(24),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                          ),
-                        ),
-                      ),
                       if (_isRecording) ...[
-                        IconButton(
-                          tooltip: isArabic
-                              ? 'إلغاء التسجيل'
-                              : 'Cancel recording',
-                          onPressed: _isSending ? null : _cancelVoiceRecording,
-                          icon: const Icon(Icons.close, color: Colors.red),
-                        ),
-                        IconButton(
-                          tooltip: isArabic
-                              ? 'إيقاف وإرسال الصوت'
-                              : 'Stop and send voice',
-                          onPressed: _isSending
-                              ? null
-                              : _stopAndSendVoiceMessage,
-                          icon: const Icon(
-                            Icons.stop_circle,
-                            color: Colors.red,
+                        Expanded(
+                          child: Container(
+                            height: 48,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(26),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.fiber_manual_record, color: Colors.red, size: 14),
+                                const SizedBox(width: 10),
+                                Text(
+                                  isArabic ? 'جاري التسجيل' : 'Recording',
+                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  _recordingElapsed,
+                                  style: const TextStyle(fontFamily: 'monospace'),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ] else
-                        IconButton(
-                          tooltip: isArabic
-                              ? 'تسجيل رسالة صوتية'
-                              : 'Record a voice message',
-                          onPressed: _isSending ? null : _startVoiceRecording,
-                          icon: const Icon(Icons.mic),
+                        IconButton.filledTonal(
+                          tooltip: isArabic ? 'إلغاء التسجيل' : 'Cancel recording',
+                          onPressed: _isSending ? null : _cancelVoiceRecording,
+                          icon: const Icon(Icons.delete_outline, color: Colors.red),
                         ),
-                      const SizedBox(width: 8),
-                      FloatingActionButton(
-                        mini: true,
-                        onPressed: _isSending || _isRecording
-                            ? null
-                            : _sendMessage,
-                        child: const Icon(Icons.send),
-                      ),
+                        IconButton.filled(
+                          tooltip: isArabic ? 'إرسال التسجيل' : 'Send recording',
+                          onPressed: _isSending ? null : _stopAndSendVoiceMessage,
+                          icon: const Icon(Icons.send),
+                        ),
+                      ] else ...[
+                        IconButton(
+                          tooltip: isArabic ? 'إرفاق صورة أو فيديو' : 'Attach photo or video',
+                          onPressed: _isSending ? null : _pickAndSendMedia,
+                          icon: const Icon(Icons.attach_file),
+                        ),
+                        Expanded(
+                          child: TextField(
+                            controller: _messageController,
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: (_) => _sendMessage(),
+                            decoration: InputDecoration(
+                              hintText: sendMessageHint,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (_isSending)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 12),
+                            child: SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        else
+                          IconButton(
+                            tooltip: isArabic ? 'تسجيل رسالة صوتية' : 'Record a voice message',
+                            onPressed: _startVoiceRecording,
+                            icon: const Icon(Icons.mic),
+                          ),
+                        const SizedBox(width: 4),
+                        FloatingActionButton(
+                          mini: true,
+                          onPressed: _isSending ? null : _sendMessage,
+                          child: const Icon(Icons.send),
+                        ),
+                      ],
                     ],
                   ),
                 ],

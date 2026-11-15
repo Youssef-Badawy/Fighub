@@ -202,12 +202,60 @@ service cloud.firestore {
       allow read: if request.auth != null;
 
       allow create: if request.auth != null
-                    && request.auth.uid == sellerId;
+                    && request.auth.uid == sellerId
+                    && (
+                      !request.resource.data.keys().hasAny([
+                        'isAdmin', 'isVerified', 'verifiedUntil'
+                      ])
+                      || get(
+                        /databases/$(database)/documents/users/$(request.auth.uid)
+                      ).data.role == 'admin'
+                    );
 
       allow update: if request.auth != null
-                    && request.auth.uid == sellerId;
+                    && (
+                      (
+                        request.auth.uid == sellerId
+                        && !request.resource.data.diff(resource.data)
+                           .affectedKeys().hasAny([
+                             'isAdmin', 'isVerified', 'verifiedUntil'
+                           ])
+                      )
+                      || get(
+                        /databases/$(database)/documents/users/$(request.auth.uid)
+                      ).data.role == 'admin'
+                    );
 
       allow delete: if false;
+    }
+
+    match /seller_reviews/{reviewId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+                    && request.resource.data.reviewerId == request.auth.uid
+                    && request.resource.data.sellerId is string
+                    && request.resource.data.sellerId != request.auth.uid
+                    && request.resource.data.productId is string
+                    && request.resource.data.rating is int
+                    && request.resource.data.rating >= 1
+                    && request.resource.data.rating <= 5
+                    && request.resource.data.comment is string
+                    && request.resource.data.comment.size() <= 300
+                    && request.resource.data.createdAt == request.time
+                    && reviewId == request.resource.data.sellerId + '_' + request.auth.uid
+                    && exists(
+                      /databases/$(database)/documents/products/$(request.resource.data.productId)
+                    )
+                    && get(
+                      /databases/$(database)/documents/products/$(request.resource.data.productId)
+                    ).data.sellerId == request.resource.data.sellerId
+                    && get(
+                      /databases/$(database)/documents/products/$(request.resource.data.productId)
+                    ).data.soldTo == request.auth.uid
+                    && get(
+                      /databases/$(database)/documents/products/$(request.resource.data.productId)
+                    ).data.status == 'Sold';
+      allow update, delete: if false;
     }
 
     match /offers/{offerId} {
@@ -649,6 +697,9 @@ service cloud.firestore {
 
     match /print_design_requests/{requestId} {
       allow create: if request.auth != null
+                    && get(
+                      /databases/$(database)/documents/users/$(request.auth.uid)
+                    ).data.role == 'admin'
                     && request.resource.data.customerId == request.auth.uid
                     && request.resource.data.companyId is string
                     && exists(
@@ -801,7 +852,31 @@ service cloud.firestore {
                       && request.resource.data.senderId
                          == request.auth.uid;
 
-        allow update: if false;
+        allow update: if request.auth != null
+                      && request.auth.uid in
+                         get(
+                           /databases/$(database)/documents/chats/$(chatId)
+                         ).data.participants
+                      && resource.data.senderId != request.auth.uid
+                      && request.resource.data.diff(resource.data)
+                         .affectedKeys().hasOnly(['deliveredAt', 'readAt'])
+                      && (
+                        !request.resource.data.diff(resource.data)
+                           .affectedKeys().hasAny(['deliveredAt'])
+                        || (
+                          resource.data.get('deliveredAt', null) == null
+                          && request.resource.data.deliveredAt == request.time
+                        )
+                      )
+                      && (
+                        !request.resource.data.diff(resource.data)
+                           .affectedKeys().hasAny(['readAt'])
+                        || (
+                          resource.data.get('readAt', null) == null
+                          && request.resource.data.readAt == request.time
+                          && request.resource.data.get('deliveredAt', null) != null
+                        )
+                      );
 
         allow delete: if request.auth != null
                       && request.auth.uid in
