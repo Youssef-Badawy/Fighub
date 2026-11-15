@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:record/record.dart';
 import 'package:image_picker/image_picker.dart';
+
+import 'fighub_image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -229,7 +231,7 @@ class _ChatPageState extends State<ChatPage> {
     try {
       final picker = ImagePicker();
       final file = selectedType == 'image'
-          ? await picker.pickImage(source: ImageSource.gallery)
+          ? await FigHubImagePicker.pickAndCrop(context)
           : await picker.pickVideo(source: ImageSource.gallery);
 
       if (!mounted || file == null) return;
