@@ -624,7 +624,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
             if (!_isOwner)
               StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                 stream: FirebaseAuth.instance.currentUser == null
-                    ? const Stream.empty()
+                    ? const Stream<DocumentSnapshot<Map<String, dynamic>>>.empty()
                     : _db.collection('users')
                         .doc(FirebaseAuth.instance.currentUser!.uid)
                         .snapshots(),
