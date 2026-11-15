@@ -418,10 +418,10 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
       return;
     }
     final userDocument = await _db.collection('users').doc(user.uid).get();
-    if (userDocument.data()?['role'] != 'admin') {
+    if (!userDocument.exists || userDocument.data()?['role'] == 'admin') {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('الميزة دي متاحة لحساب الإدارة فقط')),
+          const SnackBar(content: Text('طلب التصميم متاح لحسابات المستخدمين فقط')),
         );
       }
       return;
@@ -639,8 +639,13 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
                         .doc(FirebaseAuth.instance.currentUser!.uid)
                         .snapshots(),
                 builder: (context, userSnapshot) {
+                  final currentUser = FirebaseAuth.instance.currentUser;
                   final isAdmin = userSnapshot.data?.data()?['role'] == 'admin';
-                  if (!isAdmin) return const SizedBox.shrink();
+                  if (currentUser == null ||
+                      currentUser.isAnonymous ||
+                      isAdmin) {
+                    return const SizedBox.shrink();
+                  }
                   return Padding(
                     padding: const EdgeInsets.all(12),
                     child: SizedBox(
