@@ -251,7 +251,7 @@ service cloud.firestore {
                     ).data.sellerId == request.resource.data.sellerId
                     && get(
                       /databases/$(database)/documents/products/$(request.resource.data.productId)
-                    ).data.reservedBy == request.auth.uid
+                    ).data.soldTo == request.auth.uid
                     && get(
                       /databases/$(database)/documents/products/$(request.resource.data.productId)
                     ).data.status == 'Sold';
