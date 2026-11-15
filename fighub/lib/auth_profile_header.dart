@@ -207,10 +207,13 @@ class _AuthProfileHeaderState extends State<AuthProfileHeader> {
                       switch (value) {
                         case 'cover':
                           _changeCoverPhoto();
+                          break;
                         case 'photo':
                           _changeProfilePhoto();
+                          break;
                         case 'bio':
                           _editBio();
+                          break;
                       }
                     },
                     itemBuilder: (_) => const [
