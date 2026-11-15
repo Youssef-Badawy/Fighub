@@ -632,8 +632,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
               const SizedBox(width: 8),
               Expanded(child: OutlinedButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PrintRequestsPage(companyId: widget.businessId))), icon: const Icon(Icons.inbox), label: const Text('طلبات التصميم'))),
             ])),
-            if (!_isOwner)
-              StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                 stream: FirebaseAuth.instance.currentUser == null
                     ? const Stream<DocumentSnapshot<Map<String, dynamic>>>.empty()
                     : _db.collection('users')
