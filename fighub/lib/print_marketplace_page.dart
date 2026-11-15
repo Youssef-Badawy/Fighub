@@ -417,6 +417,15 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('سجّل حسابك أولًا لإرسال طلب تصميم')));
       return;
     }
+    final userDocument = await _db.collection('users').doc(user.uid).get();
+    if (userDocument.data()?['role'] != 'admin') {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('الميزة دي متاحة لحساب الإدارة فقط')),
+        );
+      }
+      return;
+    }
     final notes = TextEditingController();
     String category = widget.initialCategory ?? printCategories.first['name'] as String;
     XFile? image;
