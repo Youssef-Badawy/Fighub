@@ -484,9 +484,16 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
             'طلب تصميم جديد',
             'المنتج: ${result['category']}',
             'التفاصيل: ${result['notes']}',
-            if (imageUrl.isNotEmpty) 'صورة التصميم: $imageUrl',
           ].join('\n'),
         );
+        if (imageUrl.isNotEmpty) {
+          await ChatService().sendMediaMessage(
+            chatId: chatId,
+            mediaUrl: imageUrl,
+            mediaType: 'image',
+            caption: 'صورة التصميم المرفقة - ${result['category']}',
+          );
+        }
       } catch (deliveryError) {
         debugPrint('PRINT DESIGN CHAT DELIVERY ERROR: $deliveryError');
       }
@@ -569,6 +576,37 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
     }
   }
 
+  void _showProductImage(String imageUrl) {
+    if (imageUrl.isEmpty) return;
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            InteractiveViewer(
+              minScale: 0.7,
+              maxScale: 5,
+              child: Image.network(
+                imageUrl,
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Icon(Icons.broken_image_outlined, size: 48),
+                ),
+              ),
+            ),
+            IconButton.filledTonal(
+              onPressed: () => Navigator.pop(dialogContext),
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -583,7 +621,29 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
               const SizedBox(width: 8),
               Expanded(child: OutlinedButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PrintRequestsPage(companyId: widget.businessId))), icon: const Icon(Icons.inbox), label: const Text('طلبات التصميم'))),
             ])),
-            if (!_isOwner) Padding(padding: const EdgeInsets.all(12), child: SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: _busy ? null : () => _requestDesign(business), icon: const Icon(Icons.brush), label: const Text('اطلب تصميمك')))),
+            if (!_isOwner)
+              StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                stream: FirebaseAuth.instance.currentUser == null
+                    ? const Stream.empty()
+                    : _db.collection('users')
+                        .doc(FirebaseAuth.instance.currentUser!.uid)
+                        .snapshots(),
+                builder: (context, userSnapshot) {
+                  final isAdmin = userSnapshot.data?.data()?['role'] == 'admin';
+                  if (!isAdmin) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _busy ? null : () => _requestDesign(business),
+                        icon: const Icon(Icons.brush),
+                        label: const Text('اطلب تصميمك'),
+                      ),
+                    ),
+                  );
+                },
+              ),
             if (_busy) const LinearProgressIndicator(),
             Expanded(child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _db.collection('print_products').where('sellerId', isEqualTo: widget.businessId).where('active', isEqualTo: true).snapshots(),
@@ -606,7 +666,29 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
                     final stock = (data['stockQuantity'] as num?)?.toInt() ?? 0;
                     final imageUrl = data['imageUrl'] as String? ?? '';
                     return Card(child: ListTile(
-                      leading: imageUrl.isEmpty ? const CircleAvatar(child: Icon(Icons.inventory_2)) : CircleAvatar(backgroundImage: NetworkImage(imageUrl)),
+                      leading: imageUrl.isEmpty
+                          ? const SizedBox(
+                              width: 88,
+                              height: 88,
+                              child: Center(child: Icon(Icons.inventory_2, size: 36)),
+                            )
+                          : InkWell(
+                              onTap: () => _showProductImage(imageUrl),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Image.network(
+                                  imageUrl,
+                                  width: 88,
+                                  height: 88,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, _, _) => const SizedBox(
+                                    width: 88,
+                                    height: 88,
+                                    child: Icon(Icons.broken_image_outlined),
+                                  ),
+                                ),
+                              ),
+                            ),
                       title: Text(data['name']?.toString() ?? ''),
                       subtitle: Text('${data['price']} جنيه • المتاح: $stock\n${data['description'] ?? ''}'),
                       isThreeLine: true,
