@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'fighub_image_picker.dart';
 
 import 'auth_manager.dart';
@@ -252,11 +254,43 @@ class _AuthProfileHeaderState extends State<AuthProfileHeader> {
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            name,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  name,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
+              ),
+              if (FirebaseAuth.instance.currentUser != null)
+                StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseFirestore.instance
+                      .collection('seller_profiles')
+                      .doc(FirebaseAuth.instance.currentUser!.uid)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    final data = snapshot.data?.data() ?? {};
+                    final isAdmin = data['isAdmin'] == true;
+                    final expiresAt = data['verifiedUntil'];
+                    final isPaidVerified = data['isVerified'] == true &&
+                        expiresAt is Timestamp &&
+                        DateTime.now().isBefore(expiresAt.toDate());
+                    if (!isAdmin && !isPaidVerified) {
+                      return const SizedBox.shrink();
+                    }
+                    return const Padding(
+                      padding: EdgeInsetsDirectional.only(start: 6),
+                      child: Icon(
+                        Icons.verified,
+                        color: Color(0xFF1D9BF0),
+                        size: 22,
+                      ),
+                    );
+                  },
+                ),
+            ],
           ),
           const SizedBox(height: 8),
           Text(
