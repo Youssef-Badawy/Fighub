@@ -691,6 +691,8 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
                                   imageUrl,
                                   width: 88,
                                   height: 88,
+                                  cacheWidth: 264,
+                                  cacheHeight: 264,
                                   fit: BoxFit.cover,
                                   errorBuilder: (_, _, _) => const SizedBox(
                                     width: 88,
@@ -808,6 +810,8 @@ class PrintRequestsPage extends StatelessWidget {
                               data['imageUrl'] as String,
                               width: 88,
                               height: 88,
+                              cacheWidth: 264,
+                              cacheHeight: 264,
                               fit: BoxFit.cover,
                             ),
                           ),
