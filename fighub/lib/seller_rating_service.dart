@@ -47,7 +47,7 @@ class SellerRatingService {
 
     for (final product in products.docs) {
       final data = product.data();
-      if (data['status'] == 'Sold' && data['reservedBy'] == user.uid) {
+      if (data['status'] == 'Sold' && data['soldTo'] == user.uid) {
         return product.id;
       }
     }
@@ -86,7 +86,7 @@ class SellerRatingService {
       final data = product.data();
       if (!product.exists ||
           data?['sellerId'] != sellerId ||
-          data?['reservedBy'] != user.uid ||
+          data?['soldTo'] != user.uid ||
           data?['status'] != 'Sold') {
         throw StateError('التقييم متاح بعد إتمام عملية شراء مؤكدة فقط.');
       }
