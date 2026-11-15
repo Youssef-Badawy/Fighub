@@ -1529,6 +1529,20 @@ class ChatService {
     });
   }
 
+  Stream<List<Map<String, dynamic>>> watchRecentMessages(String chatId) {
+    final user = _auth.currentUser;
+    if (chatId.isEmpty || user == null) {
+      return Stream.value(const <Map<String, dynamic>>[]);
+    }
+    return _messagesCollection(chatId)
+        .orderBy('createdAt', descending: true)
+        .limit(50)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((document) => {'id': document.id, ...document.data()})
+            .toList());
+  }
+
   Stream<List<Map<String, dynamic>>> watchMessages(String chatId) {
     final user = _auth.currentUser;
     if (chatId.isEmpty || user == null) {
