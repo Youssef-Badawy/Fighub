@@ -697,9 +697,13 @@ service cloud.firestore {
 
     match /print_design_requests/{requestId} {
       allow create: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
+                    && exists(
+                      /databases/$(database)/documents/users/$(request.auth.uid)
+                    )
                     && get(
                       /databases/$(database)/documents/users/$(request.auth.uid)
-                    ).data.role == 'admin'
+                    ).data.role != 'admin'
                     && request.resource.data.customerId == request.auth.uid
                     && request.resource.data.companyId is string
                     && exists(

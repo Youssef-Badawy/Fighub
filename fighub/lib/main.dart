@@ -1047,46 +1047,50 @@ class _FigHubHomeState extends State<FigHubHome> {
   ) {
     final products = _filteredProducts;
 
-    return CustomScrollView(
-      // A new scroll identity prevents stale sliver offsets after a search
-      // filters the visible products down to a much shorter list.
-      key: ValueKey('home-${_selectedCategory}-${_searchQuery}'),
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.all(16),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate([
-              if (_searchQuery.isNotEmpty)
-                Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: TextButton.icon(
-                    onPressed: () => setState(() => _searchQuery = ''),
-                    icon: const Icon(Icons.close),
-                    label: Text(localization.isArabic ? 'مسح البحث: $_searchQuery' : 'Clear search: $_searchQuery'),
+    return ListView.builder(
+      key: ValueKey('home-\${_selectedCategory}-\${_searchQuery}'),
+      itemCount: products.isEmpty ? 2 : products.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_searchQuery.isNotEmpty)
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton.icon(
+                      onPressed: () => setState(() => _searchQuery = ''),
+                      icon: const Icon(Icons.close),
+                      label: Text(
+                        localization.isArabic
+                            ? 'مسح البحث: \$_searchQuery'
+                            : 'Clear search: \$_searchQuery',
+                      ),
+                    ),
+                  ),
+                SizedBox(
+                  height: 42,
+                  child: ListView.separated(
+                    primary: false,
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _categories.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    itemBuilder: (context, categoryIndex) {
+                      final category = _categories[categoryIndex];
+                      return ChoiceChip(
+                        label: Text(_categoryLabel(context, category)),
+                        selected: _selectedCategory == category,
+                        onSelected: (_) {
+                          setState(() => _selectedCategory = category);
+                        },
+                      );
+                    },
                   ),
                 ),
-              SizedBox(
-                height: 42,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _categories.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 8),
-                  itemBuilder: (context, index) {
-                    final category = _categories[index];
-                    return ChoiceChip(
-                      label: Text(_categoryLabel(context, category)),
-                      selected: _selectedCategory == category,
-                      onSelected: (_) {
-                        setState(() => _selectedCategory = category);
-                      },
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
+                const SizedBox(height: 16),
+                FilledButton.icon(
                   onPressed: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
@@ -1099,87 +1103,51 @@ class _FigHubHomeState extends State<FigHubHome> {
                     localization.isArabic ? 'العروض الجماعية' : 'Group offers',
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-            ]),
-          ),
-        ),
-        if (products.isEmpty)
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: 280,
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _searchQuery.isNotEmpty
-                            ? Icons.search_off_outlined
-                            : Icons.inventory_2_outlined,
-                        size: 58,
-                        color: Theme.of(context).colorScheme.outline,
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        _searchQuery.isNotEmpty
-                            ? (localization.isArabic
-                                ? 'ملقيناش منتجات مطابقة لبحثك'
-                                : 'No products match your search')
-                            : localization.noProducts,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
-                      if (_searchQuery.isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        TextButton.icon(
-                          onPressed: () => setState(() => _searchQuery = ''),
-                          icon: const Icon(Icons.close),
-                          label: Text(
-                            localization.isArabic ? 'مسح البحث' : 'Clear search',
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+              ],
+            ),
+          );
+        }
+
+        if (products.isEmpty) {
+          return SizedBox(
+            height: 280,
+            child: Center(
+              child: Text(
+                _searchQuery.trim().isNotEmpty
+                    ? 'بحث خطأ'
+                    : localization.noProducts,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyLarge,
               ),
             ),
-          )
-        else
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final product = products[index];
-                  if (index % 20 == 0) {
-                    _loadSellerProfiles(
-                      products.skip(index).take(20).toList(),
-                    );
-                  }
-                  return RepaintBoundary(
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _ProductCard(
-                        product: product,
-                        sellerProfile: _sellerProfiles[product.sellerId],
-                        isFavorite: _isFavorite(product),
-                        onFavorite: () => _toggleFavorite(product),
-                        onTap: () => _openProductDetails(product),
-                        onSellerTap: () =>
-                            _openSellerProfile(product.sellerId),
-                      ),
-                    ),
-                  );
-                },
-                childCount: products.length,
-              ),
+          );
+        }
+
+        final productIndex = index - 1;
+        if (productIndex % 20 == 0) {
+          final batch = products.skip(productIndex).take(20).toList();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              unawaited(_loadSellerProfiles(batch));
+            }
+          });
+        }
+
+        final product = products[productIndex];
+        return RepaintBoundary(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: _ProductCard(
+              product: product,
+              sellerProfile: _sellerProfiles[product.sellerId],
+              isFavorite: _isFavorite(product),
+              onFavorite: () => _toggleFavorite(product),
+              onTap: () => _openProductDetails(product),
+              onSellerTap: () => _openSellerProfile(product.sellerId),
             ),
           ),
-      ],
+        );
+      },
     );
   }
 
