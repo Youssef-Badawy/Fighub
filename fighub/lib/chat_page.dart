@@ -34,6 +34,21 @@ class _ChatPageState extends State<ChatPage> {
   bool _isSending = false;
   bool _isRecording = false;
   final AudioRecorder _audioRecorder = AudioRecorder();
+  final Stopwatch _recordingStopwatch = Stopwatch();
+  Timer? _recordingTimer;
+
+  String get _recordingElapsed {
+    final elapsed = _recordingStopwatch.elapsed;
+    final minutes = elapsed.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = elapsed.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  void _stopRecordingClock() {
+    _recordingTimer?.cancel();
+    _recordingTimer = null;
+    _recordingStopwatch.stop();
+  }
 
   @override
   void initState() {
@@ -44,6 +59,7 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void dispose() {
     _messageController.dispose();
+    _stopRecordingClock();
     unawaited(_audioRecorder.dispose());
     super.dispose();
   }
@@ -80,6 +96,13 @@ class _ChatPageState extends State<ChatPage> {
         return;
       }
 
+      _recordingStopwatch
+        ..reset()
+        ..start();
+      _recordingTimer?.cancel();
+      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
       setState(() => _isRecording = true);
     } catch (_) {
       if (!mounted) return;
@@ -103,6 +126,7 @@ class _ChatPageState extends State<ChatPage> {
     } catch (_) {
       // Best effort cleanup when cancelling a recording.
     } finally {
+      _stopRecordingClock();
       if (mounted) setState(() => _isRecording = false);
     }
   }
@@ -113,6 +137,7 @@ class _ChatPageState extends State<ChatPage> {
     if (!_isRecording || _isSending) return;
     String? path;
 
+    _stopRecordingClock();
     setState(() {
       _isRecording = false;
       _isSending = true;
@@ -1422,66 +1447,87 @@ class _ChatPageState extends State<ChatPage> {
                   ),
                   Row(
                     children: [
-                      IconButton(
-                        tooltip: isArabic
-                            ? 'إرفاق صورة أو فيديو'
-                            : 'Attach photo or video',
-                        onPressed: _isSending ? null : _pickAndSendMedia,
-                        icon: const Icon(Icons.attach_file),
-                      ),
-                      Expanded(
-                        child: TextField(
-                          controller: _messageController,
-                          textInputAction: TextInputAction.send,
-                          onSubmitted: (_) => _sendMessage(),
-                          decoration: InputDecoration(
-                            hintText: sendMessageHint,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(24),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                          ),
-                        ),
-                      ),
                       if (_isRecording) ...[
-                        IconButton(
-                          tooltip: isArabic
-                              ? 'إلغاء التسجيل'
-                              : 'Cancel recording',
-                          onPressed: _isSending ? null : _cancelVoiceRecording,
-                          icon: const Icon(Icons.close, color: Colors.red),
-                        ),
-                        IconButton(
-                          tooltip: isArabic
-                              ? 'إيقاف وإرسال الصوت'
-                              : 'Stop and send voice',
-                          onPressed: _isSending
-                              ? null
-                              : _stopAndSendVoiceMessage,
-                          icon: const Icon(
-                            Icons.stop_circle,
-                            color: Colors.red,
+                        Expanded(
+                          child: Container(
+                            height: 48,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(26),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.fiber_manual_record, color: Colors.red, size: 14),
+                                const SizedBox(width: 10),
+                                Text(
+                                  isArabic ? 'جاري التسجيل' : 'Recording',
+                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  _recordingElapsed,
+                                  style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ] else
-                        IconButton(
-                          tooltip: isArabic
-                              ? 'تسجيل رسالة صوتية'
-                              : 'Record a voice message',
-                          onPressed: _isSending ? null : _startVoiceRecording,
-                          icon: const Icon(Icons.mic),
+                        IconButton.filledTonal(
+                          tooltip: isArabic ? 'إلغاء التسجيل' : 'Cancel recording',
+                          onPressed: _isSending ? null : _cancelVoiceRecording,
+                          icon: const Icon(Icons.delete_outline, color: Colors.red),
                         ),
-                      const SizedBox(width: 8),
-                      FloatingActionButton(
-                        mini: true,
-                        onPressed: _isSending || _isRecording
-                            ? null
-                            : _sendMessage,
-                        child: const Icon(Icons.send),
-                      ),
+                        IconButton.filled(
+                          tooltip: isArabic ? 'إرسال التسجيل' : 'Send recording',
+                          onPressed: _isSending ? null : _stopAndSendVoiceMessage,
+                          icon: const Icon(Icons.send),
+                        ),
+                      ] else ...[
+                        IconButton(
+                          tooltip: isArabic ? 'إرفاق صورة أو فيديو' : 'Attach photo or video',
+                          onPressed: _isSending ? null : _pickAndSendMedia,
+                          icon: const Icon(Icons.attach_file),
+                        ),
+                        Expanded(
+                          child: TextField(
+                            controller: _messageController,
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: (_) => _sendMessage(),
+                            decoration: InputDecoration(
+                              hintText: sendMessageHint,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (_isSending)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 12),
+                            child: SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        else
+                          IconButton(
+                            tooltip: isArabic ? 'تسجيل رسالة صوتية' : 'Record a voice message',
+                            onPressed: _startVoiceRecording,
+                            icon: const Icon(Icons.mic),
+                          ),
+                        const SizedBox(width: 4),
+                        FloatingActionButton(
+                          mini: true,
+                          onPressed: _isSending ? null : _sendMessage,
+                          child: const Icon(Icons.send),
+                        ),
+                      ],
                     ],
                   ),
                 ],
