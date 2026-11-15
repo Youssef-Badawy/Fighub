@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'app_localizations.dart';
@@ -194,7 +196,10 @@ class ChatListPage extends StatelessWidget {
         final partnerName = partner?['name'] as String? ?? '';
         final photo = partner?['photoUrl'] as String? ?? '';
 
-        return Card(
+        return _watchDeliveryReceipts(
+          chatId,
+          service,
+          Card(
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -268,7 +273,29 @@ class ChatListPage extends StatelessWidget {
                     );
                   },
           ),
+          ),
         );
+      },
+    );
+  }
+
+  Widget _watchDeliveryReceipts(
+    String chatId,
+    ChatService service,
+    Widget child,
+  ) {
+    if (chatId.isEmpty) return child;
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: service.watchMessages(chatId),
+      builder: (context, snapshot) {
+        final messages = snapshot.data;
+        if (messages != null && messages.isNotEmpty) {
+          unawaited(service.markMessagesDelivered(
+            chatId: chatId,
+            messages: messages,
+          ));
+        }
+        return child;
       },
     );
   }
