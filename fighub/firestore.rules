@@ -849,7 +849,31 @@ service cloud.firestore {
                       && request.resource.data.senderId
                          == request.auth.uid;
 
-        allow update: if false;
+        allow update: if request.auth != null
+                      && request.auth.uid in
+                         get(
+                           /databases/$(database)/documents/chats/$(chatId)
+                         ).data.participants
+                      && resource.data.senderId != request.auth.uid
+                      && request.resource.data.diff(resource.data)
+                         .affectedKeys().hasOnly(['deliveredAt', 'readAt'])
+                      && (
+                        !request.resource.data.diff(resource.data)
+                           .affectedKeys().hasAny(['deliveredAt'])
+                        || (
+                          resource.data.get('deliveredAt', null) == null
+                          && request.resource.data.deliveredAt == request.time
+                        )
+                      )
+                      && (
+                        !request.resource.data.diff(resource.data)
+                           .affectedKeys().hasAny(['readAt'])
+                        || (
+                          resource.data.get('readAt', null) == null
+                          && request.resource.data.readAt == request.time
+                          && request.resource.data.get('deliveredAt', null) != null
+                        )
+                      );
 
         allow delete: if request.auth != null
                       && request.auth.uid in
