@@ -1048,6 +1048,9 @@ class _FigHubHomeState extends State<FigHubHome> {
     final products = _filteredProducts;
 
     return CustomScrollView(
+      // A new scroll identity prevents stale sliver offsets after a search
+      // filters the visible products down to a much shorter list.
+      key: ValueKey('home-${_selectedCategory}-${_searchQuery}'),
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.all(16),
