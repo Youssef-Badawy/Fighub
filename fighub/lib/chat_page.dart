@@ -1467,7 +1467,7 @@ class _ChatPageState extends State<ChatPage> {
                                 const Spacer(),
                                 Text(
                                   _recordingElapsed,
-                                  style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+                                  style: const TextStyle(fontFamily: 'monospace'),
                                 ),
                               ],
                             ),
