@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 
 import 'cloudinary_service.dart';
 import 'verification_model.dart';
+import 'fighub_image_picker.dart';
 import 'verification_service.dart';
 
 class VerificationPage extends StatefulWidget {
@@ -23,7 +24,6 @@ class _VerificationPageState
   final CloudinaryService _cloudinaryService =
       CloudinaryService();
 
-  final ImagePicker _imagePicker = ImagePicker();
 
   String _selectedPlanId =
       VerificationPlan.monthly.id;
@@ -38,9 +38,11 @@ class _VerificationPageState
     }
 
     try {
-      final image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
+      final image = await FigHubImagePicker.pickAndCrop(
+        context,
         imageQuality: 85,
+        maxWidth: 2000,
+        maxHeight: 2000,
       );
 
       if (image == null) {
