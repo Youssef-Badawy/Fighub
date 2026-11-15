@@ -286,7 +286,7 @@ class ChatListPage extends StatelessWidget {
   ) {
     if (chatId.isEmpty) return child;
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: service.watchMessages(chatId),
+      stream: service.watchRecentMessages(chatId),
       builder: (context, snapshot) {
         final messages = snapshot.data;
         if (messages != null && messages.isNotEmpty) {
