@@ -788,6 +788,7 @@ class _ChatPageState extends State<ChatPage> {
                 child: Image.network(
                   mediaUrl,
                   width: 230,
+                  cacheWidth: 690,
                   fit: BoxFit.cover,
                   loadingBuilder: (context, child, progress) {
                     if (progress == null) return child;
