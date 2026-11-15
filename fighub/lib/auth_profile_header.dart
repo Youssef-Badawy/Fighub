@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'fighub_image_picker.dart';
 
 import 'auth_manager.dart';
 
@@ -16,7 +16,6 @@ class AuthProfileHeader extends StatefulWidget {
 }
 
 class _AuthProfileHeaderState extends State<AuthProfileHeader> {
-  final ImagePicker _imagePicker = ImagePicker();
   late final TextEditingController _bioController;
   bool _isUploadingPhoto = false;
   bool _isUploadingCover = false;
@@ -37,8 +36,8 @@ class _AuthProfileHeaderState extends State<AuthProfileHeader> {
   Future<void> _changeProfilePhoto() async {
     if (_isUploadingPhoto) return;
     try {
-      final image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
+      final image = await FigHubImagePicker.pickAndCrop(
+        context,
         imageQuality: 85,
         maxWidth: 900,
         maxHeight: 900,
@@ -60,8 +59,8 @@ class _AuthProfileHeaderState extends State<AuthProfileHeader> {
   Future<void> _changeCoverPhoto() async {
     if (_isUploadingCover) return;
     try {
-      final image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
+      final image = await FigHubImagePicker.pickAndCrop(
+        context,
         imageQuality: 82,
         maxWidth: 1800,
         maxHeight: 1000,
