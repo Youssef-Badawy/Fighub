@@ -37,6 +37,8 @@ class SellerRatingService {
   Future<String?> findEligibleProduct(String sellerId) async {
     final user = _auth.currentUser;
     if (user == null || user.isAnonymous || user.uid == sellerId) return null;
+    final previousReview = await _reviews.doc('${sellerId}_${user.uid}').get();
+    if (previousReview.exists) return null;
 
     final products = await _db
         .collection('products')
