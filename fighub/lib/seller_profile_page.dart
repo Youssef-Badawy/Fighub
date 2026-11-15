@@ -478,38 +478,54 @@ class _SellerProfilePageState
                   final isFollowing =
                       snapshot.data ?? false;
 
-                  return Row(
+                  return Column(
                     children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: _isFollowLoading ? null : _toggleFollow,
-                          icon: _isFollowLoading
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : Icon(
-                                  isFollowing
-                                      ? Icons.person_remove_outlined
-                                      : Icons.person_add_outlined,
-                                ),
-                          label: Text(isFollowing ? 'Following' : 'Follow'),
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: _isFollowLoading ? null : _toggleFollow,
+                              icon: _isFollowLoading
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : Icon(
+                                      isFollowing
+                                          ? Icons.person_remove_outlined
+                                          : Icons.person_add_outlined,
+                                    ),
+                              label: Text(isFollowing ? 'Following' : 'Follow'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _isOpeningChat ? null : _openDirectChat,
+                              icon: _isOpeningChat
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.chat_bubble_outline),
+                              label: const Text('Message'),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _isOpeningChat ? null : _openDirectChat,
-                          icon: _isOpeningChat
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.chat_bubble_outline),
-                          label: const Text('Message'),
-                        ),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: _isRatingLoading ? null : _rateSeller,
+                        icon: _isRatingLoading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.star_outline),
+                        label: const Text('قيّم البائع'),
                       ),
                     ],
                   );
