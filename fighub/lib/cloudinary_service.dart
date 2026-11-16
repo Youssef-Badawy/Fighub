@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
@@ -10,6 +12,11 @@ class CloudinaryService {
 
   static const String _workerUrl =
       'https://fighub.youssef-khaled-badawy.workers.dev';
+
+  static const int _maxImageBytes = 25 * 1024 * 1024;
+  static const int _maxVideoBytes = 100 * 1024 * 1024;
+  static const int _maxAudioBytes = 25 * 1024 * 1024;
+  static const Duration _uploadTimeout = Duration(minutes: 3);
 
   Future<void> deleteProductAssets({
     required String productId,
@@ -62,14 +69,16 @@ class CloudinaryService {
       throw StateError('Could not get Firebase ID token.');
     }
 
-    final response = await http.post(
-      Uri.parse(_workerUrl),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $idToken',
-      },
-      body: jsonEncode(body),
-    );
+    final response = await http
+        .post(
+          Uri.parse(_workerUrl),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $idToken',
+          },
+          body: jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 30));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
         'Cloudinary cleanup failed: ${response.statusCode} ${response.body}',
@@ -77,110 +86,120 @@ class CloudinaryService {
     }
   }
 
-  Future<String> uploadImage(XFile imageFile) async {
-    final imageBytes = await imageFile.readAsBytes();
-
-    if (imageBytes.isEmpty) {
-      throw StateError('Image file is empty.');
+  String _errorMessage(String responseBody) {
+    try {
+      final decoded = jsonDecode(responseBody);
+      if (decoded is Map<String, dynamic>) {
+        final error = decoded['error'];
+        if (error is Map<String, dynamic>) {
+          final message = error['message']?.toString();
+          if (message != null && message.isNotEmpty) return message;
+        }
+        final message = decoded['message']?.toString();
+        if (message != null && message.isNotEmpty) return message;
+      }
+    } catch (_) {
+      // Preserve the original response when Cloudinary returns non-JSON.
     }
-
-    final uri = Uri.parse(
-      'https://api.cloudinary.com/v1_1/$_cloudName/image/upload',
-    );
-
-    final request = http.MultipartRequest('POST', uri);
-
-    request.fields['upload_preset'] = _uploadPreset;
-
-    request.files.add(
-      http.MultipartFile.fromBytes(
-        'file',
-        imageBytes,
-        filename: imageFile.name,
-      ),
-    );
-
-    final response = await request.send();
-
-    final responseBody = await response.stream.bytesToString();
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-        'Cloudinary upload failed: '
-        '${response.statusCode} $responseBody',
-      );
-    }
-
-    final decodedResponse = jsonDecode(responseBody) as Map<String, dynamic>;
-
-    final secureUrl = decodedResponse['secure_url'] as String?;
-
-    if (secureUrl == null || secureUrl.isEmpty) {
-      throw StateError('Cloudinary did not return an image URL.');
-    }
-
-    return secureUrl;
+    return responseBody.length > 500
+        ? responseBody.substring(0, 500)
+        : responseBody;
   }
 
-  Future<String> uploadAudio(String audioPath) async {
+  Future<String> _uploadFile({
+    required String path,
+    required String filename,
+    required String resourceType,
+    required String mediaLabel,
+    required int maxBytes,
+  }) async {
+    final file = File(path);
+    if (!await file.exists()) {
+      throw StateError('ملف $mediaLabel غير موجود على الجهاز.');
+    }
+
+    final fileLength = await file.length();
+    if (fileLength <= 0) {
+      throw StateError('ملف $mediaLabel فارغ.');
+    }
+    if (fileLength > maxBytes) {
+      final maxMb = (maxBytes / (1024 * 1024)).round();
+      throw StateError('حجم $mediaLabel أكبر من الحد المسموح ($maxMb MB).');
+    }
+
     final uri = Uri.parse(
-      'https://api.cloudinary.com/v1_1/$_cloudName/video/upload',
+      'https://api.cloudinary.com/v1_1/$_cloudName/$resourceType/upload',
     );
-    final request = http.MultipartRequest('POST', uri);
-    request.fields['upload_preset'] = _uploadPreset;
-    request.files.add(
-      await http.MultipartFile.fromPath(
-        'file',
-        audioPath,
-        filename: 'voice_message.m4a',
-      ),
-    );
-
-    final response = await request.send();
-    final body = await response.stream.bytesToString();
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-        'Cloudinary audio upload failed: ${response.statusCode} $body',
+    final request = http.MultipartRequest('POST', uri)
+      ..fields['upload_preset'] = _uploadPreset
+      ..files.add(
+        await http.MultipartFile.fromPath(
+          'file',
+          path,
+          filename: filename,
+        ),
       );
-    }
 
-    final decoded = jsonDecode(body) as Map<String, dynamic>;
-    final url = decoded['secure_url'] as String?;
-    if (url == null || url.isEmpty) {
-      throw StateError('Cloudinary did not return an audio URL.');
+    try {
+      final streamedResponse =
+          await request.send().timeout(_uploadTimeout);
+      final responseBody = await streamedResponse.stream
+          .bytesToString()
+          .timeout(const Duration(seconds: 30));
+
+      if (streamedResponse.statusCode < 200 ||
+          streamedResponse.statusCode >= 300) {
+        throw StateError(
+          'Cloudinary $mediaLabel upload failed '
+          '(${streamedResponse.statusCode}): ${_errorMessage(responseBody)}',
+        );
+      }
+
+      final decoded = jsonDecode(responseBody);
+      if (decoded is! Map<String, dynamic>) {
+        throw StateError('Cloudinary returned an invalid response.');
+      }
+      final secureUrl = decoded['secure_url'] as String?;
+      if (secureUrl == null || secureUrl.isEmpty) {
+        throw StateError('Cloudinary did not return a secure URL.');
+      }
+      return secureUrl;
+    } on TimeoutException {
+      throw StateError(
+        'انتهت مهلة رفع $mediaLabel. تحقق من الاتصال وحاول مرة أخرى.',
+      );
+    } on SocketException {
+      throw StateError('تعذر الاتصال بخدمة رفع $mediaLabel.');
     }
-    return url;
   }
 
-  Future<String> uploadVideo(XFile videoFile) async {
-    final uri = Uri.parse(
-      'https://api.cloudinary.com/v1_1/$_cloudName/video/upload',
+  Future<String> uploadImage(XFile imageFile) {
+    return _uploadFile(
+      path: imageFile.path,
+      filename: imageFile.name,
+      resourceType: 'image',
+      mediaLabel: 'الصورة',
+      maxBytes: _maxImageBytes,
     );
-    final request = http.MultipartRequest('POST', uri);
-    request.fields['upload_preset'] = _uploadPreset;
-    request.files.add(
-      await http.MultipartFile.fromPath(
-        'file',
-        videoFile.path,
-        filename: videoFile.name,
-      ),
+  }
+
+  Future<String> uploadAudio(String audioPath) {
+    return _uploadFile(
+      path: audioPath,
+      filename: 'voice_message.m4a',
+      resourceType: 'video',
+      mediaLabel: 'الرسالة الصوتية',
+      maxBytes: _maxAudioBytes,
     );
+  }
 
-    final response = await request.send();
-    final body = await response.stream.bytesToString();
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-        'Cloudinary video upload failed: ${response.statusCode} $body',
-      );
-    }
-
-    final decoded = jsonDecode(body) as Map<String, dynamic>;
-    final url = decoded['secure_url'] as String?;
-    if (url == null || url.isEmpty) {
-      throw StateError('Cloudinary did not return a video URL.');
-    }
-    return url;
+  Future<String> uploadVideo(XFile videoFile) {
+    return _uploadFile(
+      path: videoFile.path,
+      filename: videoFile.name,
+      resourceType: 'video',
+      mediaLabel: 'الفيديو',
+      maxBytes: _maxVideoBytes,
+    );
   }
 }
