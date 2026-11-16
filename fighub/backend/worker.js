@@ -130,6 +130,55 @@ async function readFirestoreDocument(path, idToken) {
   return response.json();
 }
 
+
+async function handleCloudinaryUploadSignature(body, payload, env) {
+  const resourceType = body.resourceType;
+  if (!['image', 'video'].includes(resourceType)) {
+    return new Response(JSON.stringify({ error: 'Unsupported upload resource type' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (payload.firebase?.sign_in_provider === 'anonymous') {
+    return new Response(JSON.stringify({ error: 'A registered account is required to upload files' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (!env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET) {
+    return new Response(JSON.stringify({ error: 'Cloudinary upload credentials are not configured on the FigHub Worker' }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Keep the upload folder server-controlled. The client receives only a
+  // short-lived signature and never receives the Cloudinary API secret.
+  const folder = 'fighub';
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const signatureText = `folder=${folder}&timestamp=${timestamp}${env.CLOUDINARY_API_SECRET}`;
+  const digest = await crypto.subtle.digest(
+    'SHA-1',
+    new TextEncoder().encode(signatureText),
+  );
+  const signature = Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+
+  return new Response(JSON.stringify({
+    cloudName: CLOUDINARY_CLOUD_NAME,
+    apiKey: env.CLOUDINARY_API_KEY,
+    timestamp,
+    signature,
+    folder,
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 async function handleCloudinaryDeletion(body, payload, idToken, env) {
   const { ownerType, ownerId } = body;
   if (!ownerId || !['product', 'offer'].includes(ownerType)) {
@@ -284,6 +333,10 @@ export default {
       }
 
       const body = await request.json();
+
+      if (body.action === 'signCloudinaryUpload') {
+        return await handleCloudinaryUploadSignature(body, payload, env);
+      }
 
       if (body.action === 'deleteCloudinaryAssets') {
         try {

@@ -157,13 +157,22 @@ class _ChatPageState extends State<ChatPage> {
       );
 
       // Successful voice messages are confirmed by the message checkmarks.
-    } catch (_) {
+    } catch (error, stackTrace) {
+      debugPrint('FIGHUB CHAT AUDIO SEND ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
+      final details = error.toString();
+      final shortDetails = details.length > 180
+          ? '${details.substring(0, 180)}…'
+          : details;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            isArabic ? 'تعذر إرسال الصوت. راجع الاتصال وإعدادات Cloudinary.' : 'Could not send audio. Check your connection and Cloudinary settings.',
+            isArabic
+                ? 'تعذر إرسال الصوت: $shortDetails'
+                : 'Could not send audio: $shortDetails',
           ),
+          duration: const Duration(seconds: 6),
         ),
       );
     } finally {
@@ -267,13 +276,22 @@ class _ChatPageState extends State<ChatPage> {
       );
 
       // Successful media messages are confirmed by the message checkmarks.
-    } catch (_) {
+    } catch (error, stackTrace) {
+      debugPrint('FIGHUB CHAT MEDIA SEND ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
+      final details = error.toString();
+      final shortDetails = details.length > 180
+          ? '${details.substring(0, 180)}…'
+          : details;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            isArabic ? 'تعذر إرسال الوسائط. راجع الاتصال وإعدادات Cloudinary.' : 'Could not send media. Check your connection and Cloudinary settings.',
+            isArabic
+                ? 'تعذر إرسال الوسائط: $shortDetails'
+                : 'Could not send media: $shortDetails',
           ),
+          duration: const Duration(seconds: 6),
         ),
       );
     } finally {
@@ -1655,26 +1673,45 @@ class _ChatVideoPlayer extends StatefulWidget {
 }
 
 class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
-  late final VideoPlayerController _controller;
+  VideoPlayerController? _controller;
+  bool _loading = false;
+  bool _started = false;
   bool _failed = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
-    _controller
-        .initialize()
-        .then((_) {
-          if (mounted) setState(() {});
-        })
-        .catchError((Object _) {
-          if (mounted) setState(() => _failed = true);
+  Future<void> _startPlayback() async {
+    if (_loading || _started || _failed) return;
+    setState(() => _loading = true);
+
+    final controller =
+        VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    _controller = controller;
+
+    try {
+      await controller.initialize().timeout(const Duration(seconds: 25));
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() {
+        _loading = false;
+        _started = true;
+      });
+    } catch (error) {
+      debugPrint('FIGHUB CHAT VIDEO PLAYER ERROR: $error');
+      await controller.dispose();
+      if (identical(_controller, controller)) _controller = null;
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _failed = true;
         });
+      }
+    }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
@@ -1687,7 +1724,8 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
         child: Center(child: Icon(Icons.error_outline)),
       );
     }
-    if (!_controller.value.isInitialized) {
+
+    if (_loading) {
       return const SizedBox(
         width: 230,
         height: 130,
@@ -1695,8 +1733,28 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
       );
     }
 
-    final ratio = _controller.value.aspectRatio > 0
-        ? _controller.value.aspectRatio
+    if (!_started || _controller == null) {
+      return SizedBox(
+        width: 230,
+        height: 130,
+        child: Material(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(10),
+          child: Center(
+            child: IconButton.filled(
+              tooltip: 'تشغيل الفيديو',
+              onPressed: _startPlayback,
+              icon: const Icon(Icons.play_arrow),
+              iconSize: 34,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final controller = _controller!;
+    final ratio = controller.value.aspectRatio > 0
+        ? controller.value.aspectRatio
         : 16 / 9;
 
     return SizedBox(
@@ -1706,18 +1764,18 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            VideoPlayer(_controller),
+            VideoPlayer(controller),
             IconButton.filled(
               onPressed: () {
-                if (_controller.value.isPlaying) {
-                  _controller.pause();
+                if (controller.value.isPlaying) {
+                  controller.pause();
                 } else {
-                  _controller.play();
+                  controller.play();
                 }
                 setState(() {});
               },
               icon: Icon(
-                _controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
+                controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
               ),
             ),
           ],

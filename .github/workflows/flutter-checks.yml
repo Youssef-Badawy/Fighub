@@ -53,16 +53,3 @@ jobs:
       - name: Analyze entire Flutter app
         run: flutter analyze --no-fatal-infos
 
-      - name: Build Android debug APK
-        id: build_apk
-        if: always()
-        run: flutter build apk --debug
-
-      - name: Upload Android debug APK
-        if: always() && steps.build_apk.outcome == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: fighub-debug-apk-${{ github.sha }}
-          path: fighub/build/app/outputs/flutter-apk/app-debug.apk
-          if-no-files-found: error
-          retention-days: 7
