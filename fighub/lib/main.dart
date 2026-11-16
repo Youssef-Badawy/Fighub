@@ -49,30 +49,59 @@ class FigHubBootstrap extends StatefulWidget {
 }
 
 class _FigHubBootstrapState extends State<FigHubBootstrap> {
-  late final Future<({AppSettings settings, AuthManager authManager})> _startup =
-      _initializeApp();
+  late Future<({AppSettings settings, AuthManager authManager})> _startup;
+
+  @override
+  void initState() {
+    super.initState();
+    _startup = _initializeApp();
+  }
 
   Future<({AppSettings settings, AuthManager authManager})> _initializeApp() async {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      ).timeout(const Duration(seconds: 30));
+    } else {
+      Firebase.app();
+    }
 
-    // Start in guest mode so browsing does not require an email account.
+    // Guest authentication is helpful, but it must never hold the whole app
+    // on the welcome screen when the auth service or network is unavailable.
     if (FirebaseAuth.instance.currentUser == null) {
       try {
-        await FirebaseAuth.instance.signInAnonymously();
+        await FirebaseAuth.instance
+            .signInAnonymously()
+            .timeout(const Duration(seconds: 12));
       } catch (error) {
         debugPrint('Anonymous sign-in is unavailable: $error');
       }
     }
 
     final settings = AppSettings();
-    await settings.loadSettings();
+    try {
+      await settings.loadSettings().timeout(const Duration(seconds: 5));
+    } catch (error) {
+      debugPrint('Settings load failed; using defaults: $error');
+    }
 
     final authManager = AuthManager();
-    await authManager.load();
+    try {
+      await authManager.load().timeout(const Duration(seconds: 10));
+    } catch (error) {
+      // AuthManager.load updates the local auth state before optional profile
+      // reads. Continue to the app instead of leaving users on an endless
+      // startup spinner when Firestore is slow or temporarily unreachable.
+      debugPrint('Profile startup load timed out or failed: $error');
+    }
 
     return (settings: settings, authManager: authManager);
+  }
+
+  void _retryStartup() {
+    setState(() {
+      _startup = _initializeApp();
+    });
   }
 
   @override
@@ -87,15 +116,76 @@ class _FigHubBootstrapState extends State<FigHubBootstrap> {
           );
         }
 
-        return MaterialApp(
+        if (snapshot.hasError) {
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: ThemeData(
+              useMaterial3: true,
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: const Color(0xFF246BCE),
+              ),
+            ),
+            home: Scaffold(
+              backgroundColor: const Color(0xFF246BCE),
+              body: SafeArea(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.cloud_off_outlined,
+                          size: 64,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'تعذر تشغيل FigHub',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'تأكد من اتصال الإنترنت ثم حاول مرة أخرى.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                        const SizedBox(height: 22),
+                        FilledButton(
+                          onPressed: _retryStartup,
+                          child: const Text('إعادة المحاولة'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        return const MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: ThemeData(
             useMaterial3: true,
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF246BCE),
+            colorScheme: ColorScheme(
+              brightness: Brightness.light,
+              primary: Color(0xFF246BCE),
+              onPrimary: Colors.white,
+              secondary: Color(0xFF246BCE),
+              onSecondary: Colors.white,
+              error: Colors.red,
+              onError: Colors.white,
+              surface: Colors.white,
+              onSurface: Colors.black,
             ),
           ),
-          home: const FigHubWelcomeScreen(),
+          home: FigHubWelcomeScreen(),
         );
       },
     );
