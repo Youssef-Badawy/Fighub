@@ -9,26 +9,26 @@ import 'chat_service.dart';
 import 'chat_page.dart';
 import 'cloudinary_service.dart';
 
-const printCategories = <Map<String, dynamic>>[
-  {'name': 'تيشيرتات', 'icon': Icons.checkroom},
-  {'name': 'مجات', 'icon': Icons.coffee},
-  {'name': 'هدايا', 'icon': Icons.card_giftcard},
-  {'name': 'مجسمات', 'icon': Icons.toys},
-  {'name': 'ميداليات', 'icon': Icons.workspace_premium},
-  {'name': 'استيكرات', 'icon': Icons.sticky_note_2},
-  {'name': 'خشبيات', 'icon': Icons.forest},
-  {'name': 'سلاسل', 'icon': Icons.link},
-  {'name': 'حظاظات', 'icon': Icons.circle_outlined},
-  {'name': 'شنط', 'icon': Icons.shopping_bag},
-  {'name': 'طابلوه', 'icon': Icons.image},
-  {'name': 'صور', 'icon': Icons.photo},
-  {'name': 'كابات', 'icon': Icons.sports_baseball},
-  {'name': 'برواز', 'icon': Icons.crop_portrait},
-  {'name': 'كوميكس', 'icon': Icons.menu_book},
-  {'name': 'اعلام', 'icon': Icons.flag},
-  {'name': 'نوت بوك', 'icon': Icons.book},
-  {'name': 'اقلام', 'icon': Icons.edit},
-  {'name': 'محفظة', 'icon': Icons.account_balance_wallet},
+const printCategories = <Map<String, String>>[
+  {'name': 'تيشيرتات', 'emoji': '👕'},
+  {'name': 'مجات', 'emoji': '☕'},
+  {'name': 'هدايا', 'emoji': '🎁'},
+  {'name': 'مجسمات', 'emoji': '🧸'},
+  {'name': 'ميداليات', 'emoji': '🏅'},
+  {'name': 'استيكرات', 'emoji': '🏷️'},
+  {'name': 'خشبيات', 'emoji': '🪵'},
+  {'name': 'سلاسل', 'emoji': '📿'},
+  {'name': 'حظاظات', 'emoji': '🪢'},
+  {'name': 'شنط', 'emoji': '👜'},
+  {'name': 'طابلوه', 'emoji': '🖼️'},
+  {'name': 'صور', 'emoji': '📸'},
+  {'name': 'كابات', 'emoji': '🧢'},
+  {'name': 'برواز', 'emoji': '🖼️'},
+  {'name': 'كوميكس', 'emoji': '📚'},
+  {'name': 'اعلام', 'emoji': '🚩'},
+  {'name': 'نوت بوك', 'emoji': '📓'},
+  {'name': 'اقلام', 'emoji': '🖊️'},
+  {'name': 'محفظة', 'emoji': '👛'},
 ];
 
 class PrintMarketplacePage extends StatelessWidget {
@@ -209,7 +209,33 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
           child: InkWell(
             onTap: () => setState(() => _selectedCategory = item['name'] as String),
             child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Icon(item['icon'] as IconData, size: 34, color: Theme.of(context).colorScheme.primary),
+              Container(
+                width: 76,
+                height: 76,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Theme.of(context).colorScheme.primaryContainer,
+                      Theme.of(context).colorScheme.surfaceContainerHighest,
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(22),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Theme.of(context).colorScheme.shadow.withValues(alpha: .10),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  item['emoji']!,
+                  style: const TextStyle(fontSize: 43, height: 1.15),
+                ),
+              ),
               const SizedBox(height: 10),
               Text(item['name'] as String, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600)),
             ]),
