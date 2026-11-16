@@ -8,8 +8,6 @@ import 'package:image_picker/image_picker.dart';
 
 class CloudinaryService {
   static const String _cloudName = 'jcfyuify';
-  static const String _uploadPreset = 'fighub_products';
-
   static const String _workerUrl =
       'https://fighub.youssef-khaled-badawy.workers.dev';
 
@@ -106,6 +104,44 @@ class CloudinaryService {
         : responseBody;
   }
 
+  Future<Map<String, dynamic>> _requestUploadSignature(
+    String resourceType,
+  ) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous) {
+      throw StateError('يجب تسجيل الدخول بحساب مسجل لرفع الملفات.');
+    }
+
+    final idToken = await user.getIdToken();
+    if (idToken == null || idToken.isEmpty) {
+      throw StateError('تعذر التحقق من الحساب قبل رفع الملف.');
+    }
+
+    final response = await http
+        .post(
+          Uri.parse(_workerUrl),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $idToken',
+          },
+          body: jsonEncode({
+            'action': 'signCloudinaryUpload',
+            'resourceType': resourceType,
+          }),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    final decoded = jsonDecode(response.body);
+    if (response.statusCode < 200 ||
+        response.statusCode >= 300 ||
+        decoded is! Map<String, dynamic>) {
+      throw StateError(
+        'تعذر تجهيز رفع الملف: ${_errorMessage(response.body)}',
+      );
+    }
+    return decoded;
+  }
+
   Future<String> _uploadFile({
     required String path,
     required String filename,
@@ -127,11 +163,25 @@ class CloudinaryService {
       throw StateError('حجم $mediaLabel أكبر من الحد المسموح ($maxMb MB).');
     }
 
+    final signatureData = await _requestUploadSignature(resourceType);
+    final cloudName = signatureData['cloudName'] as String? ?? _cloudName;
+    final apiKey = signatureData['apiKey'] as String? ?? '';
+    final timestamp = signatureData['timestamp']?.toString() ?? '';
+    final signature = signatureData['signature'] as String? ?? '';
+    final folder = signatureData['folder'] as String? ?? 'fighub';
+
+    if (apiKey.isEmpty || timestamp.isEmpty || signature.isEmpty) {
+      throw StateError('بيانات التوقيع الآمن من خادم FigHub غير مكتملة.');
+    }
+
     final uri = Uri.parse(
-      'https://api.cloudinary.com/v1_1/$_cloudName/$resourceType/upload',
+      'https://api.cloudinary.com/v1_1/$cloudName/$resourceType/upload',
     );
     final request = http.MultipartRequest('POST', uri)
-      ..fields['upload_preset'] = _uploadPreset
+      ..fields['api_key'] = apiKey
+      ..fields['timestamp'] = timestamp
+      ..fields['signature'] = signature
+      ..fields['folder'] = folder
       ..files.add(
         await http.MultipartFile.fromPath(
           'file',
