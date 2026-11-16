@@ -157,13 +157,22 @@ class _ChatPageState extends State<ChatPage> {
       );
 
       // Successful voice messages are confirmed by the message checkmarks.
-    } catch (_) {
+    } catch (error, stackTrace) {
+      debugPrint('FIGHUB CHAT AUDIO SEND ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
+      final details = error.toString();
+      final shortDetails = details.length > 180
+          ? '${details.substring(0, 180)}…'
+          : details;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            isArabic ? 'تعذر إرسال الصوت. راجع الاتصال وإعدادات Cloudinary.' : 'Could not send audio. Check your connection and Cloudinary settings.',
+            isArabic
+                ? 'تعذر إرسال الصوت: $shortDetails'
+                : 'Could not send audio: $shortDetails',
           ),
+          duration: const Duration(seconds: 6),
         ),
       );
     } finally {
@@ -267,13 +276,22 @@ class _ChatPageState extends State<ChatPage> {
       );
 
       // Successful media messages are confirmed by the message checkmarks.
-    } catch (_) {
+    } catch (error, stackTrace) {
+      debugPrint('FIGHUB CHAT MEDIA SEND ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
+      final details = error.toString();
+      final shortDetails = details.length > 180
+          ? '${details.substring(0, 180)}…'
+          : details;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            isArabic ? 'تعذر إرسال الوسائط. راجع الاتصال وإعدادات Cloudinary.' : 'Could not send media. Check your connection and Cloudinary settings.',
+            isArabic
+                ? 'تعذر إرسال الوسائط: $shortDetails'
+                : 'Could not send media: $shortDetails',
           ),
+          duration: const Duration(seconds: 6),
         ),
       );
     } finally {
@@ -1664,10 +1682,12 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
     _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
     _controller
         .initialize()
+        .timeout(const Duration(seconds: 25))
         .then((_) {
           if (mounted) setState(() {});
         })
-        .catchError((Object _) {
+        .catchError((Object error) {
+          debugPrint('FIGHUB CHAT VIDEO PLAYER ERROR: $error');
           if (mounted) setState(() => _failed = true);
         });
   }
