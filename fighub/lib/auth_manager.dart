@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -65,7 +67,8 @@ class AuthManager extends ChangeNotifier {
       final document = await _firestore
           .collection('users')
           .doc(user.uid)
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 8));
 
       if (document.exists) {
         final data = document.data();
@@ -96,7 +99,15 @@ class AuthManager extends ChangeNotifier {
       _interests = [];
     }
 
-    await _syncSellerProfile();
+    // Public seller-profile synchronization is secondary startup work. Do not
+    // block entry to the app while waiting for this network operation.
+    unawaited(
+      _syncSellerProfile()
+          .timeout(const Duration(seconds: 8))
+          .catchError((Object error, StackTrace stackTrace) {
+        debugPrint('Startup seller profile sync failed: $error');
+      }),
+    );
 
     notifyListeners();
   }
