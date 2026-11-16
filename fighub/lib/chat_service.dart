@@ -36,6 +36,40 @@ class ChatService {
     }
   }
 
+  void _dispatchMessageNotifications({
+    required String recipientId,
+    required String chatId,
+    required String messageId,
+    required String title,
+    required String message,
+    String? productId,
+  }) {
+    // Never hold the sender's chat UI open for notification delivery.
+    unawaited(
+      _notifySafely(
+        userId: recipientId,
+        title: title,
+        message: message,
+        productId: productId,
+        chatId: chatId,
+      ),
+    );
+    unawaited(
+      _workerPushService
+          .sendPush(
+            userId: recipientId,
+            chatId: chatId,
+            messageId: messageId,
+            title: title,
+            message: message,
+          )
+          .catchError((Object error, StackTrace stackTrace) {
+        debugPrint('FIGHUB CHAT PUSH ERROR: $error');
+        debugPrintStack(stackTrace: stackTrace);
+      }),
+    );
+  }
+
   String? get currentUserId {
     return _auth.currentUser?.uid;
   }
@@ -1327,37 +1361,27 @@ class ChatService {
 
     final recipientId = user.uid == buyerId ? sellerId : buyerId;
 
-    final messageReference = await _messagesCollection(chatId).add({
+    final messageReference = _messagesCollection(chatId).doc();
+    final batch = _firestore.batch();
+    batch.set(messageReference, {
       'senderId': user.uid,
       'text': message,
       'createdAt': FieldValue.serverTimestamp(),
     });
-
-    await chatReference.update({
+    batch.update(chatReference, {
       'lastMessage': message,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+    await batch.commit();
 
-    await _notifySafely(
-      userId: recipientId,
+    _dispatchMessageNotifications(
+      recipientId: recipientId,
+      chatId: chatId,
+      messageId: messageReference.id,
       title: 'رسالة جديدة',
       message: '$productName: $message',
       productId: productId,
-      chatId: chatId,
     );
-
-    try {
-      await _workerPushService.sendPush(
-        userId: recipientId,
-        chatId: chatId,
-        messageId: messageReference.id,
-        title: 'رسالة جديدة',
-        message: '$productName: $message',
-      );
-    } catch (_) {
-      // Push notification failure must not prevent
-      // the chat message from being saved successfully.
-    }
   }
 
   Future<void> sendMediaMessage({
@@ -1403,38 +1427,29 @@ class ChatService {
         ? label
         : '$label: $trimmedCaption';
 
-    final messageReference = await _messagesCollection(chatId).add({
+    final messageReference = _messagesCollection(chatId).doc();
+    final batch = _firestore.batch();
+    batch.set(messageReference, {
       'senderId': user.uid,
       'text': trimmedCaption,
       'type': mediaType,
       'mediaUrl': mediaUrl,
       'createdAt': FieldValue.serverTimestamp(),
     });
-
-    await chatRef.update({
+    batch.update(chatRef, {
       'lastMessage': lastMessage,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+    await batch.commit();
 
-    await _notifySafely(
-      userId: recipientId,
+    _dispatchMessageNotifications(
+      recipientId: recipientId,
+      chatId: chatId,
+      messageId: messageReference.id,
       title: 'رسالة جديدة',
       message: '$productName: $lastMessage',
       productId: productId,
-      chatId: chatId,
     );
-
-    try {
-      await _workerPushService.sendPush(
-        userId: recipientId,
-        chatId: chatId,
-        messageId: messageReference.id,
-        title: 'رسالة جديدة',
-        message: '$productName: $lastMessage',
-      );
-    } catch (_) {
-      // Push failure must not prevent the message from being saved.
-    }
   }
 
   Future<void> deleteMessage({
