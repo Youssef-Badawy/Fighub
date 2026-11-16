@@ -169,23 +169,15 @@ class _FigHubBootstrapState extends State<FigHubBootstrap> {
           );
         }
 
-        return const MaterialApp(
+        return MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: ThemeData(
             useMaterial3: true,
-            colorScheme: ColorScheme(
-              brightness: Brightness.light,
-              primary: Color(0xFF246BCE),
-              onPrimary: Colors.white,
-              secondary: Color(0xFF246BCE),
-              onSecondary: Colors.white,
-              error: Colors.red,
-              onError: Colors.white,
-              surface: Colors.white,
-              onSurface: Colors.black,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: const Color(0xFF246BCE),
             ),
           ),
-          home: FigHubWelcomeScreen(),
+          home: const FigHubWelcomeScreen(),
         );
       },
     );
