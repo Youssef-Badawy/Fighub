@@ -1047,61 +1047,96 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
                     final data = doc.data();
                     final stock = (data['stockQuantity'] as num?)?.toInt() ?? 0;
                     final imageUrl = data['imageUrl'] as String? ?? '';
-                    return Card(child: ListTile(
-                      leading: imageUrl.isEmpty
-                          ? const SizedBox(
-                              width: 88,
-                              height: 88,
-                              child: Center(child: Icon(Icons.inventory_2, size: 36)),
-                            )
-                          : InkWell(
+                    final franchise = data['franchise']?.toString() ?? '';
+                    final character = data['character']?.toString() ?? '';
+                    final description = data['description']?.toString() ?? '';
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      clipBehavior: Clip.antiAlias,
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            InkWell(
                               onTap: () => _showProductImage(imageUrl),
+                              borderRadius: BorderRadius.circular(10),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(10),
-                                child: Image.network(
-                                  imageUrl,
-                                  width: 88,
-                                  height: 88,
-                                  cacheWidth: 264,
-                                  cacheHeight: 264,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, _, _) => const SizedBox(
-                                    width: 88,
-                                    height: 88,
-                                    child: Icon(Icons.broken_image_outlined),
-                                  ),
+                                child: SizedBox(
+                                  width: 104,
+                                  height: 104,
+                                  child: imageUrl.isEmpty
+                                      ? const ColoredBox(
+                                          color: Color(0x11000000),
+                                          child: Icon(Icons.inventory_2_outlined, size: 34),
+                                        )
+                                      : Image.network(
+                                          imageUrl,
+                                          width: 104,
+                                          height: 104,
+                                          cacheWidth: 312,
+                                          cacheHeight: 312,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, _, _) => const Icon(Icons.broken_image_outlined),
+                                        ),
                                 ),
                               ),
                             ),
-                      title: Text(data['name']?.toString() ?? ''),
-                      subtitle: Text([
-                        '${data['price']} جنيه • المتاح: $stock',
-                        if ((data['franchise'] as String? ?? '').isNotEmpty)
-                          'السلسلة: ${data['franchise']}',
-                        if ((data['character'] as String? ?? '').isNotEmpty)
-                          'الشخصية: ${data['character']}',
-                        if ((data['description'] as String? ?? '').isNotEmpty)
-                          data['description'] as String,
-                      ].join('\n')),
-                      isThreeLine: true,
-                      trailing: _isOwner
-                          ? Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  tooltip: 'تعديل الكمية',
-                                  icon: const Icon(Icons.inventory_2_outlined),
-                                  onPressed: () => _editStock(doc.reference, stock),
-                                ),
-                                IconButton(
-                                  tooltip: 'تعديل السعر',
-                                  icon: const Icon(Icons.edit_outlined),
-                                  onPressed: () => _editPrice(doc.reference, data['price']?.toString() ?? ''),
-                                ),
-                                IconButton(
-                                  tooltip: 'إخفاء المنتج',
-                                  icon: const Icon(Icons.visibility_off_outlined),
-                                  onPressed: () async {
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    data['name']?.toString() ?? '',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                                  ),
+                                  const SizedBox(height: 7),
+                                  Text(
+                                    '${data['price']} جنيه  •  المتاح: $stock',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: Theme.of(context).colorScheme.primary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  if (franchise.isNotEmpty || character.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      [if (franchise.isNotEmpty) franchise, if (character.isNotEmpty) character].join(' • '),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context).textTheme.bodySmall,
+                                    ),
+                                  ],
+                                  if (description.isNotEmpty) ...[
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      description,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context).textTheme.bodySmall,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            if (_isOwner)
+                              PopupMenuButton<String>(
+                                tooltip: 'إدارة المنتج',
+                                icon: const Icon(Icons.more_vert),
+                                onSelected: (action) async {
+                                  if (action == 'stock') {
+                                    await _editStock(doc.reference, stock);
+                                  } else if (action == 'price') {
+                                    await _editPrice(doc.reference, data['price']?.toString() ?? '');
+                                  } else if (action == 'hide') {
                                     try {
                                       await doc.reference.update({'active': false});
                                     } catch (error) {
@@ -1111,17 +1146,23 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
                                         );
                                       }
                                     }
-                                  },
-                                ),
-                              ],
-                            )
-                          : FilledButton(
-                              onPressed: stock > 0 && !_busy
-                                  ? () => _buyProduct(doc.id)
-                                  : null,
-                              child: const Text('اطلب'),
-                            ),
-                    ));
+                                  }
+                                },
+                                itemBuilder: (_) => const [
+                                  PopupMenuItem(value: 'stock', child: Text('تعديل الكمية')),
+                                  PopupMenuItem(value: 'price', child: Text('تعديل السعر')),
+                                  PopupMenuItem(value: 'hide', child: Text('إخفاء المنتج')),
+                                ],
+                              )
+                            else
+                              FilledButton.tonal(
+                                onPressed: stock > 0 && !_busy ? () => _buyProduct(doc.id) : null,
+                                child: const Text('اطلب'),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
                   },
                 );
               },
