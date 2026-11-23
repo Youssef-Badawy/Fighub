@@ -671,6 +671,9 @@ service cloud.firestore {
                       request.resource.data.get('catalogManaged', false) != true
                       || (
                         request.resource.data.catalogOwnerId == request.auth.uid
+                        && exists(
+                          /databases/$(database)/documents/users/$(request.auth.uid)
+                        )
                         && get(
                           /databases/$(database)/documents/users/$(request.auth.uid)
                         ).data.role == 'admin'
@@ -682,9 +685,17 @@ service cloud.firestore {
                         resource.data.sellerId == request.auth.uid
                         && (
                           resource.data.get('catalogManaged', false) != true
-                          || get(
-                            /databases/$(database)/documents/users/$(request.auth.uid)
-                          ).data.role == 'admin'
+                          || (
+                            resource.data.catalogOwnerId == request.auth.uid
+                            && request.resource.data.catalogOwnerId == resource.data.catalogOwnerId
+                            && request.resource.data.get('catalogManaged', false) == true
+                            && exists(
+                              /databases/$(database)/documents/users/$(request.auth.uid)
+                            )
+                            && get(
+                              /databases/$(database)/documents/users/$(request.auth.uid)
+                            ).data.role == 'admin'
+                          )
                         )
                         && request.resource.data.sellerId == resource.data.sellerId
                         && request.resource.data.diff(resource.data)
