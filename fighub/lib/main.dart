@@ -443,6 +443,7 @@ class _FigHubHomeState extends State<FigHubHome> {
       SellerProfileService();
 
   StreamSubscription<List<Product>>? _productsSubscription;
+  String? _productsStreamError;
   StreamSubscription<List<String>>? _favoritesSubscription;
   StreamSubscription<List<Map<String, dynamic>>>?
       _notificationsSubscription;
@@ -475,24 +476,34 @@ class _FigHubHomeState extends State<FigHubHome> {
     _subscribeToUserData();
     unawaited(_cleanupDeletedOffers());
 
-    _productsSubscription = _productService
-        .watchProducts()
-        .listen((products) {
-      if (!mounted) {
-        return;
-      }
+    _subscribeToProducts();
 
-      setState(() {
-        _products
-          ..clear()
-          ..addAll(products);
-
-        _refreshFavoritesList();
-      });
 
       // Seller profiles are fetched lazily for visible product batches in
       // _buildHome; loading dozens of profiles at startup slows first paint.
     });
+  }
+
+  void _subscribeToProducts() {
+    _productsSubscription?.cancel();
+    _productsSubscription = _productService.watchProducts().listen(
+      (products) {
+        if (!mounted) return;
+        setState(() {
+          _productsStreamError = null;
+          _products
+            ..clear()
+            ..addAll(products);
+          _refreshFavoritesList();
+        });
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        debugPrint('FIGHUB PRODUCTS STREAM ERROR: $error');
+        debugPrintStack(stackTrace: stackTrace);
+        if (!mounted) return;
+        setState(() => _productsStreamError = error.toString());
+      },
+    );
   }
 
   Future<void> _loadSellerProfiles(
@@ -1127,6 +1138,33 @@ class _FigHubHomeState extends State<FigHubHome> {
     AppLocalizations localization,
   ) {
     final products = _filteredProducts;
+
+    if (_productsStreamError != null && _products.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off_outlined, size: 48),
+              const SizedBox(height: 12),
+              Text(
+                localization.isArabic
+                    ? 'تعذر تحميل المنتجات. تحقق من الاتصال وحاول مرة أخرى.'
+                    : 'Could not load products. Check your connection and try again.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _subscribeToProducts,
+                icon: const Icon(Icons.refresh),
+                label: Text(localization.isArabic ? 'إعادة المحاولة' : 'Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return ListView.builder(
       key: ValueKey('home-\${_selectedCategory}-\${_searchQuery}'),
