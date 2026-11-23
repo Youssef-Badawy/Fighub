@@ -30,6 +30,10 @@ class _ChatPageState extends State<ChatPage> {
   final TextEditingController _messageController = TextEditingController();
 
   final ChatService _chatService = ChatService();
+  late final Stream<Map<String, dynamic>?> _chatStream;
+  late final Stream<Map<String, dynamic>?> _partnerStream;
+  late final Stream<List<Map<String, dynamic>>> _messagesStream;
+  late final ValueNotifier<String> _recordingElapsedNotifier;
 
   bool _isSending = false;
   bool _isRecording = false;
@@ -53,6 +57,11 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void initState() {
     super.initState();
+    // Stable stream identities prevent Firestore resubscriptions on local rebuilds.
+    _chatStream = _chatService.watchChat(widget.chatId);
+    _partnerStream = _chatService.watchChatPartner(widget.chatId);
+    _messagesStream = _chatService.watchMessages(widget.chatId);
+    _recordingElapsedNotifier = ValueNotifier<String>(_recordingElapsed);
     unawaited(_chatService.reconcileChatItems(widget.chatId));
   }
 
@@ -60,6 +69,7 @@ class _ChatPageState extends State<ChatPage> {
   void dispose() {
     _messageController.dispose();
     _stopRecordingClock();
+    _recordingElapsedNotifier.dispose();
     unawaited(_audioRecorder.dispose());
     super.dispose();
   }
@@ -100,8 +110,9 @@ class _ChatPageState extends State<ChatPage> {
         ..reset()
         ..start();
       _recordingTimer?.cancel();
+      _recordingElapsedNotifier.value = _recordingElapsed;
       _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (mounted) setState(() {});
+        if (mounted) _recordingElapsedNotifier.value = _recordingElapsed;
       });
       setState(() => _isRecording = true);
     } catch (_) {
@@ -891,7 +902,7 @@ class _ChatPageState extends State<ChatPage> {
     return Scaffold(
       appBar: AppBar(
         title: StreamBuilder<Map<String, dynamic>?>(
-          stream: _chatService.watchChat(widget.chatId),
+          stream: _chatStream,
           builder: (context, chatSnapshot) {
             final chatData = {
               ...?chatSnapshot.data,
@@ -907,7 +918,7 @@ class _ChatPageState extends State<ChatPage> {
             };
 
             return StreamBuilder<Map<String, dynamic>?>(
-              stream: _chatService.watchChatPartner(widget.chatId),
+              stream: _partnerStream,
               builder: (context, partnerSnapshot) {
                 final partner = partnerSnapshot.data;
                 final partnerName = partner?['name'] as String? ?? '';
@@ -956,7 +967,7 @@ class _ChatPageState extends State<ChatPage> {
       body: Column(
         children: [
           StreamBuilder<Map<String, dynamic>?>(
-            stream: _chatService.watchChat(widget.chatId),
+            stream: _chatStream,
             builder: (context, chatSnapshot) {
               final chatData = chatSnapshot.data ?? {};
 
@@ -1242,7 +1253,7 @@ class _ChatPageState extends State<ChatPage> {
             },
           ),
           StreamBuilder<Map<String, dynamic>?>(
-            stream: _chatService.watchChat(widget.chatId),
+            stream: _chatStream,
             builder: (context, snapshot) {
               final data = snapshot.data;
               if (data == null) return const SizedBox.shrink();
@@ -1360,7 +1371,7 @@ class _ChatPageState extends State<ChatPage> {
           ),
           Expanded(
             child: StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _chatService.watchMessages(widget.chatId),
+              stream: _messagesStream,
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
                   return Center(
@@ -1428,7 +1439,7 @@ class _ChatPageState extends State<ChatPage> {
               child: Column(
                 children: [
                   StreamBuilder<List<Map<String, dynamic>>>(
-                    stream: _chatService.watchMessages(widget.chatId),
+                    stream: _messagesStream,
                     builder: (context, snapshot) {
                       final messages = snapshot.data ?? const [];
 
@@ -1507,9 +1518,12 @@ class _ChatPageState extends State<ChatPage> {
                                   style: const TextStyle(fontWeight: FontWeight.w600),
                                 ),
                                 const Spacer(),
-                                Text(
-                                  _recordingElapsed,
-                                  style: const TextStyle(fontFamily: 'monospace'),
+                                ValueListenableBuilder<String>(
+                                  valueListenable: _recordingElapsedNotifier,
+                                  builder: (context, elapsed, _) => Text(
+                                    elapsed,
+                                    style: const TextStyle(fontFamily: 'monospace'),
+                                  ),
                                 ),
                               ],
                             ),
