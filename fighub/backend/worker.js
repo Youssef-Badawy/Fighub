@@ -497,7 +497,7 @@ export default {
           error: 'Worker request failed. Check the FigHub Worker logs.',
         }),
         {
-          status: 500,
+          status: 401,
           headers: {
             'Content-Type': 'application/json',
           },
