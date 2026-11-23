@@ -477,11 +477,6 @@ class _FigHubHomeState extends State<FigHubHome> {
     unawaited(_cleanupDeletedOffers());
 
     _subscribeToProducts();
-
-
-      // Seller profiles are fetched lazily for visible product batches in
-      // _buildHome; loading dozens of profiles at startup slows first paint.
-    });
   }
 
   void _subscribeToProducts() {
