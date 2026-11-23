@@ -972,7 +972,9 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('متجر 3D PRINTING')),
+      appBar: AppBar(
+        title: Text(widget.isAdminCatalog ? 'كتالوج FigHub الرسمي' : 'متجر 3D PRINTING'),
+      ),
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
         stream: _db.collection('print_businesses').doc(widget.businessId).snapshots(),
         builder: (context, businessSnapshot) {
@@ -1072,7 +1074,15 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
                               ),
                             ),
                       title: Text(data['name']?.toString() ?? ''),
-                      subtitle: Text('${data['price']} جنيه • المتاح: $stock\n${data['description'] ?? ''}'),
+                      subtitle: Text([
+                        '${data['price']} جنيه • المتاح: $stock',
+                        if ((data['franchise'] as String? ?? '').isNotEmpty)
+                          'السلسلة: ${data['franchise']}',
+                        if ((data['character'] as String? ?? '').isNotEmpty)
+                          'الشخصية: ${data['character']}',
+                        if ((data['description'] as String? ?? '').isNotEmpty)
+                          data['description'] as String,
+                      ].join('\n')),
                       isThreeLine: true,
                       trailing: _isOwner
                           ? Row(
