@@ -464,6 +464,8 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
       final imageUrl = await CloudinaryService().uploadCatalogImage(selectedImage);
       await _db.collection('print_products').add({
         'sellerId': widget.businessId,
+        if (widget.isAdminCatalog) 'catalogOwnerId': widget.businessId,
+        if (widget.isAdminCatalog) 'catalogManaged': true,
         'name': picked['name'],
         'price': picked['price'],
         'stockQuantity': picked['stock'],
