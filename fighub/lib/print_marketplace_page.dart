@@ -400,7 +400,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
       if (selectedImage == null) {
         throw StateError('لا يمكن نشر منتج بدون صورة.');
       }
-      final imageUrl = await CloudinaryService().uploadImage(selectedImage);
+      final imageUrl = await CloudinaryService().uploadCatalogImage(selectedImage);
       await _db.collection('print_products').add({
         'sellerId': widget.businessId,
         'name': picked['name'],
