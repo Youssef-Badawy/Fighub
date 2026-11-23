@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -168,8 +170,8 @@ class _AddOfferItemPageState extends State<AddOfferItemPage> {
                     itemBuilder: (context, index) {
                       return ClipRRect(
                         borderRadius: BorderRadius.circular(10),
-                        child: Image.network(
-                          _selectedImages[index].path,
+                        child: Image.file(
+                          File(_selectedImages[index].path),
                           width: 110,
                           height: 110,
                           fit: BoxFit.cover,
