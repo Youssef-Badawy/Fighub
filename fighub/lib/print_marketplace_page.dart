@@ -9,6 +9,16 @@ import 'chat_service.dart';
 import 'chat_page.dart';
 import 'cloudinary_service.dart';
 
+int? _defaultPrintPrice(String category) {
+  switch (category) {
+    case 'تيشيرتات': return 450;
+    case 'مجات': return 200;
+    case 'برواز': return 200; // 30×20 cm starting size
+    case 'طابلوه': return 120; // 20×15 cm starting size
+    default: return null;
+  }
+}
+
 const printCategories = <Map<String, String>>[
   {'name': 'تيشيرتات', 'emoji': '👕'},
   {'name': 'مجات', 'emoji': '☕'},
@@ -324,7 +334,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
 
   Future<void> _addProduct() async {
     final name = TextEditingController();
-    final price = TextEditingController();
+    final price = TextEditingController(text: _defaultPrintPrice(widget.initialCategory ?? printCategories.first['name']!)?.toString() ?? '');
     final stock = TextEditingController(text: '1');
     final description = TextEditingController();
     final formKey = GlobalKey<FormState>();
@@ -340,7 +350,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
             TextFormField(controller: name, decoration: const InputDecoration(labelText: 'اسم المنتج'), validator: (v) => v == null || v.trim().isEmpty ? 'اكتب اسم المنتج' : null),
             TextFormField(controller: price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'السعر بالجنيه'), validator: (v) { final value = double.tryParse(v ?? ''); return value == null || value <= 0 ? 'اكتب سعرًا أكبر من صفر' : null; }),
             TextFormField(controller: stock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'عدد القطع المتوفرة'), validator: (v) => int.tryParse(v ?? '') == null || int.parse(v!) < 0 ? 'اكتب كمية صحيحة' : null),
-            DropdownButtonFormField<String>(value: category, decoration: const InputDecoration(labelText: 'القسم'), items: printCategories.map((c) => DropdownMenuItem(value: c['name'] as String, child: Text(c['name'] as String))).toList(), onChanged: (v) => refresh(() => category = v ?? category)),
+            DropdownButtonFormField<String>(value: category, decoration: const InputDecoration(labelText: 'القسم'), items: printCategories.map((c) => DropdownMenuItem(value: c['name'] as String, child: Text(c['name'] as String))).toList(), onChanged: (v) => refresh(() { category = v ?? category; price.text = _defaultPrintPrice(category)?.toString() ?? ''; })),
             TextFormField(controller: description, maxLines: 2, decoration: const InputDecoration(labelText: 'وصف المنتج')),
             const SizedBox(height: 10),
             OutlinedButton.icon(onPressed: () async { final files = await FigHubImagePicker.pickAndCrop(context, imageQuality: 85, maxWidth: 2500, maxHeight: 2500); if (files != null) refresh(() => image = files); }, icon: const Icon(Icons.image), label: Text(image == null ? 'اختيار صورة' : 'تم اختيار الصورة')),
@@ -444,10 +454,10 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
       return;
     }
     final userDocument = await _db.collection('users').doc(user.uid).get();
-    if (!userDocument.exists || userDocument.data()?['role'] == 'admin') {
+    if (!userDocument.exists || userDocument.data()?['role'] != 'admin') {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('طلب التصميم متاح لحسابات المستخدمين فقط')),
+          const SnackBar(content: Text('طلب التصميم متاح لحساب الأدمن فقط')),
         );
       }
       return;
@@ -669,7 +679,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
                   final isAdmin = userSnapshot.data?.data()?['role'] == 'admin';
                   if (currentUser == null ||
                       currentUser.isAnonymous ||
-                      isAdmin) {
+                      !isAdmin) {
                     return const SizedBox.shrink();
                   }
                   return Padding(
