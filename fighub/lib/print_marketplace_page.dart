@@ -361,21 +361,46 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
             if (_printSizePrices.containsKey(category)) DropdownButtonFormField<String>(value: selectedSize, decoration: const InputDecoration(labelText: 'المقاس'), items: _printSizePrices[category]!.keys.map((size) => DropdownMenuItem(value: size, child: Text(size))).toList(), onChanged: (v) => refresh(() { selectedSize = v; if (v != null) price.text = _printSizePrices[category]![v].toString(); })),
             TextFormField(controller: description, maxLines: 2, decoration: const InputDecoration(labelText: 'وصف المنتج')),
             const SizedBox(height: 10),
-            OutlinedButton.icon(onPressed: () async { final files = await FigHubImagePicker.pickAndCrop(context, imageQuality: 85, maxWidth: 2500, maxHeight: 2500); if (files != null) refresh(() => image = files); }, icon: const Icon(Icons.image), label: Text(image == null ? 'اختيار صورة' : 'تم اختيار الصورة')),
+            OutlinedButton.icon(onPressed: () async { final files = await FigHubImagePicker.pickAndCrop(context, imageQuality: 90, maxWidth: 2500, maxHeight: 2500); if (files != null) refresh(() => image = files); }, icon: const Icon(Icons.image), label: Text(image == null ? 'اختيار صورة المنتج (مطلوب)' : 'تم اختيار الصورة')),
           ])),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
-          FilledButton(onPressed: () { if (formKey.currentState!.validate()) Navigator.pop(dialogContext, {'name': selectedSize == null ? name.text.trim() : '${name.text.trim()} - $selectedSize', 'price': price.text.trim(), 'stock': int.parse(stock.text), 'category': category, 'description': description.text.trim(), 'image': image}); }, child: const Text('نشر')),
+          FilledButton(
+            onPressed: () {
+              if (!formKey.currentState!.validate()) return;
+              if (image == null) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('اختار صورة واضحة للمنتج قبل النشر'),
+                  ),
+                );
+                return;
+              }
+              Navigator.pop(dialogContext, {
+                'name': selectedSize == null
+                    ? name.text.trim()
+                    : '${name.text.trim()} - $selectedSize',
+                'price': price.text.trim(),
+                'stock': int.parse(stock.text),
+                'category': category,
+                'description': description.text.trim(),
+                'image': image,
+              });
+            },
+            child: const Text('نشر'),
+          ),
         ],
       )),
     );
     if (picked == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      String imageUrl = '';
       final selectedImage = picked['image'] as XFile?;
-      if (selectedImage != null) imageUrl = await CloudinaryService().uploadImage(selectedImage);
+      if (selectedImage == null) {
+        throw StateError('لا يمكن نشر منتج بدون صورة.');
+      }
+      final imageUrl = await CloudinaryService().uploadImage(selectedImage);
       await _db.collection('print_products').add({
         'sellerId': widget.businessId,
         'name': picked['name'],
