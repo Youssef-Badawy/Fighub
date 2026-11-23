@@ -9,6 +9,11 @@ import 'chat_service.dart';
 import 'chat_page.dart';
 import 'cloudinary_service.dart';
 
+const _printSizePrices = <String, Map<String, int>>{
+  'برواز': {'30×20 سم': 200, '40×30 سم': 300, '50×40 سم': 450, '60×50 سم': 500, '70×50 سم': 580},
+  'طابلوه': {'20×15 سم': 120, '30×20 سم': 230, '40×30 سم': 380, '50×40 سم': 450, '60×50 سم': 550, '70×50 سم': 580},
+};
+
 int? _defaultPrintPrice(String category) {
   switch (category) {
     case 'تيشيرتات': return 450;
@@ -334,11 +339,13 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
 
   Future<void> _addProduct() async {
     final name = TextEditingController();
-    final price = TextEditingController(text: _defaultPrintPrice(widget.initialCategory ?? printCategories.first['name']!)?.toString() ?? '');
+    final initialCategory = widget.initialCategory ?? printCategories.first['name']!;
+    final price = TextEditingController(text: _defaultPrintPrice(initialCategory)?.toString() ?? '');
     final stock = TextEditingController(text: '1');
     final description = TextEditingController();
     final formKey = GlobalKey<FormState>();
-    String category = widget.initialCategory ?? printCategories.first['name'] as String;
+    String category = initialCategory;
+    String? selectedSize = _printSizePrices[initialCategory]?.keys.first;
     XFile? image;
     final picked = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -350,7 +357,8 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
             TextFormField(controller: name, decoration: const InputDecoration(labelText: 'اسم المنتج'), validator: (v) => v == null || v.trim().isEmpty ? 'اكتب اسم المنتج' : null),
             TextFormField(controller: price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'السعر بالجنيه'), validator: (v) { final value = double.tryParse(v ?? ''); return value == null || value <= 0 ? 'اكتب سعرًا أكبر من صفر' : null; }),
             TextFormField(controller: stock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'عدد القطع المتوفرة'), validator: (v) => int.tryParse(v ?? '') == null || int.parse(v!) < 0 ? 'اكتب كمية صحيحة' : null),
-            DropdownButtonFormField<String>(value: category, decoration: const InputDecoration(labelText: 'القسم'), items: printCategories.map((c) => DropdownMenuItem(value: c['name'] as String, child: Text(c['name'] as String))).toList(), onChanged: (v) => refresh(() { category = v ?? category; price.text = _defaultPrintPrice(category)?.toString() ?? ''; })),
+            DropdownButtonFormField<String>(value: category, decoration: const InputDecoration(labelText: 'القسم'), items: printCategories.map((c) => DropdownMenuItem(value: c['name'] as String, child: Text(c['name'] as String))).toList(), onChanged: (v) => refresh(() { category = v ?? category; selectedSize = _printSizePrices[category]?.keys.first; price.text = selectedSize == null ? (_defaultPrintPrice(category)?.toString() ?? '') : _printSizePrices[category]![selectedSize].toString(); })),
+            if (_printSizePrices.containsKey(category)) DropdownButtonFormField<String>(value: selectedSize, decoration: const InputDecoration(labelText: 'المقاس'), items: _printSizePrices[category]!.keys.map((size) => DropdownMenuItem(value: size, child: Text(size))).toList(), onChanged: (v) => refresh(() { selectedSize = v; if (v != null) price.text = _printSizePrices[category]![v].toString(); })),
             TextFormField(controller: description, maxLines: 2, decoration: const InputDecoration(labelText: 'وصف المنتج')),
             const SizedBox(height: 10),
             OutlinedButton.icon(onPressed: () async { final files = await FigHubImagePicker.pickAndCrop(context, imageQuality: 85, maxWidth: 2500, maxHeight: 2500); if (files != null) refresh(() => image = files); }, icon: const Icon(Icons.image), label: Text(image == null ? 'اختيار صورة' : 'تم اختيار الصورة')),
@@ -358,7 +366,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
-          FilledButton(onPressed: () { if (formKey.currentState!.validate()) Navigator.pop(dialogContext, {'name': name.text.trim(), 'price': price.text.trim(), 'stock': int.parse(stock.text), 'category': category, 'description': description.text.trim(), 'image': image}); }, child: const Text('نشر')),
+          FilledButton(onPressed: () { if (formKey.currentState!.validate()) Navigator.pop(dialogContext, {'name': selectedSize == null ? name.text.trim() : '${name.text.trim()} - $selectedSize', 'price': price.text.trim(), 'stock': int.parse(stock.text), 'category': category, 'description': description.text.trim(), 'image': image}); }, child: const Text('نشر')),
         ],
       )),
     );
