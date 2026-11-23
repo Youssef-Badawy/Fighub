@@ -489,12 +489,15 @@ export default {
         },
       });
     } catch (error) {
+      // Keep detailed diagnostics in Cloudflare logs without exposing tokens,
+      // request headers, or Cloudinary secrets to the mobile client.
+      console.error('FIGHUB WORKER REQUEST ERROR:', error);
       return new Response(
         JSON.stringify({
-          error: 'Unauthorized',
+          error: 'Worker request failed. Check the FigHub Worker logs.',
         }),
         {
-          status: 401,
+          status: 500,
           headers: {
             'Content-Type': 'application/json',
           },
