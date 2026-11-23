@@ -494,7 +494,7 @@ export default {
       console.error('FIGHUB WORKER REQUEST ERROR:', error);
       return new Response(
         JSON.stringify({
-          error: 'Worker request failed. Check the FigHub Worker logs.',
+          error: 'Unauthorized',
         }),
         {
           status: 401,
