@@ -240,6 +240,60 @@ class CloudinaryService {
     }
   }
 
+  /// Uploads 3D Printing catalog artwork through the dedicated unsigned preset.
+  /// Other app media continues using the authenticated signed Worker flow.
+  Future<String> uploadCatalogImage(XFile imageFile) async {
+    final file = File(imageFile.path);
+    if (!await file.exists()) {
+      throw StateError('ملف صورة الكتالوج غير موجود على الجهاز.');
+    }
+
+    final fileLength = await file.length();
+    if (fileLength <= 0) {
+      throw StateError('ملف صورة الكتالوج فارغ.');
+    }
+    if (fileLength > _maxImageBytes) {
+      throw StateError('حجم صورة الكتالوج أكبر من الحد المسموح (25 MB).');
+    }
+
+    final uri = Uri.parse(
+      'https://api.cloudinary.com/v1_1/$_cloudName/image/upload',
+    );
+    final request = http.MultipartRequest('POST', uri)
+      ..fields['upload_preset'] = 'fighub_catalog'
+      ..files.add(
+        await http.MultipartFile.fromPath(
+          'file',
+          imageFile.path,
+          filename: imageFile.name,
+        ),
+      );
+
+    try {
+      final streamed = await request.send().timeout(_uploadTimeout);
+      final body = await streamed.stream
+          .bytesToString()
+          .timeout(const Duration(seconds: 30));
+      if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+        throw StateError(
+          'فشل رفع صورة الكتالوج (' + streamed.statusCode.toString() + '): ' + _errorMessage(body),
+        );
+      }
+      final decoded = jsonDecode(body);
+      if (decoded is! Map<String, dynamic>) {
+        throw StateError('استجابة Cloudinary لصورة الكتالوج غير صالحة.');
+      }
+      final secureUrl = decoded['secure_url'] as String?;
+      if (secureUrl == null || secureUrl.isEmpty) {
+        throw StateError('Cloudinary لم يُرجع رابط الصورة الآمن.');
+      }
+      return secureUrl;
+    } on TimeoutException {
+      throw StateError('انتهت مهلة رفع صورة الكتالوج. حاول مرة أخرى.');
+    } on SocketException {
+      throw StateError('تعذر الاتصال بخدمة رفع صور الكتالوج.');
+    }
+  }
   Future<String> uploadImage(XFile imageFile) {
     return _uploadFile(
       path: imageFile.path,

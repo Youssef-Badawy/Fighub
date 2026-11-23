@@ -177,6 +177,46 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
     }
   }
 
+  Future<void> _openAdminCatalog() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous) return;
+    try {
+      final userSnapshot = await _db.collection('users').doc(user.uid).get();
+      if (userSnapshot.data()?['role'] != 'admin') {
+        throw StateError('هذه اللوحة متاحة لحساب الأدمن فقط.');
+      }
+      final businessRef = _db.collection('print_businesses').doc(user.uid);
+      final businessSnapshot = await businessRef.get();
+      if (!businessSnapshot.exists) {
+        await businessRef.set({
+          'name': 'كتالوج FigHub الرسمي',
+          'phone': '',
+          'description': 'الكتالوج الرسمي لتصميمات FigHub',
+          'active': true,
+          'ownerId': user.uid,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PrintBusinessPage(
+            businessId: user.uid,
+            isAdminCatalog: true,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر فتح كتالوج الأدمن: $error')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -206,6 +246,21 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
                 );
               },
             ),
+          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: user == null || user.isAnonymous
+                ? const Stream<DocumentSnapshot<Map<String, dynamic>>>.empty()
+                : _db.collection('users').doc(user.uid).snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.data?.data()?['role'] != 'admin') {
+                return const SizedBox.shrink();
+              }
+              return IconButton(
+                tooltip: 'كتالوج FigHub الرسمي',
+                icon: const Icon(Icons.admin_panel_settings_outlined),
+                onPressed: _openAdminCatalog,
+              );
+            },
+          ),
         ],
       ),
       body: _selectedCategory == null ? _buildCategories() : _buildBusinesses(),
@@ -325,7 +380,13 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
 class PrintBusinessPage extends StatefulWidget {
   final String businessId;
   final String? initialCategory;
-  const PrintBusinessPage({super.key, required this.businessId, this.initialCategory});
+  final bool isAdminCatalog;
+  const PrintBusinessPage({
+    super.key,
+    required this.businessId,
+    this.initialCategory,
+    this.isAdminCatalog = false,
+  });
 
   @override
   State<PrintBusinessPage> createState() => _PrintBusinessPageState();
@@ -400,9 +461,11 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
       if (selectedImage == null) {
         throw StateError('لا يمكن نشر منتج بدون صورة.');
       }
-      final imageUrl = await CloudinaryService().uploadImage(selectedImage);
+      final imageUrl = await CloudinaryService().uploadCatalogImage(selectedImage);
       await _db.collection('print_products').add({
         'sellerId': widget.businessId,
+        if (widget.isAdminCatalog) 'catalogOwnerId': widget.businessId,
+        if (widget.isAdminCatalog) 'catalogManaged': true,
         'name': picked['name'],
         'price': picked['price'],
         'stockQuantity': picked['stock'],
@@ -416,6 +479,172 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
     } catch (error) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر إضافة المنتج: $error')));
     } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _bulkImportCatalog() async {
+    if (!widget.isAdminCatalog || !_isOwner || _busy) return;
+    final franchise = TextEditingController();
+    final character = TextEditingController();
+    final price = TextEditingController(text: '250');
+    final stock = TextEditingController(text: '10');
+    final description = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    String category = widget.initialCategory ?? printCategories.first['name']!;
+    List<XFile> images = [];
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, refresh) => AlertDialog(
+          title: const Text('استيراد دفعة تصميمات للكتالوج الرسمي'),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: franchise,
+                    decoration: const InputDecoration(labelText: 'العالم / السلسلة (مثال: خيال علمي)'),
+                    validator: (v) => v == null || v.trim().isEmpty ? 'اكتب اسم السلسلة' : null,
+                  ),
+                  TextFormField(
+                    controller: character,
+                    decoration: const InputDecoration(labelText: 'الشخصية أو الموضوع'),
+                    validator: (v) => v == null || v.trim().isEmpty ? 'اكتب الشخصية أو الموضوع' : null,
+                  ),
+                  DropdownButtonFormField<String>(
+                    value: category,
+                    decoration: const InputDecoration(labelText: 'نوع المنتج'),
+                    items: printCategories.map((item) => DropdownMenuItem(
+                      value: item['name'] as String,
+                      child: Text(item['name'] as String),
+                    )).toList(),
+                    onChanged: (value) => refresh(() => category = value ?? category),
+                  ),
+                  TextFormField(
+                    controller: price,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'سعر القطعة بالجنيه'),
+                    validator: (v) {
+                      final value = double.tryParse(v ?? '');
+                      return value == null || value <= 0 ? 'اكتب سعرًا صحيحًا' : null;
+                    },
+                  ),
+                  TextFormField(
+                    controller: stock,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'المخزون لكل تصميم'),
+                    validator: (v) {
+                      final value = int.tryParse(v ?? '');
+                      return value == null || value < 0 ? 'اكتب كمية صحيحة' : null;
+                    },
+                  ),
+                  TextFormField(
+                    controller: description,
+                    maxLines: 2,
+                    decoration: const InputDecoration(labelText: 'وصف مشترك (اختياري)'),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final selected = await ImagePicker().pickMultiImage(
+                        imageQuality: 90,
+                        maxWidth: 2500,
+                        maxHeight: 2500,
+                      );
+                      if (selected.isNotEmpty) refresh(() => images = selected);
+                    },
+                    icon: const Icon(Icons.collections_outlined),
+                    label: Text(images.isEmpty
+                        ? 'اختيار صور التصميمات من الجهاز'
+                        : 'تم اختيار ${images.length} صورة'),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'كل صورة ستتحول إلى منتج مستقل على حساب الأدمن. اختر صورًا أصلية تملك حق استخدامها.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (!formKey.currentState!.validate()) return;
+                if (images.isEmpty) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(content: Text('اختار صورة واحدة على الأقل')),
+                  );
+                  return;
+                }
+                Navigator.pop(dialogContext, true);
+              },
+              child: const Text('بدء الاستيراد'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result != true || !mounted) {
+      franchise.dispose();
+      character.dispose();
+      price.dispose();
+      stock.dispose();
+      description.dispose();
+      return;
+    }
+
+    setState(() => _busy = true);
+    var imported = 0;
+    try {
+      final ownerId = FirebaseAuth.instance.currentUser!.uid;
+      for (var index = 0; index < images.length; index++) {
+        final imageUrl = await CloudinaryService().uploadCatalogImage(images[index]);
+        final productRef = _db.collection('print_products').doc();
+        await productRef.set({
+          'sellerId': ownerId,
+          'catalogOwnerId': ownerId,
+          'catalogManaged': true,
+          'franchise': franchise.text.trim(),
+          'character': character.text.trim(),
+          'designNumber': index + 1,
+          'name': '${character.text.trim()} - ${category} - تصميم ${index + 1}',
+          'price': price.text.trim(),
+          'stockQuantity': int.parse(stock.text),
+          'category': category,
+          'description': description.text.trim(),
+          'imageUrl': imageUrl,
+          'active': true,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        imported++;
+        if (mounted) setState(() {});
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تم استيراد $imported تصميم إلى كتالوج الأدمن')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تم استيراد $imported من أصل ${images.length}. تعذر إكمال الدفعة: $error')),
+        );
+      }
+    } finally {
+      franchise.dispose();
+      character.dispose();
+      price.dispose();
+      stock.dispose();
+      description.dispose();
       if (mounted) setState(() => _busy = false);
     }
   }
@@ -743,16 +972,31 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('متجر 3D PRINTING')),
+      appBar: AppBar(
+        title: Text(widget.isAdminCatalog ? 'كتالوج FigHub الرسمي' : 'متجر 3D PRINTING'),
+      ),
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
         stream: _db.collection('print_businesses').doc(widget.businessId).snapshots(),
         builder: (context, businessSnapshot) {
           final business = businessSnapshot.data?.data() ?? {};
           return Column(children: [
-            if (_isOwner) Padding(padding: const EdgeInsets.all(12), child: Row(children: [
-              Expanded(child: FilledButton.icon(onPressed: _busy ? null : _addProduct, icon: const Icon(Icons.add), label: const Text('إضافة منتج'))),
-              const SizedBox(width: 8),
-              Expanded(child: OutlinedButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PrintRequestsPage(companyId: widget.businessId))), icon: const Icon(Icons.inbox), label: const Text('طلبات التصميم'))),
+            if (_isOwner) Padding(padding: const EdgeInsets.all(12), child: Column(children: [
+              Row(children: [
+                Expanded(child: FilledButton.icon(onPressed: _busy ? null : _addProduct, icon: const Icon(Icons.add), label: const Text('إضافة منتج'))),
+                const SizedBox(width: 8),
+                Expanded(child: OutlinedButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PrintRequestsPage(companyId: widget.businessId))), icon: const Icon(Icons.inbox), label: const Text('طلبات التصميم'))),
+              ]),
+              if (widget.isAdminCatalog) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.tonalIcon(
+                    onPressed: _busy ? null : _bulkImportCatalog,
+                    icon: const Icon(Icons.library_add),
+                    label: const Text('استيراد مجموعة تصميمات لحساب الأدمن'),
+                  ),
+                ),
+              ],
             ])),
             StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                 stream: FirebaseAuth.instance.currentUser == null
@@ -763,7 +1007,8 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
                 builder: (context, userSnapshot) {
                   final currentUser = FirebaseAuth.instance.currentUser;
                   final isAdmin = userSnapshot.data?.data()?['role'] == 'admin';
-                  if (currentUser == null ||
+                  if (widget.isAdminCatalog ||
+                      currentUser == null ||
                       currentUser.isAnonymous ||
                       !isAdmin) {
                     return const SizedBox.shrink();
@@ -829,7 +1074,15 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
                               ),
                             ),
                       title: Text(data['name']?.toString() ?? ''),
-                      subtitle: Text('${data['price']} جنيه • المتاح: $stock\n${data['description'] ?? ''}'),
+                      subtitle: Text([
+                        '${data['price']} جنيه • المتاح: $stock',
+                        if ((data['franchise'] as String? ?? '').isNotEmpty)
+                          'السلسلة: ${data['franchise']}',
+                        if ((data['character'] as String? ?? '').isNotEmpty)
+                          'الشخصية: ${data['character']}',
+                        if ((data['description'] as String? ?? '').isNotEmpty)
+                          data['description'] as String,
+                      ].join('\n')),
                       isThreeLine: true,
                       trailing: _isOwner
                           ? Row(
