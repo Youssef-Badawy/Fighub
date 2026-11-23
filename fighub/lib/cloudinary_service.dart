@@ -112,31 +112,48 @@ class CloudinaryService {
       throw StateError('يجب تسجيل الدخول بحساب مسجل لرفع الملفات.');
     }
 
-    final idToken = await user.getIdToken();
+    // Refresh Firebase credentials so an expired cached token cannot block signing.
+    final idToken = await user.getIdToken(true);
     if (idToken == null || idToken.isEmpty) {
       throw StateError('تعذر التحقق من الحساب قبل رفع الملف.');
     }
 
-    final response = await http
-        .post(
-          Uri.parse(_workerUrl),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $idToken',
-          },
-          body: jsonEncode({
-            'action': 'signCloudinaryUpload',
-            'resourceType': resourceType,
-          }),
-        )
-        .timeout(const Duration(seconds: 20));
+    late final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse(_workerUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $idToken',
+            },
+            body: jsonEncode({
+              'action': 'signCloudinaryUpload',
+              'resourceType': resourceType,
+            }),
+          )
+          .timeout(const Duration(seconds: 20));
+    } on TimeoutException {
+      throw StateError('انتهت مهلة الاتصال بخادم تجهيز رفع الملف.');
+    } on SocketException {
+      throw StateError('تعذر الاتصال بخادم تجهيز رفع الملف.');
+    }
 
-    final decoded = jsonDecode(response.body);
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(response.body);
+    } catch (_) {
+      final body = response.body;
+      throw StateError(
+        'تعذر تجهيز رفع الملف (HTTP ${response.statusCode}): '
+        '${body.length > 240 ? body.substring(0, 240) : body}',
+      );
+    }
     if (response.statusCode < 200 ||
         response.statusCode >= 300 ||
         decoded is! Map<String, dynamic>) {
       throw StateError(
-        'تعذر تجهيز رفع الملف: ${_errorMessage(response.body)}',
+        'تعذر تجهيز رفع الملف (HTTP ${response.statusCode}): ${_errorMessage(response.body)}',
       );
     }
     return decoded;
