@@ -455,6 +455,59 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
     }
   }
 
+  Future<void> _editPrice(
+    DocumentReference<Map<String, dynamic>> reference,
+    String currentPrice,
+  ) async {
+    final controller = TextEditingController(text: currentPrice);
+    final formKey = GlobalKey<FormState>();
+    final shouldSave = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('تعديل السعر'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: controller,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'السعر بالجنيه'),
+            validator: (value) {
+              final price = double.tryParse(value ?? '');
+              return price == null || price <= 0 ? 'اكتب سعرًا أكبر من صفر' : null;
+            },
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) Navigator.pop(dialogContext, true);
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+    if (shouldSave != true || !mounted) {
+      controller.dispose();
+      return;
+    }
+    try {
+      await reference.update({
+        'price': controller.text.trim(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر تحديث السعر: $error')),
+        );
+      }
+    } finally {
+      controller.dispose();
+    }
+  }
+
   Future<void> _requestDesign(Map<String, dynamic> business) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || user.isAnonymous) {
@@ -761,6 +814,11 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
                                   tooltip: 'تعديل الكمية',
                                   icon: const Icon(Icons.inventory_2_outlined),
                                   onPressed: () => _editStock(doc.reference, stock),
+                                ),
+                                IconButton(
+                                  tooltip: 'تعديل السعر',
+                                  icon: const Icon(Icons.edit_outlined),
+                                  onPressed: () => _editPrice(doc.reference, data['price']?.toString() ?? ''),
                                 ),
                                 IconButton(
                                   tooltip: 'إخفاء المنتج',
