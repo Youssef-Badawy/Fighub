@@ -490,7 +490,8 @@ class _FigHubHomeState extends State<FigHubHome> {
         _refreshFavoritesList();
       });
 
-      _loadSellerProfiles(products);
+      // Seller profiles are fetched lazily for visible product batches in
+      // _buildHome; loading dozens of profiles at startup slows first paint.
     });
   }
 
@@ -948,8 +949,6 @@ class _FigHubHomeState extends State<FigHubHome> {
     }
 
     setState(() {});
-
-    _loadSellerProfiles(_products);
   }
 
   Future<void> _openChat() async {
@@ -1191,15 +1190,37 @@ class _FigHubHomeState extends State<FigHubHome> {
         }
 
         if (products.isEmpty) {
+          final hasSearch = _searchQuery.trim().isNotEmpty;
           return SizedBox(
             height: 280,
             child: Center(
-              child: Text(
-                _searchQuery.trim().isNotEmpty
-                    ? 'بحث خطأ'
-                    : localization.noProducts,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyLarge,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    hasSearch ? Icons.search_off_rounded : Icons.inventory_2_outlined,
+                    size: 48,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    hasSearch
+                        ? (localization.isArabic
+                            ? 'مفيش منتجات مطابقة لبحثك'
+                            : 'No products match your search')
+                        : localization.noProducts,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  if (hasSearch) ...[
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () => setState(() => _searchQuery = ''),
+                      icon: const Icon(Icons.clear),
+                      label: Text(localization.isArabic ? 'مسح البحث' : 'Clear search'),
+                    ),
+                  ],
+                ],
               ),
             ),
           );

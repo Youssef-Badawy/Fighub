@@ -83,7 +83,15 @@ class Product {
           .toList();
     }
 
-    final oldImagePath = data['imagePath'] as String?;
+    final rawOldImagePath = data['imagePath'];
+    final oldImagePath = rawOldImagePath is String ? rawOldImagePath : null;
+
+    String readString(String key, String fallback) {
+      final value = data[key];
+      if (value is String) return value;
+      if (value is num) return value.toString();
+      return fallback;
+    }
 
     // Support old products that only have imagePath.
     if (parsedImagePaths.isEmpty &&
@@ -94,19 +102,19 @@ class Product {
 
     return Product(
       id: document.id,
-      sellerId: data['sellerId'] as String? ?? '',
-      name: data['name'] as String? ?? '',
-      price: data['price'] as String? ?? '',
-      category: data['category'] as String? ?? 'Other',
-      condition: data['condition'] as String? ?? 'Used',
-      description: data['description'] as String? ?? '',
-      paymentMethod: data['paymentMethod'] as String? ?? 'Cash on Delivery',
+      sellerId: readString('sellerId', ''),
+      name: readString('name', ''),
+      price: readString('price', ''),
+      category: readString('category', 'Other'),
+      condition: readString('condition', 'Used'),
+      description: readString('description', ''),
+      paymentMethod: readString('paymentMethod', 'Cash on Delivery'),
       imagePath:
           oldImagePath ??
           (parsedImagePaths.isNotEmpty ? parsedImagePaths.first : null),
       imagePaths: parsedImagePaths,
-      status: data['status'] as String? ?? 'Available',
-      reservedBy: data['reservedBy'] as String?,
+      status: readString('status', 'Available'),
+      reservedBy: data['reservedBy'] is String ? data['reservedBy'] as String : null,
     );
   }
 }

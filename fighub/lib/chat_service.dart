@@ -72,6 +72,39 @@ class ChatService {
     );
   }
 
+  void _dispatchMessageNotificationsFromChat({
+    required String chatId,
+    required String senderId,
+    required String messageId,
+    required String title,
+    required String message,
+  }) {
+    // Notification delivery runs after the message commit, never on its critical path.
+    unawaited(() async {
+      try {
+        final snapshot = await _firestore.collection('chats').doc(chatId).get();
+        if (!snapshot.exists) return;
+        final data = snapshot.data() ?? <String, dynamic>{};
+        final buyerId = data['buyerId'] as String? ?? '';
+        final sellerId = data['sellerId'] as String? ?? '';
+        if (senderId != buyerId && senderId != sellerId) return;
+        final recipientId = senderId == buyerId ? sellerId : buyerId;
+        if (recipientId.isEmpty || recipientId == senderId) return;
+        _dispatchMessageNotifications(
+          recipientId: recipientId,
+          chatId: chatId,
+          messageId: messageId,
+          title: title,
+          message: '${data['productName'] ?? 'FigHub'}: $message',
+          productId: data['productId'] as String?,
+        );
+      } catch (error, stackTrace) {
+        debugPrint('FIGHUB BACKGROUND MESSAGE NOTIFICATION ERROR: $error');
+        debugPrintStack(stackTrace: stackTrace);
+      }
+    }());
+  }
+
   String? get currentUserId {
     return _auth.currentUser?.uid;
   }
@@ -1336,33 +1369,8 @@ class ChatService {
     }
 
     final chatReference = _firestore.collection('chats').doc(chatId);
-
-    final chatDocument = await chatReference.get();
-
-    if (!chatDocument.exists) {
-      throw StateError('Chat not found.');
-    }
-
-    final chatData = chatDocument.data() ?? {};
-
-    final buyerId = chatData['buyerId'] as String? ?? '';
-
-    final sellerId = chatData['sellerId'] as String? ?? '';
-
-    final productId = chatData['productId'] as String? ?? '';
-
-    final productName = chatData['productName'] as String? ?? 'Product';
-
-    if (buyerId.isEmpty || sellerId.isEmpty) {
-      throw StateError('Chat participants are missing.');
-    }
-
-    if (user.uid != buyerId && user.uid != sellerId) {
-      throw StateError('You are not a participant in this chat.');
-    }
-
-    final recipientId = user.uid == buyerId ? sellerId : buyerId;
-
+    // Firestore rules validate membership on the batch itself, avoiding a
+    // separate network read before the message is committed.
     final messageReference = _messagesCollection(chatId).doc();
     final batch = _firestore.batch();
     batch.set(messageReference, {
@@ -1376,13 +1384,12 @@ class ChatService {
     });
     await batch.commit();
 
-    _dispatchMessageNotifications(
-      recipientId: recipientId,
+    _dispatchMessageNotificationsFromChat(
       chatId: chatId,
+      senderId: user.uid,
       messageId: messageReference.id,
       title: 'رسالة جديدة',
-      message: '$productName: $message',
-      productId: productId,
+      message: message,
     );
   }
 
@@ -1402,23 +1409,7 @@ class ChatService {
     }
 
     final chatRef = _firestore.collection('chats').doc(chatId);
-    final snapshot = await chatRef.get();
-    if (!snapshot.exists) throw StateError('Chat not found.');
-
-    final data = snapshot.data() ?? <String, dynamic>{};
-    final buyerId = data['buyerId'] as String? ?? '';
-    final sellerId = data['sellerId'] as String? ?? '';
-    final productId = data['productId'] as String? ?? '';
-    final productName = data['productName'] as String? ?? 'Product';
-
-    if (buyerId.isEmpty || sellerId.isEmpty) {
-      throw StateError('Chat participants are missing.');
-    }
-    if (user.uid != buyerId && user.uid != sellerId) {
-      throw StateError('You are not a participant in this chat.');
-    }
-
-    final recipientId = user.uid == buyerId ? sellerId : buyerId;
+    // Membership is checked by Firestore security rules on this atomic batch.
     final trimmedCaption = caption.trim();
     final label = mediaType == 'image'
         ? '📷 صورة'
@@ -1444,13 +1435,12 @@ class ChatService {
     });
     await batch.commit();
 
-    _dispatchMessageNotifications(
-      recipientId: recipientId,
+    _dispatchMessageNotificationsFromChat(
       chatId: chatId,
+      senderId: user.uid,
       messageId: messageReference.id,
       title: 'رسالة جديدة',
-      message: '$productName: $lastMessage',
-      productId: productId,
+      message: lastMessage,
     );
   }
 

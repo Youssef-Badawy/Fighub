@@ -9,6 +9,21 @@ import 'chat_service.dart';
 import 'chat_page.dart';
 import 'cloudinary_service.dart';
 
+const _printSizePrices = <String, Map<String, int>>{
+  'برواز': {'30×20 سم': 200, '40×30 سم': 300, '50×40 سم': 450, '60×50 سم': 500, '70×50 سم': 580},
+  'طابلوه': {'20×15 سم': 120, '30×20 سم': 230, '40×30 سم': 380, '50×40 سم': 450, '60×50 سم': 550, '70×50 سم': 580},
+};
+
+int? _defaultPrintPrice(String category) {
+  switch (category) {
+    case 'تيشيرتات': return 450;
+    case 'مجات': return 200;
+    case 'برواز': return 200; // 30×20 cm starting size
+    case 'طابلوه': return 120; // 20×15 cm starting size
+    default: return null;
+  }
+}
+
 const printCategories = <Map<String, String>>[
   {'name': 'تيشيرتات', 'emoji': '👕'},
   {'name': 'مجات', 'emoji': '☕'},
@@ -324,11 +339,13 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
 
   Future<void> _addProduct() async {
     final name = TextEditingController();
-    final price = TextEditingController();
+    final initialCategory = widget.initialCategory ?? printCategories.first['name']!;
+    final price = TextEditingController(text: _defaultPrintPrice(initialCategory)?.toString() ?? '');
     final stock = TextEditingController(text: '1');
     final description = TextEditingController();
     final formKey = GlobalKey<FormState>();
-    String category = widget.initialCategory ?? printCategories.first['name'] as String;
+    String category = initialCategory;
+    String? selectedSize = _printSizePrices[initialCategory]?.keys.first;
     XFile? image;
     final picked = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -340,24 +357,50 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
             TextFormField(controller: name, decoration: const InputDecoration(labelText: 'اسم المنتج'), validator: (v) => v == null || v.trim().isEmpty ? 'اكتب اسم المنتج' : null),
             TextFormField(controller: price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'السعر بالجنيه'), validator: (v) { final value = double.tryParse(v ?? ''); return value == null || value <= 0 ? 'اكتب سعرًا أكبر من صفر' : null; }),
             TextFormField(controller: stock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'عدد القطع المتوفرة'), validator: (v) => int.tryParse(v ?? '') == null || int.parse(v!) < 0 ? 'اكتب كمية صحيحة' : null),
-            DropdownButtonFormField<String>(value: category, decoration: const InputDecoration(labelText: 'القسم'), items: printCategories.map((c) => DropdownMenuItem(value: c['name'] as String, child: Text(c['name'] as String))).toList(), onChanged: (v) => refresh(() => category = v ?? category)),
+            DropdownButtonFormField<String>(value: category, decoration: const InputDecoration(labelText: 'القسم'), items: printCategories.map((c) => DropdownMenuItem(value: c['name'] as String, child: Text(c['name'] as String))).toList(), onChanged: (v) => refresh(() { category = v ?? category; selectedSize = _printSizePrices[category]?.keys.first; price.text = selectedSize == null ? (_defaultPrintPrice(category)?.toString() ?? '') : _printSizePrices[category]![selectedSize].toString(); })),
+            if (_printSizePrices.containsKey(category)) DropdownButtonFormField<String>(value: selectedSize, decoration: const InputDecoration(labelText: 'المقاس'), items: _printSizePrices[category]!.keys.map((size) => DropdownMenuItem(value: size, child: Text(size))).toList(), onChanged: (v) => refresh(() { selectedSize = v; if (v != null) price.text = _printSizePrices[category]![v].toString(); })),
             TextFormField(controller: description, maxLines: 2, decoration: const InputDecoration(labelText: 'وصف المنتج')),
             const SizedBox(height: 10),
-            OutlinedButton.icon(onPressed: () async { final files = await FigHubImagePicker.pickAndCrop(context, imageQuality: 85, maxWidth: 2500, maxHeight: 2500); if (files != null) refresh(() => image = files); }, icon: const Icon(Icons.image), label: Text(image == null ? 'اختيار صورة' : 'تم اختيار الصورة')),
+            OutlinedButton.icon(onPressed: () async { final files = await FigHubImagePicker.pickAndCrop(context, imageQuality: 90, maxWidth: 2500, maxHeight: 2500); if (files != null) refresh(() => image = files); }, icon: const Icon(Icons.image), label: Text(image == null ? 'اختيار صورة المنتج (مطلوب)' : 'تم اختيار الصورة')),
           ])),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
-          FilledButton(onPressed: () { if (formKey.currentState!.validate()) Navigator.pop(dialogContext, {'name': name.text.trim(), 'price': price.text.trim(), 'stock': int.parse(stock.text), 'category': category, 'description': description.text.trim(), 'image': image}); }, child: const Text('نشر')),
+          FilledButton(
+            onPressed: () {
+              if (!formKey.currentState!.validate()) return;
+              if (image == null) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('اختار صورة واضحة للمنتج قبل النشر'),
+                  ),
+                );
+                return;
+              }
+              Navigator.pop(dialogContext, {
+                'name': selectedSize == null
+                    ? name.text.trim()
+                    : '${name.text.trim()} - $selectedSize',
+                'price': price.text.trim(),
+                'stock': int.parse(stock.text),
+                'category': category,
+                'description': description.text.trim(),
+                'image': image,
+              });
+            },
+            child: const Text('نشر'),
+          ),
         ],
       )),
     );
     if (picked == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      String imageUrl = '';
       final selectedImage = picked['image'] as XFile?;
-      if (selectedImage != null) imageUrl = await CloudinaryService().uploadImage(selectedImage);
+      if (selectedImage == null) {
+        throw StateError('لا يمكن نشر منتج بدون صورة.');
+      }
+      final imageUrl = await CloudinaryService().uploadImage(selectedImage);
       await _db.collection('print_products').add({
         'sellerId': widget.businessId,
         'name': picked['name'],
@@ -437,6 +480,59 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
     }
   }
 
+  Future<void> _editPrice(
+    DocumentReference<Map<String, dynamic>> reference,
+    String currentPrice,
+  ) async {
+    final controller = TextEditingController(text: currentPrice);
+    final formKey = GlobalKey<FormState>();
+    final shouldSave = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('تعديل السعر'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: controller,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'السعر بالجنيه'),
+            validator: (value) {
+              final price = double.tryParse(value ?? '');
+              return price == null || price <= 0 ? 'اكتب سعرًا أكبر من صفر' : null;
+            },
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) Navigator.pop(dialogContext, true);
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+    if (shouldSave != true || !mounted) {
+      controller.dispose();
+      return;
+    }
+    try {
+      await reference.update({
+        'price': controller.text.trim(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر تحديث السعر: $error')),
+        );
+      }
+    } finally {
+      controller.dispose();
+    }
+  }
+
   Future<void> _requestDesign(Map<String, dynamic> business) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || user.isAnonymous) {
@@ -444,10 +540,10 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
       return;
     }
     final userDocument = await _db.collection('users').doc(user.uid).get();
-    if (!userDocument.exists || userDocument.data()?['role'] == 'admin') {
+    if (!userDocument.exists || userDocument.data()?['role'] != 'admin') {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('طلب التصميم متاح لحسابات المستخدمين فقط')),
+          const SnackBar(content: Text('طلب التصميم متاح لحساب الأدمن فقط')),
         );
       }
       return;
@@ -669,7 +765,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
                   final isAdmin = userSnapshot.data?.data()?['role'] == 'admin';
                   if (currentUser == null ||
                       currentUser.isAnonymous ||
-                      isAdmin) {
+                      !isAdmin) {
                     return const SizedBox.shrink();
                   }
                   return Padding(
@@ -743,6 +839,11 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
                                   tooltip: 'تعديل الكمية',
                                   icon: const Icon(Icons.inventory_2_outlined),
                                   onPressed: () => _editStock(doc.reference, stock),
+                                ),
+                                IconButton(
+                                  tooltip: 'تعديل السعر',
+                                  icon: const Icon(Icons.edit_outlined),
+                                  onPressed: () => _editPrice(doc.reference, data['price']?.toString() ?? ''),
                                 ),
                                 IconButton(
                                   tooltip: 'إخفاء المنتج',
