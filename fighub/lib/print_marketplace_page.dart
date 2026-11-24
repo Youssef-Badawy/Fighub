@@ -229,7 +229,7 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
     try {
       final result = await _db
           .collection('print_businesses')
-          .where('name', isEqualTo: 'كتالوج FigHub الرسمي')
+          .where('officialCatalog', isEqualTo: true)
           .get();
 
       // The officialCatalog marker is writable only by an admin according
