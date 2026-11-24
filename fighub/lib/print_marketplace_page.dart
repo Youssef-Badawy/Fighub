@@ -926,6 +926,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
         if (!snapshot.exists) throw StateError('المنتج غير موجود');
         final data = snapshot.data()!;
         final quantity = (data['stockQuantity'] as num?)?.toInt() ?? 0;
+        final imageUrl = (data['imageUrl'] as String? ?? '').trim();
         if (quantity < 1 || data['active'] != true) throw StateError('الكمية غير متاحة حاليًا');
         transaction.update(productRef, {'stockQuantity': quantity - 1, 'updatedAt': FieldValue.serverTimestamp()});
         transaction.set(orderRef, {
@@ -940,8 +941,8 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
           'condition': 'New',
           'description': data['description'] ?? '',
           'paymentMethod': 'Cash on Delivery',
-          'imagePath': data['imageUrl'] ?? '',
-          'imagePaths': (data['imageUrl'] as String?)?.isNotEmpty == true ? [data['imageUrl']] : <String>[],
+          'imagePath': imageUrl,
+          'imagePaths': imageUrl.isNotEmpty ? [imageUrl] : <String>[],
           'status': 'Reserved',
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -1079,7 +1080,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
                     final doc = docs[index];
                     final data = doc.data();
                     final stock = (data['stockQuantity'] as num?)?.toInt() ?? 0;
-                    final imageUrl = data['imageUrl'] as String? ?? '';
+                    final imageUrl = (data['imageUrl'] as String? ?? '').trim();
                     final franchise = data['franchise']?.toString() ?? '';
                     final character = data['character']?.toString() ?? '';
                     final description = data['description']?.toString() ?? '';
@@ -1226,14 +1227,15 @@ class PrintRequestsPage extends StatelessWidget {
             itemBuilder: (context, index) {
               final doc = snapshot.data!.docs[index];
               final data = doc.data();
+              final imageUrl = (data['imageUrl'] as String? ?? '').trim();
               return Card(
                 margin: const EdgeInsets.all(10),
                 child: ListTile(
-                  leading: (data['imageUrl'] as String? ?? '').isEmpty
+                  leading: imageUrl.isEmpty
                       ? const Icon(Icons.design_services, size: 36)
                       : InkWell(
                           onTap: () {
-                            final imageUrl = data['imageUrl'] as String;
+                            final selectedImageUrl = imageUrl;
                             showDialog<void>(
                               context: context,
                               builder: (dialogContext) => Dialog(
