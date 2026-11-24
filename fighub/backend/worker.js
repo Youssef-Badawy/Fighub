@@ -131,7 +131,7 @@ async function readFirestoreDocument(path, idToken) {
 }
 
 
-async function handleCloudinaryUploadSignature(body, payload, env) {
+async function handleCloudinaryUploadSignature(body, payload, idToken, env) {
   const resourceType = body.resourceType;
   if (!['image', 'video'].includes(resourceType)) {
     return new Response(JSON.stringify({ error: 'Unsupported upload resource type' }), {
@@ -154,9 +154,30 @@ async function handleCloudinaryUploadSignature(body, payload, env) {
     });
   }
 
-  // Keep the upload folder server-controlled. The client receives only a
-  // short-lived signature and never receives the Cloudinary API secret.
-  const folder = 'fighub';
+  const purpose = body.purpose ?? 'standard';
+  if (!['standard', 'catalog'].includes(purpose)) {
+    return new Response(JSON.stringify({ error: 'Unsupported upload purpose' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Catalog uploads are restricted server-side; hiding the admin button in
+  // Flutter alone is not an authorization boundary.
+  let folder = 'fighub';
+  if (purpose === 'catalog') {
+    const userDocument = await readFirestoreDocument(
+      `users/${encodeURIComponent(payload.sub)}`,
+      idToken,
+    );
+    if (readStringField(userDocument?.fields, 'role') !== 'admin') {
+      return new Response(JSON.stringify({ error: 'Admin account required for catalog uploads' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    folder = `fighub/catalog/${payload.sub}`;
+  }
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const signatureText = `folder=${folder}&timestamp=${timestamp}${env.CLOUDINARY_API_SECRET}`;
   const digest = await crypto.subtle.digest(
@@ -356,7 +377,7 @@ export default {
       const body = await request.json();
 
       if (body.action === 'signCloudinaryUpload') {
-        return await handleCloudinaryUploadSignature(body, payload, env);
+        return await handleCloudinaryUploadSignature(body, payload, idToken, env);
       }
 
       if (body.action === 'deleteCloudinaryAssets') {
