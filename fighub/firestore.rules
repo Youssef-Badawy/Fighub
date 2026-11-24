@@ -744,8 +744,8 @@ service cloud.firestore {
                     ).data.role == 'admin'
                     && request.resource.data.status == 'new'
                     && request.resource.data.category is string
-                    && request.resource.data.imageUrl is string
-                    && request.resource.data.imageUrl.size() > 0;
+                    // A reference image is optional; text-only design requests are valid.
+                    && request.resource.data.imageUrl is string;
       allow read: if request.auth != null
                   && (
                     resource.data.customerId == request.auth.uid
