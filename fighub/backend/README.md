@@ -28,6 +28,11 @@ are supported; Cloudinary audio uploads use the `video` resource type.
 The Worker requires both `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET`
 to be configured as Worker secrets before signed uploads can succeed.
 
+After deployment, open `https://fighub.youssef-khaled-badawy.workers.dev/health`.
+The read-only response reports whether the Cloudinary signing secrets are present;
+it never returns the API key or API secret. `cloudinarySigningConfigured` must
+be `true` before testing uploads.
+
 The Cloudinary deletion endpoint requires a valid Firebase ID token and checks
 the authenticated seller against the Firestore product or offer before deleting
 only image/video assets listed on that record. Chat message attachments are not
