@@ -32,6 +32,26 @@ try {
       name: 'Regular seller',
       active: true,
     });
+    await setDoc(doc(db, 'products/product-1'), {
+      sellerId: 'not-admin',
+      name: 'Test product',
+      status: 'Available',
+    });
+    await setDoc(doc(db, 'offers/offer-1'), {
+      sellerId: 'not-admin',
+      title: 'Test offer',
+    });
+    await setDoc(doc(db, 'offers/offer-1/items/item-1'), {
+      name: 'Test offer item',
+      status: 'Available',
+      reservedBy: null,
+    });
+    await setDoc(doc(db, 'print_products/print-1'), {
+      sellerId: 'not-admin',
+      name: 'Test print',
+      stockQuantity: 5,
+      active: true,
+    });
   });
 
   const request = {
@@ -52,6 +72,18 @@ try {
   await assertSucceeds(
     setDoc(doc(registeredCustomer, 'print_design_requests/text-only'), request),
   );
+  await assertSucceeds(
+    setDoc(doc(registeredCustomer, 'products/registered-product'), {
+      sellerId: 'customer-1',
+      name: 'Registered listing',
+    }),
+  );
+  await assertSucceeds(
+    setDoc(doc(registeredCustomer, 'offers/registered-offer'), {
+      sellerId: 'customer-1',
+      title: 'Registered offer',
+    }),
+  );
 
   const anonymousCustomer = env.authenticatedContext('anonymous-1', {
     firebase: { sign_in_provider: 'anonymous' },
@@ -61,6 +93,35 @@ try {
     setDoc(doc(anonymousCustomer, 'print_design_requests/anonymous'), {
       ...request,
       customerId: 'anonymous-1',
+    }),
+  );
+  await assertFails(
+    setDoc(doc(anonymousCustomer, 'products/anonymous-product'), {
+      sellerId: 'anonymous-1',
+      name: 'Anonymous listing',
+    }),
+  );
+  await assertFails(
+    setDoc(doc(anonymousCustomer, 'offers/anonymous-offer'), {
+      sellerId: 'anonymous-1',
+      title: 'Anonymous offer',
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(anonymousCustomer, 'products/product-1'), {
+      status: 'Reserved',
+      reservedBy: 'anonymous-1',
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(anonymousCustomer, 'print_products/print-1'), {
+      stockQuantity: 4,
+    }),
+  );
+  await assertFails(
+    setDoc(doc(anonymousCustomer, 'offers/offer-1/items/item-1/reservations/anonymous-1'), {
+      userId: 'anonymous-1',
+      status: 'Active',
     }),
   );
 
