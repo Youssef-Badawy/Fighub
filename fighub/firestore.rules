@@ -33,6 +33,7 @@ service cloud.firestore {
                     );
 
       allow update: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && (
                       (
                         resource.data.sellerId == request.auth.uid
@@ -269,12 +270,14 @@ service cloud.firestore {
                        == request.auth.uid;
 
       allow update: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && resource.data.sellerId
                        == request.auth.uid
                     && request.resource.data.sellerId
                        == resource.data.sellerId;
 
       allow delete: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && resource.data.sellerId
                        == request.auth.uid;
 
@@ -290,6 +293,7 @@ service cloud.firestore {
                          == request.auth.uid;
 
         allow update: if request.auth != null
+                      && request.auth.token.firebase.sign_in_provider != 'anonymous'
                       && (
                         (
                           get(
@@ -411,6 +415,7 @@ service cloud.firestore {
                       );
 
         allow delete: if request.auth != null
+                      && request.auth.token.firebase.sign_in_provider != 'anonymous'
                       && get(
                         /databases/$(database)/documents/offers/$(offerId)
                       ).data.sellerId == request.auth.uid
@@ -438,6 +443,7 @@ service cloud.firestore {
                       );
 
           allow create: if request.auth != null
+                        && request.auth.token.firebase.sign_in_provider != 'anonymous'
                         && request.auth.uid == reservationId
                         && request.resource.data.userId
                            == request.auth.uid
@@ -453,6 +459,7 @@ service cloud.firestore {
                         );
 
           allow update: if request.auth != null
+                        && request.auth.token.firebase.sign_in_provider != 'anonymous'
                         && (
                           (
                             request.auth.uid == reservationId
@@ -549,6 +556,7 @@ service cloud.firestore {
                         );
 
           allow delete: if request.auth != null
+                        && request.auth.token.firebase.sign_in_provider != 'anonymous'
                         && get(
                           /databases/$(database)/documents/offers/$(offerId)
                         ).data.sellerId == request.auth.uid
@@ -702,6 +710,7 @@ service cloud.firestore {
                       )
                     );
       allow update: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && (
                       (
                         resource.data.sellerId == request.auth.uid
