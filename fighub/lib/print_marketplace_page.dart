@@ -229,7 +229,8 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
       DocumentSnapshot<Map<String, dynamic>>? officialCatalog;
       for (final candidate in result.docs) {
         final owner = await _db.collection('users').doc(candidate.id).get();
-        if (owner.data()?['role'] == 'admin' &&\n            candidate.data()['active'] == true) {
+        if (owner.data()?['role'] == 'admin' &&
+            candidate.data()['active'] == true) {
           officialCatalog = candidate;
           break;
         }
