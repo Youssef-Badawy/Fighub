@@ -1235,7 +1235,6 @@ class PrintRequestsPage extends StatelessWidget {
                       ? const Icon(Icons.design_services, size: 36)
                       : InkWell(
                           onTap: () {
-                            final selectedImageUrl = imageUrl;
                             showDialog<void>(
                               context: context,
                               builder: (dialogContext) => Dialog(
@@ -1267,7 +1266,7 @@ class PrintRequestsPage extends StatelessWidget {
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(10),
                             child: Image.network(
-                              data['imageUrl'] as String,
+                              imageUrl,
                               width: 88,
                               height: 88,
                               cacheWidth: 264,
