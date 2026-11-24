@@ -106,6 +106,19 @@ class _AddProductPageState extends State<AddProductPage> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+    if (_imageFiles.isEmpty) {
+      final isArabic = AppLocalizations.of(context).isArabic;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isArabic
+                ? 'اختر صورة واحدة على الأقل للمنتج.'
+                : 'Choose at least one product image.',
+          ),
+        ),
+      );
+      return;
+    }
     if (!await requireRegisteredAccount(context)) return;
 
     final user = FirebaseAuth.instance.currentUser;
