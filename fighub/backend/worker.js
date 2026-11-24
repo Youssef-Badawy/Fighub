@@ -351,14 +351,26 @@ export default {
 
       const idToken = authHeader.substring(7);
 
-      const { payload } = await jwtVerify(
-        idToken,
-        FIREBASE_KEYS,
-        {
-          issuer: FIREBASE_ISSUER,
-          audience: FIREBASE_PROJECT_ID,
-        },
-      );
+      let payload;
+      try {
+        ({ payload } = await jwtVerify(
+          idToken,
+          FIREBASE_KEYS,
+          {
+            issuer: FIREBASE_ISSUER,
+            audience: FIREBASE_PROJECT_ID,
+          },
+        ));
+      } catch (authError) {
+        console.warn('FIGHUB WORKER AUTHENTICATION REJECTED:', authError?.code || 'invalid-token');
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      }
 
       if (!payload.sub) {
         return new Response(
@@ -536,10 +548,10 @@ export default {
       console.error('FIGHUB WORKER REQUEST ERROR:', error);
       return new Response(
         JSON.stringify({
-          error: 'Unauthorized',
+          error: 'Internal server error',
         }),
         {
-          status: 401,
+          status: 500,
           headers: {
             'Content-Type': 'application/json',
           },
