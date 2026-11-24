@@ -39,9 +39,9 @@ class SellerProfile {
       name: data['name'] as String? ?? '',
       email: data['email'] as String? ?? '',
       phone: data['phone'] as String? ?? '',
-      photoUrl: data['photoUrl'] as String? ?? '',
+      photoUrl: (data['photoUrl'] as String? ?? '').trim(),
       bio: data['bio'] as String? ?? '',
-      coverUrl: data['coverUrl'] as String? ?? '',
+      coverUrl: (data['coverUrl'] as String? ?? '').trim(),
       isAdmin: data['isAdmin'] == true,
       isVerified: data['isVerified'] == true,
       verifiedUntil: data['verifiedUntil'] is Timestamp
