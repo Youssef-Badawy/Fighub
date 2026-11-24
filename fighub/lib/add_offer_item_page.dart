@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'fighub_image_picker.dart';
+import 'auth_guard.dart';
 
 import 'interests.dart';
 
@@ -77,6 +78,7 @@ class _AddOfferItemPageState extends State<AddOfferItemPage> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+    if (!await requireRegisteredAccount(context)) return;
 
     if (_selectedImages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
