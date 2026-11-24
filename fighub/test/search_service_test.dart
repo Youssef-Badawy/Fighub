@@ -16,6 +16,7 @@ void main() {
     test('normalizes common Arabic letter variants and diacritics', () {
       expect(SearchService.matches('ألعاب مُجسّمات', 'العاب مجسمات'), isTrue);
       expect(SearchService.matches('فتى فضاء', 'فتي فضاء'), isTrue);
+      expect(SearchService.matches('مكتبة مجسمات', 'مكتبه مجسمات'), isTrue);
     });
 
     test('requires every query token to match', () {
