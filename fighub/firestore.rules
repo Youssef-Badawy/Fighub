@@ -659,6 +659,7 @@ service cloud.firestore {
                       ).data.role == 'admin'
                     );
       allow update: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && request.auth.uid == businessId
                     && request.resource.data.ownerId == request.auth.uid
                     && request.resource.data.diff(resource.data)
