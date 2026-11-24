@@ -22,6 +22,9 @@ class OfferService {
     if (user == null) {
       throw StateError('User must be signed in.');
     }
+    if (user.isAnonymous) {
+      throw StateError('يجب تسجيل حساب مسجل قبل إنشاء العروض أو إضافة قطع إليها.');
+    }
 
     return user.uid;
   }
