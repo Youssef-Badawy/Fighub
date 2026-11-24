@@ -8,6 +8,7 @@ service cloud.firestore {
       allow read: if request.auth != null;
 
       allow create: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && (
                       request.resource.data.sellerId == request.auth.uid
                       || (
@@ -263,6 +264,7 @@ service cloud.firestore {
       allow read: if request.auth != null;
 
       allow create: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && request.resource.data.sellerId
                        == request.auth.uid;
 
@@ -281,6 +283,7 @@ service cloud.firestore {
         allow read: if request.auth != null;
 
         allow create: if request.auth != null
+                      && request.auth.token.firebase.sign_in_provider != 'anonymous'
                       && get(
                         /databases/$(database)/documents/offers/$(offerId)
                       ).data.sellerId
@@ -646,6 +649,7 @@ service cloud.firestore {
     match /print_businesses/{businessId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && request.auth.uid == businessId
                     && request.resource.data.ownerId == request.auth.uid;
       allow update: if request.auth != null
@@ -663,6 +667,7 @@ service cloud.firestore {
     match /print_products/{printProductId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && request.resource.data.sellerId == request.auth.uid
                     && exists(
                       /databases/$(database)/documents/print_businesses/$(request.auth.uid)
