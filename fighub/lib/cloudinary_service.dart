@@ -184,7 +184,10 @@ class CloudinaryService {
       throw StateError('حجم $mediaLabel أكبر من الحد المسموح ($maxMb MB).');
     }
 
-    final signatureData = await _requestUploadSignature(\n      resourceType,\n      purpose: purpose,\n    );
+    final signatureData = await _requestUploadSignature(
+      resourceType,
+      purpose: purpose,
+    );
     final cloudName = signatureData['cloudName'] as String? ?? _cloudName;
     final apiKey = signatureData['apiKey'] as String? ?? '';
     final timestamp = signatureData['timestamp']?.toString() ?? '';
