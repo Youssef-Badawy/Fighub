@@ -898,7 +898,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم إرسال طلب التصميم للشركة')),
+          const SnackBar(content: Text('تم إرسال طلب التصميم لحساب FigHub')),
         );
       }
     } catch (error) {
