@@ -14,6 +14,7 @@ class SearchService {
           .replaceAll(_arabicMarks, '')
           .replaceAll(RegExp(r'[أإآٱ]'), 'ا')
           .replaceAll('ى', 'ي')
+          .replaceAll('ة', 'ه')
           .replaceAll('ؤ', 'و')
           .replaceAll('ئ', 'ي')
           .replaceAll(_separators, ' ')
