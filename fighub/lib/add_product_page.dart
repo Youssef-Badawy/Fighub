@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'fighub_image_picker.dart';
 
 import 'app_localizations.dart';
+import 'auth_guard.dart';
 import 'cloudinary_service.dart';
 import 'product_model.dart';
 import 'product_service.dart';
@@ -105,6 +106,7 @@ class _AddProductPageState extends State<AddProductPage> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+    if (!await requireRegisteredAccount(context)) return;
 
     final user = FirebaseAuth.instance.currentUser;
 
