@@ -74,6 +74,7 @@ service cloud.firestore {
                     );
 
       allow delete: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && resource.data.sellerId == request.auth.uid
                     && resource.data.get('status', 'Available') == 'Available';
     }
