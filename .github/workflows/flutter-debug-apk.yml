@@ -22,7 +22,7 @@ jobs:
   build-debug-apk:
     # The stability-audit PR is intentionally validation-only: no APK build
     # until the reported production blockers have been resolved.
-    if: github.head_ref != 'fix/prebuild-stability-audit'
+    if: github.head_ref != 'fix/prebuild-stability-audit' && github.ref_name != 'fix/prebuild-stability-audit'
     runs-on: ubuntu-latest
     defaults:
       run:
