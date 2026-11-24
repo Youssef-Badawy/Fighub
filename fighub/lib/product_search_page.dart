@@ -63,7 +63,9 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
               textInputAction: TextInputAction.search,
               onChanged: (value) => setState(() => _query = value),
               decoration: InputDecoration(
-                hintText: isArabic\n                    ? 'اكتب اسم المنتج أو القسم أو الوصف'\n                    : 'Search by product, category, or description',
+                hintText: isArabic
+                    ? 'اكتب اسم المنتج أو القسم أو الوصف'
+                    : 'Search by product, category, or description',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _query.isEmpty
                     ? null
@@ -83,16 +85,18 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
           ),
           Expanded(
             child: results.isEmpty
-                ? const Center(
+                ? Center(
                     child: Padding(
-                      padding: EdgeInsets.all(24),
+                      padding: const EdgeInsets.all(24),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.search_off_rounded, size: 52),
-                          SizedBox(height: 12),
+                          const Icon(Icons.search_off_rounded, size: 52),
+                          const SizedBox(height: 12),
                           Text(
-                            isArabic\n                                ? 'مفيش منتجات مطابقة. جرّب كلمة تانية.'\n                                : 'No matching products. Try another search.',
+                            isArabic
+                                ? 'مفيش منتجات مطابقة. جرّب كلمة تانية.'
+                                : 'No matching products. Try another search.',
                             textAlign: TextAlign.center,
                           ),
                         ],
@@ -146,9 +150,10 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
                           ),
                           trailing: const Icon(Icons.chevron_right),
                           onTap: () {
+                            final openProduct = widget.onOpenProduct;
                             Navigator.of(context).pop();
                             WidgetsBinding.instance.addPostFrameCallback((_) {
-                              widget.onOpenProduct(product);
+                              openProduct(product);
                             });
                           },
                         ),
