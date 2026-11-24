@@ -312,7 +312,7 @@ class CloudinaryService {
     int concurrency = 3,
   }) async {
     if (imageFiles.isEmpty) return const <String>[];
-    final safeConcurrency = concurrency.clamp(1, 4);
+    final safeConcurrency = concurrency.clamp(1, 4).toInt();
     final uploadedUrls = <String>[];
     for (var offset = 0; offset < imageFiles.length; offset += safeConcurrency) {
       final batch = imageFiles.skip(offset).take(safeConcurrency);
