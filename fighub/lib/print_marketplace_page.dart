@@ -193,8 +193,16 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
           'phone': '',
           'description': 'الكتالوج الرسمي لتصميمات FigHub',
           'active': true,
+          'officialCatalog': true,
           'ownerId': user.uid,
           'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } else if (businessSnapshot.data()?['officialCatalog'] != true) {
+        // Mark legacy official-catalog documents so customers can discover
+        // them without reading the owner's private users/{uid} document.
+        await businessRef.update({
+          'officialCatalog': true,
           'updatedAt': FieldValue.serverTimestamp(),
         });
       }
@@ -224,12 +232,11 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
           .where('name', isEqualTo: 'كتالوج FigHub الرسمي')
           .get();
 
-      // Never trust a business display name as proof that it is the official
-      // catalog. Verify the owning user document actually has the admin role.
+      // The officialCatalog marker is writable only by an admin according
+      // to Firestore rules. Do not read users/{uid}: those documents are private.
       DocumentSnapshot<Map<String, dynamic>>? officialCatalog;
       for (final candidate in result.docs) {
-        final owner = await _db.collection('users').doc(candidate.id).get();
-        if (owner.data()?['role'] == 'admin' &&
+        if (candidate.data()['officialCatalog'] == true &&
             candidate.data()['active'] == true) {
           officialCatalog = candidate;
           break;
