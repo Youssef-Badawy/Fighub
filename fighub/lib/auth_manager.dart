@@ -76,8 +76,10 @@ class AuthManager extends ChangeNotifier {
         _name = data?['name'] as String? ?? '';
         _phone =
             data?['phone'] as String? ?? _phone;
-        _photoUrl =
-            data?['photoUrl'] as String? ?? _photoUrl;
+        final storedPhotoUrl = data?['photoUrl'] as String? ?? '';
+        if (storedPhotoUrl.trim().isNotEmpty) {
+          _photoUrl = storedPhotoUrl.trim();
+        }
         _bio = data?['bio'] as String? ?? '';
         _coverUrl = data?['coverUrl'] as String? ?? '';
 
@@ -203,8 +205,10 @@ class AuthManager extends ChangeNotifier {
       _name = data?['name'] as String? ?? '';
       _phone =
           data?['phone'] as String? ?? _phone;
-      _photoUrl =
-          data?['photoUrl'] as String? ?? _photoUrl;
+      final storedPhotoUrl = data?['photoUrl'] as String? ?? '';
+      if (storedPhotoUrl.trim().isNotEmpty) {
+        _photoUrl = storedPhotoUrl.trim();
+      }
       _bio = data?['bio'] as String? ?? '';
       _coverUrl = data?['coverUrl'] as String? ?? '';
 
