@@ -70,8 +70,12 @@ class Product {
   factory Product.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> document,
   ) {
-    final data = document.data() ?? {};
+    return Product.fromMap(document.id, document.data() ?? {});
+  }
 
+  /// Parses product fields without requiring a live Firestore snapshot.
+  /// Kept separate so legacy image-field fallbacks can be tested directly.
+  factory Product.fromMap(String id, Map<String, dynamic> data) {
     final rawImagePaths = data['imagePaths'];
 
     List<String> parsedImagePaths = [];
@@ -102,7 +106,7 @@ class Product {
     }
 
     return Product(
-      id: document.id,
+      id: id,
       sellerId: readString('sellerId', ''),
       name: readString('name', ''),
       price: readString('price', ''),
