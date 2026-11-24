@@ -79,7 +79,19 @@ try {
     }),
   );
 
-  console.log('Firestore rules tests passed: optional image, registered customer, admin target, and ownership checks.');
+  const regularSeller = env.authenticatedContext('not-admin', {
+    firebase: { sign_in_provider: 'password' },
+  }).firestore();
+  await assertFails(
+    setDoc(doc(regularSeller, 'print_businesses/not-admin'), {
+      ownerId: 'not-admin',
+      name: 'Fake official catalog',
+      active: true,
+      officialCatalog: true,
+    }),
+  );
+
+  console.log('Firestore rules tests passed: design requests, admin-only catalog marker, and ownership checks.');
 } finally {
   await env.cleanup();
 }
