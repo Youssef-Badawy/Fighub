@@ -94,12 +94,7 @@ class _AddOfferItemPageState extends State<AddOfferItemPage> {
     });
 
     try {
-      final imageUrls = <String>[];
-
-      for (final image in _selectedImages) {
-        final url = await _cloudinaryService.uploadImage(image);
-        imageUrls.add(url);
-      }
+      final imageUrls = await _cloudinaryService.uploadImages(_selectedImages);
 
       final item = OfferItem(
         name: _nameController.text.trim(),
