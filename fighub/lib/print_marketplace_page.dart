@@ -217,6 +217,41 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
     }
   }
 
+  Future<void> _openOfficialCatalog() async {
+    try {
+      final result = await _db
+          .collection('print_businesses')
+          .where('name', isEqualTo: 'كتالوج FigHub الرسمي')
+          .limit(1)
+          .get();
+      if (result.docs.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('الكتالوج الرسمي قيد التجهيز حاليًا')),
+          );
+        }
+        return;
+      }
+      final catalog = result.docs.first;
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PrintBusinessPage(
+            businessId: catalog.id,
+            isAdminCatalog: true,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر فتح الكتالوج الرسمي: $error')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -228,6 +263,11 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
           onPressed: () => setState(() => _selectedCategory = null),
         ),
         actions: [
+          IconButton(
+            tooltip: 'كتالوج FigHub الرسمي',
+            icon: const Icon(Icons.auto_awesome),
+            onPressed: _openOfficialCatalog,
+          ),
           if (user != null && !user.isAnonymous)
             StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
               stream: _db.collection('print_businesses').doc(user.uid).snapshots(),
