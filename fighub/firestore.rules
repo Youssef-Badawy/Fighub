@@ -651,7 +651,13 @@ service cloud.firestore {
       allow create: if request.auth != null
                     && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && request.auth.uid == businessId
-                    && request.resource.data.ownerId == request.auth.uid;
+                    && request.resource.data.ownerId == request.auth.uid
+                    && (
+                      request.resource.data.get('officialCatalog', false) != true
+                      || get(
+                        /databases/$(database)/documents/users/$(request.auth.uid)
+                      ).data.role == 'admin'
+                    );
       allow update: if request.auth != null
                     && request.auth.uid == businessId
                     && request.resource.data.ownerId == request.auth.uid
@@ -659,8 +665,18 @@ service cloud.firestore {
                        .affectedKeys()
                        .hasOnly([
                          'ownerId', 'name', 'phone', 'description', 'active',
-                         'updatedAt'
-                       ]);
+                         'updatedAt', 'officialCatalog'
+                       ])
+                    && (
+                      !request.resource.data.diff(resource.data)
+                         .affectedKeys().hasAny(['officialCatalog'])
+                      || (
+                        request.resource.data.officialCatalog == true
+                        && get(
+                          /databases/$(database)/documents/users/$(request.auth.uid)
+                        ).data.role == 'admin'
+                      )
+                    );
       allow delete: if false;
     }
 
