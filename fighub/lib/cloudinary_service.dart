@@ -112,8 +112,9 @@ class CloudinaryService {
       throw StateError('يجب تسجيل الدخول بحساب مسجل لرفع الملفات.');
     }
 
-    // Refresh Firebase credentials so an expired cached token cannot block signing.
-    final idToken = await user.getIdToken(true);
+    // FirebaseAuth refreshes expired tokens automatically. Avoid forcing a
+    // network refresh for every media file, especially in multi-image uploads.
+    final idToken = await user.getIdToken();
     if (idToken == null || idToken.isEmpty) {
       throw StateError('تعذر التحقق من الحساب قبل رفع الملف.');
     }
