@@ -6,7 +6,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc } from 'firebase/firestore';
+import { deleteDoc, doc, setDoc, updateDoc } from 'firebase/firestore';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const projectId = 'demo-fighub-rules-test';
@@ -35,6 +35,11 @@ try {
     await setDoc(doc(db, 'products/product-1'), {
       sellerId: 'not-admin',
       name: 'Test product',
+      status: 'Available',
+    });
+    await setDoc(doc(db, 'products/legacy-anonymous-product'), {
+      sellerId: 'anonymous-1',
+      name: 'Legacy anonymous listing',
       status: 'Available',
     });
     await setDoc(doc(db, 'offers/offer-1'), {
@@ -112,6 +117,9 @@ try {
       status: 'Reserved',
       reservedBy: 'anonymous-1',
     }),
+  );
+  await assertFails(
+    deleteDoc(doc(anonymousCustomer, 'products/legacy-anonymous-product')),
   );
   await assertFails(
     updateDoc(doc(anonymousCustomer, 'print_products/print-1'), {
