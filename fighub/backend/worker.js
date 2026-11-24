@@ -283,6 +283,27 @@ async function handleCloudinaryDeletion(body, payload, idToken, env) {
 
 export default {
   async fetch(request, env) {
+    const requestUrl = new URL(request.url);
+    // Safe, read-only health endpoint for diagnosing signed-upload setup.
+    // It exposes configuration presence only, never API keys or secrets.
+    if (request.method === 'GET' && requestUrl.pathname === '/health') {
+      return new Response(JSON.stringify({
+        service: 'fighub-worker',
+        status: 'ok',
+        cloudName: CLOUDINARY_CLOUD_NAME,
+        cloudinarySigningConfigured: Boolean(
+          env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET,
+        ),
+        pushConfigured: Boolean(env.ONESIGNAL_REST_API_KEY),
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        },
+      });
+    }
+
     if (request.method !== 'POST') {
       return new Response('Method Not Allowed', {
         status: 405,
