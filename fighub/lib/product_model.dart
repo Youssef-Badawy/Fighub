@@ -79,6 +79,7 @@ class Product {
     if (rawImagePaths is List) {
       parsedImagePaths = rawImagePaths
           .whereType<String>()
+          .map((path) => path.trim())
           .where((path) => path.isNotEmpty)
           .toList();
     }
