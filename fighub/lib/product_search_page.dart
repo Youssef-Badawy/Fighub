@@ -145,7 +145,9 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
                           trailing: const Icon(Icons.chevron_right),
                           onTap: () {
                             Navigator.of(context).pop();
-                            widget.onOpenProduct(product);
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              widget.onOpenProduct(product);
+                            });
                           },
                         ),
                       );
