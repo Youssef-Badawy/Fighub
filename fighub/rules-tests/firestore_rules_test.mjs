@@ -6,7 +6,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, updateDoc } from 'firebase/firestore';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const projectId = 'demo-fighub-rules-test';
@@ -87,6 +87,20 @@ try {
       ownerId: 'not-admin',
       name: 'Fake official catalog',
       active: true,
+      officialCatalog: true,
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(regularSeller, 'print_businesses/not-admin'), {
+      officialCatalog: true,
+    }),
+  );
+
+  const admin = env.authenticatedContext('admin-1', {
+    firebase: { sign_in_provider: 'password' },
+  }).firestore();
+  await assertSucceeds(
+    updateDoc(doc(admin, 'print_businesses/admin-1'), {
       officialCatalog: true,
     }),
   );
