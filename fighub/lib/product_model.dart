@@ -101,8 +101,8 @@ class Product {
     // Support old products that only have imagePath.
     if (parsedImagePaths.isEmpty &&
         oldImagePath != null &&
-        oldImagePath.isNotEmpty) {
-      parsedImagePaths = [oldImagePath];
+        oldImagePath.trim().isNotEmpty) {
+      parsedImagePaths = [oldImagePath.trim()];
     }
 
     return Product(
