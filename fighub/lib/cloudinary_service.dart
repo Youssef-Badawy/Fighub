@@ -259,4 +259,51 @@ class CloudinaryService {
       purpose: 'catalog',
     );
   }
+  Future<String> uploadImage(XFile imageFile) {
+    return _uploadFile(
+      path: imageFile.path,
+      filename: imageFile.name,
+      resourceType: 'image',
+      mediaLabel: 'الصورة',
+      maxBytes: _maxImageBytes,
+    );
+  }
+
+  /// Upload multiple photos in small parallel batches without flooding the
+  /// device connection or Cloudinary.
+  Future<List<String>> uploadImages(
+    List<XFile> imageFiles, {
+    int concurrency = 3,
+  }) async {
+    if (imageFiles.isEmpty) return const <String>[];
+    final safeConcurrency = concurrency.clamp(1, 4).toInt();
+    final uploadedUrls = <String>[];
+    for (var offset = 0; offset < imageFiles.length; offset += safeConcurrency) {
+      final batch = imageFiles.skip(offset).take(safeConcurrency);
+      final batchUrls = await Future.wait(batch.map(uploadImage));
+      uploadedUrls.addAll(batchUrls);
+    }
+    return uploadedUrls;
+  }
+
+  Future<String> uploadAudio(String audioPath) {
+    return _uploadFile(
+      path: audioPath,
+      filename: 'voice_message.m4a',
+      resourceType: 'video',
+      mediaLabel: 'الرسالة الصوتية',
+      maxBytes: _maxAudioBytes,
+    );
+  }
+
+  Future<String> uploadVideo(XFile videoFile) {
+    return _uploadFile(
+      path: videoFile.path,
+      filename: videoFile.name,
+      resourceType: 'video',
+      mediaLabel: 'الفيديو',
+      maxBytes: _maxVideoBytes,
+    );
+  }
+
 }
