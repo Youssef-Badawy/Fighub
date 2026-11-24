@@ -38,6 +38,9 @@ the authenticated seller against the Firestore product or offer before deleting
 only image/video assets listed on that record. Chat message attachments are not
 sent to this endpoint and are never deleted by product or offer cleanup.
 
-The Flutter app calls this endpoint before deleting the corresponding Firestore
-product or offer. If Cloudinary credentials are missing or cleanup fails, the
-Firestore record is retained (or an offer remains hidden for a safe retry).
+The Flutter app attempts Cloudinary cleanup while the corresponding Firestore
+product or offer record is still available for ownership verification. Product
+deletion is allowed to continue if Cloudinary cleanup fails, so the listing is
+not blocked by a stale Worker; in that case, the asset may remain in Cloudinary
+and the app logs the cleanup failure. Do not interpret a successful listing
+deletion as proof that its remote media was deleted.
