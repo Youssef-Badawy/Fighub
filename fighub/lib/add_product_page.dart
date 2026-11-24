@@ -128,14 +128,7 @@ class _AddProductPageState extends State<AddProductPage> {
     });
 
     try {
-      final List<String> imageUrls = [];
-
-      for (final imageFile in _imageFiles) {
-        final imageUrl =
-            await _cloudinaryService.uploadImage(imageFile);
-
-        imageUrls.add(imageUrl);
-      }
+      final imageUrls = await _cloudinaryService.uploadImages(_imageFiles);
 
       final product = Product(
         name: _nameController.text.trim(),
