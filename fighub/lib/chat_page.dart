@@ -771,7 +771,7 @@ class _ChatPageState extends State<ChatPage> {
 
     final rawText = message['text'] as String? ?? '';
     final rawType = message['type'] as String? ?? 'text';
-    final rawMediaUrl = message['mediaUrl'] as String? ?? '';
+    final rawMediaUrl = (message['mediaUrl'] as String? ?? '').trim();
     final looksLikeImageUrl = rawType == 'text' &&
         rawText.startsWith('http') &&
         (rawText.contains('res.cloudinary.com') ||
