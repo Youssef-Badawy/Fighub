@@ -109,9 +109,10 @@ class Product {
       condition: readString('condition', 'Used'),
       description: readString('description', ''),
       paymentMethod: readString('paymentMethod', 'Cash on Delivery'),
-      imagePath:
-          oldImagePath ??
-          (parsedImagePaths.isNotEmpty ? parsedImagePaths.first : null),
+      // A legacy empty imagePath must not mask valid imagePaths data.
+      imagePath: oldImagePath != null && oldImagePath.trim().isNotEmpty
+          ? oldImagePath.trim()
+          : (parsedImagePaths.isNotEmpty ? parsedImagePaths.first : null),
       imagePaths: parsedImagePaths,
       status: readString('status', 'Available'),
       reservedBy: data['reservedBy'] is String ? data['reservedBy'] as String : null,
