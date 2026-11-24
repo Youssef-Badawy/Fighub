@@ -33,8 +33,11 @@ jobs:
       - name: Validate Firestore indexes JSON
         run: python -m json.tool firestore.indexes.json > /dev/null
 
-      - name: Check Firestore rules compile with emulator
-        run: npx --yes firebase-tools@15.32.1 emulators:exec --only firestore --project demo-fighub "echo Firestore rules loaded"
+      - name: Install Firestore rules test dependencies
+        run: npm install --prefix rules-tests --no-audit --no-fund
+
+      - name: Test Firestore rules with emulator
+        run: npx --yes firebase-tools@15.32.1 emulators:exec --only firestore --project demo-fighub-rules-test "npm --prefix rules-tests test"
 
       - name: Check Cloudflare worker JavaScript syntax
         run: node --input-type=module --check < backend/worker.js
