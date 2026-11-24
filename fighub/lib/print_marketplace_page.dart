@@ -222,9 +222,21 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
       final result = await _db
           .collection('print_businesses')
           .where('name', isEqualTo: 'كتالوج FigHub الرسمي')
-          .limit(1)
+          .where('active', isEqualTo: true)
           .get();
-      if (result.docs.isEmpty) {
+
+      // Never trust a business display name as proof that it is the official
+      // catalog. Verify the owning user document actually has the admin role.
+      DocumentSnapshot<Map<String, dynamic>>? officialCatalog;
+      for (final candidate in result.docs) {
+        final owner = await _db.collection('users').doc(candidate.id).get();
+        if (owner.data()?['role'] == 'admin') {
+          officialCatalog = candidate;
+          break;
+        }
+      }
+
+      if (officialCatalog == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('الكتالوج الرسمي قيد التجهيز حاليًا')),
@@ -232,13 +244,12 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
         }
         return;
       }
-      final catalog = result.docs.first;
       if (!mounted) return;
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => PrintBusinessPage(
-            businessId: catalog.id,
+            businessId: officialCatalog!.id,
             isAdminCatalog: true,
           ),
         ),
