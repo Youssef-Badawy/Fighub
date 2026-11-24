@@ -20,6 +20,9 @@ class ProductService {
     if (user == null) {
       throw StateError('User must be signed in.');
     }
+    if (user.isAnonymous) {
+      throw StateError('يجب تسجيل حساب مسجل قبل نشر المنتجات.');
+    }
 
     if (product.sellerId != user.uid) {
       throw StateError('You can only add products for your own account.');
