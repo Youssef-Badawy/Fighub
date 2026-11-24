@@ -49,7 +49,7 @@ void main() {
     await tester.enterText(find.byType(TextField), 'nothing matches');
     await tester.pumpAndSettle();
 
-    expect(find.text('مفيش منتجات مطابقة. جرّب كلمة تانية.'), findsOneWidget);
+    expect(find.text('No matching products. Try another search.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
