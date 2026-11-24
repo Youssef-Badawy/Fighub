@@ -768,13 +768,10 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('سجّل حسابك أولًا لإرسال طلب تصميم')));
       return;
     }
-    final userDocument = await _db.collection('users').doc(user.uid).get();
-    if (!userDocument.exists || userDocument.data()?['role'] != 'admin') {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('طلب التصميم متاح لحساب الأدمن فقط')),
-        );
-      }
+    if (user.uid == widget.businessId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا يمكنك إرسال طلب تصميم من حساب الكتالوج نفسه')),
+      );
       return;
     }
     final notes = TextEditingController();
@@ -998,34 +995,30 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
                 ),
               ],
             ])),
-            StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                stream: FirebaseAuth.instance.currentUser == null
-                    ? const Stream<DocumentSnapshot<Map<String, dynamic>>>.empty()
-                    : _db.collection('users')
-                        .doc(FirebaseAuth.instance.currentUser!.uid)
-                        .snapshots(),
-                builder: (context, userSnapshot) {
-                  final currentUser = FirebaseAuth.instance.currentUser;
-                  final isAdmin = userSnapshot.data?.data()?['role'] == 'admin';
-                  if (widget.isAdminCatalog ||
-                      currentUser == null ||
-                      currentUser.isAnonymous ||
-                      !isAdmin) {
-                    return const SizedBox.shrink();
-                  }
-                  return Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: _busy ? null : () => _requestDesign(business),
-                        icon: const Icon(Icons.brush),
-                        label: const Text('اطلب تصميمك'),
-                      ),
+            Builder(
+              builder: (context) {
+                final currentUser = FirebaseAuth.instance.currentUser;
+                // The request button belongs on the official admin catalog,
+                // and is intended for registered customers, not the admin owner.
+                if (!widget.isAdminCatalog ||
+                    currentUser == null ||
+                    currentUser.isAnonymous ||
+                    currentUser.uid == widget.businessId) {
+                  return const SizedBox.shrink();
+                }
+                return Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _busy ? null : () => _requestDesign(business),
+                      icon: const Icon(Icons.brush),
+                      label: const Text('اطلب تصميمك من FigHub'),
                     ),
-                  );
-                },
-              ),
+                  ),
+                );
+              },
+            ),
             if (_busy) const LinearProgressIndicator(),
             Expanded(child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _db.collection('print_products').where('sellerId', isEqualTo: widget.businessId).where('active', isEqualTo: true).snapshots(),
