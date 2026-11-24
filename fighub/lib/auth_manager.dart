@@ -81,7 +81,7 @@ class AuthManager extends ChangeNotifier {
           _photoUrl = storedPhotoUrl.trim();
         }
         _bio = data?['bio'] as String? ?? '';
-        _coverUrl = data?['coverUrl'] as String? ?? '';
+        _coverUrl = (data?['coverUrl'] as String? ?? '').trim();
 
         final rawInterests = data?['interests'];
 
@@ -210,7 +210,7 @@ class AuthManager extends ChangeNotifier {
         _photoUrl = storedPhotoUrl.trim();
       }
       _bio = data?['bio'] as String? ?? '';
-      _coverUrl = data?['coverUrl'] as String? ?? '';
+      _coverUrl = (data?['coverUrl'] as String? ?? '').trim();
 
       final rawInterests = data?['interests'];
 
