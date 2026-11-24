@@ -305,6 +305,23 @@ class CloudinaryService {
     );
   }
 
+  /// Upload multiple photos in small parallel batches to reduce wait time
+  /// without flooding the device connection or Cloudinary.
+  Future<List<String>> uploadImages(
+    List<XFile> imageFiles, {
+    int concurrency = 3,
+  }) async {
+    if (imageFiles.isEmpty) return const <String>[];
+    final safeConcurrency = concurrency.clamp(1, 4);
+    final uploadedUrls = <String>[];
+    for (var offset = 0; offset < imageFiles.length; offset += safeConcurrency) {
+      final batch = imageFiles.skip(offset).take(safeConcurrency);
+      final batchUrls = await Future.wait(batch.map(uploadImage));
+      uploadedUrls.addAll(batchUrls);
+    }
+    return uploadedUrls;
+  }
+
   Future<String> uploadAudio(String audioPath) {
     return _uploadFile(
       path: audioPath,
