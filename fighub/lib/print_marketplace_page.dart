@@ -222,7 +222,6 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
       final result = await _db
           .collection('print_businesses')
           .where('name', isEqualTo: 'كتالوج FigHub الرسمي')
-          .where('active', isEqualTo: true)
           .get();
 
       // Never trust a business display name as proof that it is the official
@@ -230,7 +229,7 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
       DocumentSnapshot<Map<String, dynamic>>? officialCatalog;
       for (final candidate in result.docs) {
         final owner = await _db.collection('users').doc(candidate.id).get();
-        if (owner.data()?['role'] == 'admin') {
+        if (owner.data()?['role'] == 'admin' &&\n            candidate.data()['active'] == true) {
           officialCatalog = candidate;
           break;
         }
