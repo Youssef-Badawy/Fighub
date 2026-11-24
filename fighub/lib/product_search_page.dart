@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'app_localizations.dart';
 import 'product_model.dart';
 import 'search_service.dart';
 
@@ -47,9 +48,10 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
   @override
   Widget build(BuildContext context) {
     final results = _results;
+    final isArabic = AppLocalizations.of(context).isArabic;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('البحث عن المنتجات'),
+        title: Text(isArabic ? 'البحث عن المنتجات' : 'Search products'),
       ),
       body: Column(
         children: [
@@ -61,12 +63,12 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
               textInputAction: TextInputAction.search,
               onChanged: (value) => setState(() => _query = value),
               decoration: InputDecoration(
-                hintText: 'اكتب اسم المنتج أو القسم أو الوصف',
+                hintText: isArabic\n                    ? 'اكتب اسم المنتج أو القسم أو الوصف'\n                    : 'Search by product, category, or description',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _query.isEmpty
                     ? null
                     : IconButton(
-                        tooltip: 'مسح البحث',
+                        tooltip: isArabic ? 'مسح البحث' : 'Clear search',
                         onPressed: () {
                           _queryController.clear();
                           setState(() => _query = '');
@@ -90,7 +92,7 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
                           Icon(Icons.search_off_rounded, size: 52),
                           SizedBox(height: 12),
                           Text(
-                            'مفيش منتجات مطابقة. جرّب كلمة تانية.',
+                            isArabic\n                                ? 'مفيش منتجات مطابقة. جرّب كلمة تانية.'\n                                : 'No matching products. Try another search.',
                             textAlign: TextAlign.center,
                           ),
                         ],
@@ -138,7 +140,7 @@ class _ProductSearchPageState extends State<ProductSearchPage> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Text(
-                            '${product.category} • ${product.price} ج.م',
+                            '${product.category} • ${product.price} ${isArabic ? 'ج.م' : 'EGP'}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
