@@ -846,18 +846,12 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
           DropdownButtonFormField<String>(value: category, decoration: const InputDecoration(labelText: 'عايز التصميم على إيه؟'), items: printCategories.map((c) => DropdownMenuItem(value: c['name'] as String, child: Text(c['name'] as String))).toList(), onChanged: (v) => refresh(() => category = v ?? category)),
           TextField(controller: notes, maxLines: 3, decoration: const InputDecoration(labelText: 'تفاصيل أو ملاحظات عن التصميم')),
           const SizedBox(height: 10),
-          OutlinedButton.icon(onPressed: () async { final file = await FigHubImagePicker.pickAndCrop(context, imageQuality: 85, maxWidth: 2500, maxHeight: 2500); if (file != null) refresh(() => image = file); }, icon: const Icon(Icons.upload_file), label: Text(image == null ? 'ارفع صورة التصميم' : 'تم اختيار الصورة')),
+          OutlinedButton.icon(onPressed: () async { final file = await FigHubImagePicker.pickAndCrop(context, imageQuality: 85, maxWidth: 2500, maxHeight: 2500); if (file != null) refresh(() => image = file); }, icon: const Icon(Icons.upload_file), label: Text(image == null ? 'إضافة صورة مرجعية (اختياري)' : 'تم اختيار الصورة')),
         ])),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
           FilledButton(
             onPressed: () {
-              if (image == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('ارفع صورة مرجعية للتصميم أولًا')),
-                );
-                return;
-              }
               Navigator.pop(dialogContext, {
                 'category': category,
                 'notes': notes.text.trim(),
