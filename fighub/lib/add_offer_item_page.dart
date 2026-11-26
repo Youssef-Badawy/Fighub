@@ -78,7 +78,7 @@ class _AddOfferItemPageState extends State<AddOfferItemPage> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
-    if (!await requireRegisteredAccount(context)) return;
+    if (!await requireRegisteredAccount(context) || !mounted) return;
 
     if (_selectedImages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
