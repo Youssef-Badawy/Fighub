@@ -331,7 +331,10 @@ async function handleUnattachedCloudinaryDeletion(body, payload, env) {
       });
     }
     const { resourceType, publicId } = cloudinaryPublicId(assetUrl);
+    const pathParts = publicId.split('/');
+    const hasSafePath = pathParts.every((part) => part && part !== '.' && part !== '..');
     if (!['image', 'video'].includes(resourceType) ||
+        !hasSafePath ||
         !allowedPrefixes.some((prefix) => publicId.startsWith(prefix))) {
       return new Response(JSON.stringify({ error: 'Unattached asset ownership mismatch' }), {
         status: 403,
@@ -445,19 +448,19 @@ export default {
         return await handleCloudinaryUploadSignature(body, payload, idToken, env);
       }
 
-      if (body.action === 'cleanupUnattachedCloudinaryAssets') {
-      try {
-        return await handleUnattachedCloudinaryDeletion(body, payload, env);
-      } catch (error) {
-        console.error('Unattached Cloudinary cleanup failed:', error);
-        return new Response(
-          JSON.stringify({ error: error.message || 'Unattached Cloudinary cleanup failed' }),
-          { status: 502, headers: { 'Content-Type': 'application/json' } },
-        );
+        if (body.action === 'cleanupUnattachedCloudinaryAssets') {
+        try {
+          return await handleUnattachedCloudinaryDeletion(body, payload, env);
+        } catch (error) {
+          console.error('Unattached Cloudinary cleanup failed:', error);
+          return new Response(
+            JSON.stringify({ error: error.message || 'Unattached Cloudinary cleanup failed' }),
+            { status: 502, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
       }
-    }
 
-    if (body.action === 'deleteCloudinaryAssets') {
+      if (body.action === 'deleteCloudinaryAssets') {
         try {
           return await handleCloudinaryDeletion(body, payload, idToken, env);
         } catch (error) {
