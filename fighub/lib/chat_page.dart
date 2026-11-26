@@ -1423,11 +1423,19 @@ class _ChatPageState extends State<ChatPage> {
                   );
                 }
 
+                // Firestore supplies messages oldest-first. Reverse the
+                // displayed list and the scroll direction so a chat opens at
+                // the newest message, with older messages above it.
+                final displayMessages = messages.reversed.toList(
+                  growable: false,
+                );
+
                 return ListView.builder(
+                  reverse: true,
                   padding: const EdgeInsets.all(16),
-                  itemCount: messages.length,
+                  itemCount: displayMessages.length,
                   itemBuilder: (context, index) {
-                    return _buildMessageBubble(context, messages[index]);
+                    return _buildMessageBubble(context, displayMessages[index]);
                   },
                 );
               },
