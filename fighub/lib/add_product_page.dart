@@ -119,7 +119,7 @@ class _AddProductPageState extends State<AddProductPage> {
       );
       return;
     }
-    if (!await requireRegisteredAccount(context)) return;
+    if (!await requireRegisteredAccount(context) || !mounted) return;
 
     final user = FirebaseAuth.instance.currentUser;
 
