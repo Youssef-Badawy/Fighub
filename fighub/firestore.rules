@@ -42,27 +42,40 @@ service cloud.firestore {
                     && (
                       (
                         resource.data.sellerId == request.auth.uid
-                        && request.resource.data.sellerId
-                           == resource.data.sellerId
-                        && !request.resource.data.diff(resource.data)
-                           .affectedKeys().hasAny(['createdAt'])
+                        && request.resource.data.sellerId == resource.data.sellerId
+                        && resource.data.get('status', 'Available') == 'Available'
+                        && request.resource.data.get('status', 'Available') == 'Available'
+                        && request.resource.data.get('reservedBy', null)
+                           == resource.data.get('reservedBy', null)
+                        && resource.data.get('isDeleted', false) != true
+                        && request.resource.data.diff(resource.data)
+                           .affectedKeys()
+                           .hasOnly([
+                             'name', 'price', 'category', 'condition',
+                             'description', 'paymentMethod', 'imagePath',
+                             'imagePaths', 'status', 'reservedBy', 'updatedAt',
+                             'isDeleted', 'cleanupPending', 'deletedAt'
+                           ])
                         && (
                           !request.resource.data.diff(resource.data)
                              .affectedKeys().hasAny(['isDeleted'])
                           || (
                             request.resource.data.isDeleted == true
                             && request.resource.data.cleanupPending == true
-                            && resource.data.get('status', 'Available') == 'Available'
-                            && (
-                              !resource.data.keys().hasAny(['reservedBy'])
-                              || resource.data.reservedBy == null
-                              || resource.data.reservedBy == ''
-                            )
                           )
                         )
                       )
-                      ||
-                      (
+                      || (
+                        resource.data.sellerId == request.auth.uid
+                        && resource.data.status == 'Reserved'
+                        && request.resource.data.status == 'Sold'
+                        && request.resource.data.soldTo == resource.data.reservedBy
+                        && request.resource.data.soldAt == request.time
+                        && request.resource.data.diff(resource.data)
+                           .affectedKeys()
+                           .hasOnly(['status', 'soldTo', 'soldAt'])
+                      )
+                      || (
                         request.auth.uid != resource.data.sellerId
                         && resource.data.status == 'Available'
                         && resource.data.get('isDeleted', false) != true
@@ -72,16 +85,13 @@ service cloud.firestore {
                           || resource.data.reservedBy == ''
                         )
                         && request.resource.data.status == 'Reserved'
-                        && request.resource.data.reservedBy
-                           == request.auth.uid
-                        && request.resource.data.sellerId
-                           == resource.data.sellerId
+                        && request.resource.data.reservedBy == request.auth.uid
+                        && request.resource.data.sellerId == resource.data.sellerId
                         && request.resource.data.diff(resource.data)
                            .affectedKeys()
                            .hasOnly(['status', 'reservedBy', 'reservedAt'])
                       )
-                      ||
-                      (
+                      || (
                         request.auth.uid != resource.data.sellerId
                         && resource.data.status == 'Reserved'
                         && resource.data.reservedBy == request.auth.uid
