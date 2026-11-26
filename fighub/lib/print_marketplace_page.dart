@@ -514,15 +514,17 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
     );
     if (picked == null || !mounted) return;
     setState(() => _busy = true);
+    String? uploadedImageUrl;
+    final cloudinary = CloudinaryService();
     try {
       final selectedImage = picked['image'] as XFile?;
       if (selectedImage == null) {
         throw StateError('لا يمكن نشر منتج بدون صورة.');
       }
-      final cloudinary = CloudinaryService();
       final imageUrl = widget.isAdminCatalog
           ? await cloudinary.uploadCatalogImage(selectedImage)
           : await cloudinary.uploadImage(selectedImage);
+      uploadedImageUrl = imageUrl;
       await _db.collection('print_products').add({
         'sellerId': widget.businessId,
         if (widget.isAdminCatalog) 'catalogOwnerId': widget.businessId,
@@ -537,7 +539,16 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      uploadedImageUrl = null;
     } catch (error) {
+      if (uploadedImageUrl != null) {
+        try {
+          await cloudinary.deleteUnattachedAssets([uploadedImageUrl]);
+        } catch (cleanupError, stackTrace) {
+          debugPrint('FIGHUB PRINT PRODUCT UPLOAD ROLLBACK ERROR: $cleanupError');
+          debugPrintStack(stackTrace: stackTrace);
+        }
+      }
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر إضافة المنتج: $error')));
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -667,9 +678,11 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
     try {
       final ownerId = FirebaseAuth.instance.currentUser!.uid;
       for (var index = 0; index < images.length; index++) {
-        final imageUrl = await CloudinaryService().uploadCatalogImage(images[index]);
+        final cloudinary = CloudinaryService();
+        final imageUrl = await cloudinary.uploadCatalogImage(images[index]);
         final productRef = _db.collection('print_products').doc();
-        await productRef.set({
+        try {
+          await productRef.set({
           'sellerId': ownerId,
           'catalogOwnerId': ownerId,
           'catalogManaged': true,
@@ -684,8 +697,17 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
           'imageUrl': imageUrl,
           'active': true,
           'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        } catch (_) {
+          try {
+            await cloudinary.deleteUnattachedAssets([imageUrl]);
+          } catch (cleanupError, stackTrace) {
+            debugPrint('FIGHUB BULK CATALOG UPLOAD ROLLBACK ERROR: $cleanupError');
+            debugPrintStack(stackTrace: stackTrace);
+          }
+          rethrow;
+        }
         imported++;
         if (mounted) setState(() {});
       }
@@ -868,10 +890,14 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
       return;
     }
     setState(() => _busy = true);
+    String? uploadedImageUrl;
     try {
       String imageUrl = '';
       final selectedImage = result['image'] as XFile?;
-      if (selectedImage != null) imageUrl = await CloudinaryService().uploadImage(selectedImage);
+      if (selectedImage != null) {
+        imageUrl = await CloudinaryService().uploadImage(selectedImage);
+        uploadedImageUrl = imageUrl;
+      }
       final request = await _db.collection('print_design_requests').add({
         'companyId': widget.businessId,
         'companyName': business['name'] ?? '',
@@ -883,6 +909,8 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
         'status': 'new',
         'createdAt': FieldValue.serverTimestamp(),
       });
+      // The request now owns this image; don't remove it if chat delivery fails.
+      uploadedImageUrl = null;
       // Also deliver the request in the existing buyer/company conversation,
       // which triggers the app's normal chat notification.
       try {
@@ -917,6 +945,14 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
         );
       }
     } catch (error) {
+      if (uploadedImageUrl != null) {
+        try {
+          await CloudinaryService().deleteUnattachedAssets([uploadedImageUrl]);
+        } catch (cleanupError, stackTrace) {
+          debugPrint('FIGHUB DESIGN REQUEST UPLOAD ROLLBACK ERROR: $cleanupError');
+          debugPrintStack(stackTrace: stackTrace);
+        }
+      }
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر إرسال الطلب: $error')));
     } finally {
       notes.dispose();
