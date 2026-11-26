@@ -63,6 +63,10 @@ class ProductService {
     if (ownerId != user.uid) {
       throw StateError('You can only update your own products.');
     }
+    final currentStatus = data?['status'] as String? ?? 'Available';
+    if (currentStatus != 'Available' || data?['isDeleted'] == true) {
+      throw StateError('Reserved or sold products cannot be edited.');
+    }
 
     final updates = product.toFirestore()..remove('createdAt');
 
