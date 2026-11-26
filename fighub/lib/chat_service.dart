@@ -1624,7 +1624,7 @@ class ChatService {
         final clearedAtMap = latestChat!['clearedAt'];
         final rawCutoff = clearedAtMap is Map ? clearedAtMap[user.uid] : null;
         final cutoff = rawCutoff is Timestamp ? rawCutoff : null;
-        final docs = latestMessages!.docs;
+        final docs = latestMessages!.docs.take(messagePageSize).toList();
         final visible = docs.where((document) {
           if (cutoff == null) return true;
           final createdAt = document.data()['createdAt'];
@@ -1636,7 +1636,7 @@ class ChatService {
               .map((document) => {'id': document.id, ...document.data()})
               .toList(growable: false),
           oldestDocument: docs.isEmpty ? null : docs.last,
-          hasMore: docs.length == messagePageSize,
+          hasMore: latestMessages!.docs.length > messagePageSize,
           clearedAt: cutoff,
         ));
       }
@@ -1648,7 +1648,7 @@ class ChatService {
 
       final messagesSubscription = _messagesCollection(chatId)
           .orderBy('createdAt', descending: true)
-          .limit(messagePageSize)
+          .limit(messagePageSize + 1)
           .snapshots()
           .listen((snapshot) {
             latestMessages = snapshot;
@@ -1685,10 +1685,11 @@ class ChatService {
     final page = await _messagesCollection(chatId)
         .orderBy('createdAt', descending: true)
         .startAfterDocument(cursor)
-        .limit(messagePageSize)
+        .limit(messagePageSize + 1)
         .get();
 
-    final visible = page.docs.where((document) {
+    final pageDocs = page.docs.take(messagePageSize).toList();
+    final visible = pageDocs.where((document) {
       if (cutoff == null) return true;
       final createdAt = document.data()['createdAt'];
       return createdAt is Timestamp && createdAt.compareTo(cutoff) > 0;
@@ -1698,8 +1699,8 @@ class ChatService {
       messages: visible.reversed
           .map((document) => {'id': document.id, ...document.data()})
           .toList(growable: false),
-      oldestDocument: page.docs.isEmpty ? cursor : page.docs.last,
-      hasMore: page.docs.length == messagePageSize,
+      oldestDocument: pageDocs.isEmpty ? cursor : pageDocs.last,
+      hasMore: page.docs.length > messagePageSize,
       clearedAt: cutoff,
     );
   }
