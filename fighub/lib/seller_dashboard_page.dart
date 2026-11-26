@@ -100,7 +100,7 @@ class _SellerDashboardPageState
     });
 
     try {
-      if (status == 'Sold' && product.status == 'Reserved') {
+      if (status == 'Sold' && previousStatus == 'Reserved') {
         final buyerId = product.reservedBy;
         if (buyerId == null || buyerId.isEmpty) {
           throw StateError('الحجز لا يحتوي على مشتري صالح.');
