@@ -220,8 +220,8 @@ class _SellerDashboardPageState
                     ? 'تم حذف المنتج وصوره بنجاح'
                     : 'Product and images deleted.')
                 : (localization.isArabic
-                    ? 'تم إخفاء المنتج، وسيتم تنظيف صوره تلقائيًا عند توفر الاتصال'
-                    : 'Product hidden. Image cleanup will retry automatically when online.'),
+                    ? 'تم إخفاء المنتج، وسيُعاد تنظيف صوره عند فتح التطبيق مرة أخرى مع اتصال بالإنترنت'
+                    : 'Product hidden. Image cleanup will retry the next time you open the app while online.'),
           ),
         ),
       );
