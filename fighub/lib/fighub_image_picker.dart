@@ -44,6 +44,7 @@ class FigHubImagePicker {
       ),
     );
 
+    if (!context.mounted) return null;
     if (choice == 'original') return selected;
     if (choice != 'edit') return null;
 
