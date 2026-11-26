@@ -62,6 +62,13 @@ try {
       status: 'Reserved',
       reservedBy: 'customer-1',
     });
+    await setDoc(doc(db, 'products/seller-editable'), {
+      sellerId: 'not-admin',
+      name: 'Seller editable product',
+      price: '250',
+      status: 'Available',
+      reservedBy: null,
+    });
     await setDoc(doc(db, 'products/other-seller-reserved'), {
       sellerId: 'other-seller',
       name: 'Another seller reserved product',
@@ -279,6 +286,27 @@ try {
   await assertFails(
     updateDoc(doc(forgedChatSeller, 'products/reserved-owner-edit'), {
       price: '1',
+    }),
+  );
+  await assertSucceeds(
+    updateDoc(doc(forgedChatSeller, 'products/seller-editable'), {
+      price: '300',
+    }),
+  );
+  await assertSucceeds(
+    updateDoc(doc(forgedChatSeller, 'products/seller-editable'), {
+      status: 'Sold',
+      soldTo: null,
+      soldAt: serverTimestamp(),
+    }),
+  );
+  await assertSucceeds(
+    updateDoc(doc(forgedChatSeller, 'products/seller-editable'), {
+      status: 'Available',
+      reservedBy: null,
+      reservedAt: null,
+      soldTo: null,
+      soldAt: null,
     }),
   );
   await assertSucceeds(
