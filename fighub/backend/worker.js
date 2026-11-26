@@ -31,7 +31,7 @@ function cloudinaryPublicId(assetUrl) {
     throw new Error('Invalid Cloudinary asset URL');
   }
 
-  if (url.hostname !== 'res.cloudinary.com') {
+  if (url.protocol !== 'https:' || url.hostname !== 'res.cloudinary.com') {
     throw new Error('Asset is not hosted by Cloudinary');
   }
 
@@ -164,7 +164,7 @@ async function handleCloudinaryUploadSignature(body, payload, idToken, env) {
 
   // Catalog uploads are restricted server-side; hiding the admin button in
   // Flutter alone is not an authorization boundary.
-  let folder = 'fighub';
+  let folder = `fighub/${payload.sub}`;
   if (purpose === 'catalog') {
     const userDocument = await readFirestoreDocument(
       `users/${encodeURIComponent(payload.sub)}`,
@@ -302,6 +302,59 @@ async function handleCloudinaryDeletion(body, payload, idToken, env) {
   });
 }
 
+async function handleUnattachedCloudinaryDeletion(body, payload, env) {
+  if (payload.firebase?.sign_in_provider === 'anonymous') {
+    return new Response(JSON.stringify({ error: 'A registered account is required' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const urls = Array.isArray(body.assetUrls) ? body.assetUrls : [];
+  if (urls.length > 100) {
+    return new Response(JSON.stringify({ error: 'Too many assets in one cleanup request' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const allowedPrefixes = [
+    `fighub/${payload.sub}/`,
+    `fighub/catalog/${payload.sub}/`,
+  ];
+  const requested = new Set();
+  for (const assetUrl of urls) {
+    if (typeof assetUrl !== 'string') {
+      return new Response(JSON.stringify({ error: 'Invalid asset URL' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    const { resourceType, publicId } = cloudinaryPublicId(assetUrl);
+    if (!['image', 'video'].includes(resourceType) ||
+        !allowedPrefixes.some((prefix) => publicId.startsWith(prefix))) {
+      return new Response(JSON.stringify({ error: 'Unattached asset ownership mismatch' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    requested.add(assetUrl);
+  }
+
+  for (const assetUrl of requested) {
+    await deleteCloudinaryAsset(assetUrl, env);
+  }
+
+  return new Response(JSON.stringify({
+    success: true,
+    deletedAssets: requested.size,
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+
 export default {
   async fetch(request, env) {
     const requestUrl = new URL(request.url);
@@ -392,7 +445,19 @@ export default {
         return await handleCloudinaryUploadSignature(body, payload, idToken, env);
       }
 
-      if (body.action === 'deleteCloudinaryAssets') {
+      if (body.action === 'cleanupUnattachedCloudinaryAssets') {
+      try {
+        return await handleUnattachedCloudinaryDeletion(body, payload, env);
+      } catch (error) {
+        console.error('Unattached Cloudinary cleanup failed:', error);
+        return new Response(
+          JSON.stringify({ error: error.message || 'Unattached Cloudinary cleanup failed' }),
+          { status: 502, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+    }
+
+    if (body.action === 'deleteCloudinaryAssets') {
         try {
           return await handleCloudinaryDeletion(body, payload, idToken, env);
         } catch (error) {
