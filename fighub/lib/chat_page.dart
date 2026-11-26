@@ -34,6 +34,7 @@ class _ChatPageState extends State<ChatPage> {
   late final Stream<Map<String, dynamic>?> _partnerStream;
   late final Stream<List<Map<String, dynamic>>> _messagesStream;
   late final ValueNotifier<String> _recordingElapsedNotifier;
+  late final ValueNotifier<bool> _hasMessagesNotifier;
 
   bool _isSending = false;
   bool _isRecording = false;
@@ -62,6 +63,7 @@ class _ChatPageState extends State<ChatPage> {
     _partnerStream = _chatService.watchChatPartner(widget.chatId);
     _messagesStream = _chatService.watchMessages(widget.chatId);
     _recordingElapsedNotifier = ValueNotifier<String>(_recordingElapsed);
+    _hasMessagesNotifier = ValueNotifier<bool>(false);
     unawaited(_chatService.reconcileChatItems(widget.chatId));
   }
 
@@ -70,6 +72,7 @@ class _ChatPageState extends State<ChatPage> {
     _messageController.dispose();
     _stopRecordingClock();
     _recordingElapsedNotifier.dispose();
+    _hasMessagesNotifier.dispose();
     unawaited(_audioRecorder.dispose());
     super.dispose();
   }
@@ -1412,6 +1415,9 @@ class _ChatPageState extends State<ChatPage> {
                 }
 
                 final messages = snapshot.data ?? const [];
+                if (_hasMessagesNotifier.value != messages.isNotEmpty) {
+                  _hasMessagesNotifier.value = messages.isNotEmpty;
+                }
                 if (messages.isNotEmpty) {
                   // Messages visible in the open conversation are read.
                   unawaited(_chatService.markMessagesRead(
@@ -1469,12 +1475,10 @@ class _ChatPageState extends State<ChatPage> {
               padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
               child: Column(
                 children: [
-                  StreamBuilder<List<Map<String, dynamic>>>(
-                    stream: _messagesStream,
-                    builder: (context, snapshot) {
-                      final messages = snapshot.data ?? const [];
-
-                      if (messages.isNotEmpty) {
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _hasMessagesNotifier,
+                    builder: (context, hasMessages, _) {
+                      if (hasMessages) {
                         return const SizedBox.shrink();
                       }
 
