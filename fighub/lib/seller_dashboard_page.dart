@@ -99,21 +99,9 @@ class _SellerDashboardPageState
     });
 
     try {
-      final updatedProduct = Product(
-        id: product.id,
-        sellerId: product.sellerId,
-        name: product.name,
-        price: product.price,
-        category: product.category,
-        condition: product.condition,
-        description: product.description,
-        paymentMethod: product.paymentMethod,
-        imagePath: product.imagePath,
+      await _productService.updateProductStatus(
+        productId: product.id!,
         status: status,
-      );
-
-      await _productService.updateProduct(
-        updatedProduct,
       );
 
       if (!mounted) {
