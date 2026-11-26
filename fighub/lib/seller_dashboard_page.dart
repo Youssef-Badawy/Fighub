@@ -681,11 +681,12 @@ class _SellerDashboardPageState
                                   selected:
                                       product.status ==
                                           'Reserved',
-                                  onSelected: (_) =>
-                                      _changeStatus(
-                                    product,
-                                    'Reserved',
-                                  ),
+                                  onSelected: product.status == 'Reserved'
+                                      ? (_) => _changeStatus(
+                                          product,
+                                          'Reserved',
+                                        )
+                                      : null,
                                 ),
                                 ChoiceChip(
                                   label: Text(
