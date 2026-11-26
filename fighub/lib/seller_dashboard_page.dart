@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'app_localizations.dart';
 import 'product_model.dart';
 import 'product_service.dart';
+import 'chat_service.dart';
 
 class SellerDashboardPage extends StatefulWidget {
   final List<Product> products;
@@ -99,10 +100,23 @@ class _SellerDashboardPageState
     });
 
     try {
-      await _productService.updateProductStatus(
-        productId: product.id!,
-        status: status,
-      );
+      if (status == 'Sold' && product.status == 'Reserved') {
+        final buyerId = product.reservedBy;
+        if (buyerId == null || buyerId.isEmpty) {
+          throw StateError('الحجز لا يحتوي على مشتري صالح.');
+        }
+        await ChatService().markOfferItemSold(
+          chatId: 'products_${buyerId}_${product.sellerId}',
+          itemId: product.id!,
+          source: 'product',
+          productId: product.id!,
+        );
+      } else {
+        await _productService.updateProductStatus(
+          productId: product.id!,
+          status: status,
+        );
+      }
 
       if (!mounted) {
         return;
@@ -665,11 +679,12 @@ class _SellerDashboardPageState
                                   selected:
                                       product.status ==
                                           'Available',
-                                  onSelected: (_) =>
-                                      _changeStatus(
-                                    product,
-                                    'Available',
-                                  ),
+                                  onSelected: product.status == 'Reserved'
+                                      ? null
+                                      : (_) => _changeStatus(
+                                          product,
+                                          'Available',
+                                        ),
                                 ),
                                 ChoiceChip(
                                   label: Text(
