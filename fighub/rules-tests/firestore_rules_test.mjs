@@ -42,6 +42,19 @@ try {
       name: 'Legacy anonymous listing',
       status: 'Available',
     });
+    await setDoc(doc(db, 'products/deleted-product'), {
+      sellerId: 'not-admin',
+      name: 'Hidden product awaiting cleanup',
+      status: 'Available',
+      isDeleted: true,
+      cleanupPending: true,
+    });
+    await setDoc(doc(db, 'products/reserved-product'), {
+      sellerId: 'not-admin',
+      name: 'Reserved product',
+      status: 'Reserved',
+      reservedBy: 'customer-1',
+    });
     await setDoc(doc(db, 'offers/offer-1'), {
       sellerId: 'not-admin',
       title: 'Test offer',
@@ -119,6 +132,13 @@ try {
     }),
   );
   await assertFails(
+    updateDoc(doc(registeredCustomer, 'products/deleted-product'), {
+      status: 'Reserved',
+      reservedBy: 'customer-1',
+      reservedAt: new Date(),
+    }),
+  );
+  await assertFails(
     deleteDoc(doc(anonymousCustomer, 'products/legacy-anonymous-product')),
   );
   await assertFails(
@@ -162,6 +182,22 @@ try {
   await assertFails(
     updateDoc(doc(regularSeller, 'print_businesses/not-admin'), {
       officialCatalog: true,
+    }),
+  );
+  await assertSucceeds(
+    updateDoc(doc(regularSeller, 'products/product-1'), {
+      isDeleted: true,
+      cleanupPending: true,
+      deletedAt: new Date(),
+      updatedAt: new Date(),
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(regularSeller, 'products/reserved-product'), {
+      isDeleted: true,
+      cleanupPending: true,
+      deletedAt: new Date(),
+      updatedAt: new Date(),
     }),
   );
 
