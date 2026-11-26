@@ -162,10 +162,11 @@ class _ChatPageState extends State<ChatPage> {
         throw StateError('Recording did not produce a file.');
       }
 
-      uploadedUrl = await cloudinary.uploadAudio(path);
+      final audioUrl = await cloudinary.uploadAudio(path);
+      uploadedUrl = audioUrl;
       await _chatService.sendMediaMessage(
         chatId: widget.chatId,
-        mediaUrl: uploadedUrl!,
+        mediaUrl: audioUrl,
         mediaType: 'audio',
       );
       uploadedUrl = null;
@@ -288,13 +289,14 @@ class _ChatPageState extends State<ChatPage> {
       if (!mounted || file == null) return;
       setState(() => _isSending = true);
 
-      uploadedUrl = selectedType == 'image'
+      final mediaUrl = selectedType == 'image'
           ? await cloudinary.uploadImage(file)
           : await cloudinary.uploadVideo(file);
+      uploadedUrl = mediaUrl;
 
       await _chatService.sendMediaMessage(
         chatId: widget.chatId,
-        mediaUrl: uploadedUrl!,
+        mediaUrl: mediaUrl,
         mediaType: selectedType,
       );
       uploadedUrl = null;
