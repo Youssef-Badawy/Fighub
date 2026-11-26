@@ -62,29 +62,17 @@ class ProductService {
       final currentStatus = data['status'] as String? ?? 'Available';
       if (currentStatus == status) return;
 
-      if (status == 'Sold') {
-        final updates = <String, dynamic>{
+      if (status == 'Sold' && currentStatus == 'Available') {
+        transaction.update(reference, {
           'status': 'Sold',
+          'soldTo': null,
           'soldAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
-        };
-        if (currentStatus == 'Reserved') {
-          final buyerId = data['reservedBy'] as String? ?? '';
-          if (buyerId.isEmpty || buyerId == user.uid) {
-            throw StateError('The reservation has no valid buyer.');
-          }
-          updates['soldTo'] = buyerId;
-        } else if (currentStatus == 'Available') {
-          updates['soldTo'] = null;
-        } else {
-          throw StateError('This product cannot be marked as sold.');
-        }
-        transaction.update(reference, updates);
+        });
         return;
       }
 
-      if (status == 'Available' &&
-          (currentStatus == 'Reserved' || currentStatus == 'Sold')) {
+      if (status == 'Available' && currentStatus == 'Sold') {
         transaction.update(reference, {
           'status': 'Available',
           'reservedBy': null,
