@@ -38,6 +38,21 @@ class ChatService {
     }
   }
 
+  bool _matchesAuthoritativeItemDetails(
+    Map<String, dynamic> chatItem,
+    Map<String, dynamic> sourceData,
+  ) {
+    final sourceName = sourceData['name']?.toString().trim() ?? '';
+    final sourcePrice = sourceData['price']?.toString().trim() ?? '';
+    final chatName = chatItem['itemName']?.toString().trim() ?? '';
+    final chatPrice = chatItem['price']?.toString().trim() ?? '';
+
+    return sourceName.isNotEmpty &&
+        sourcePrice.isNotEmpty &&
+        chatName == sourceName &&
+        chatPrice == sourcePrice;
+  }
+
   void _dispatchMessageNotifications({
     required String recipientId,
     required String chatId,
@@ -817,6 +832,10 @@ class ChatService {
         throw StateError('This product does not belong to the chat seller.');
       }
 
+      if (!_matchesAuthoritativeItemDetails(selected, sourceData)) {
+        throw StateError('The reserved item price or name changed. Refresh the reservation before selling.');
+      }
+
       selected['status'] = 'Settled';
       selected['soldTo'] = buyerId;
       selected['soldAt'] = Timestamp.now();
@@ -961,6 +980,9 @@ class ChatService {
           }
         } else if (sourceData['sellerId'] != sellerId) {
           throw StateError('A product does not belong to the chat seller.');
+        }
+        if (!_matchesAuthoritativeItemDetails(activeItems[i], sourceData)) {
+          throw StateError('A reserved item price or name changed. Refresh the reservation before settlement.');
         }
         final reservationSnapshot = reservationSnapshots[i];
         if (reservationSnapshot != null) {
