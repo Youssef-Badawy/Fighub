@@ -73,6 +73,14 @@ class _AddProductPageState extends State<AddProductPage> {
           ..addAll(images);
       });
     } catch (error) {
+      if (uploadedImageUrls.isNotEmpty) {
+        try {
+          await _cloudinaryService.deleteUnattachedAssets(uploadedImageUrls);
+        } catch (cleanupError, stackTrace) {
+          debugPrint('FIGHUB PRODUCT UPLOAD ROLLBACK ERROR: $cleanupError');
+          debugPrintStack(stackTrace: stackTrace);
+        }
+      }
       if (!mounted) {
         return;
       }
@@ -140,8 +148,10 @@ class _AddProductPageState extends State<AddProductPage> {
       _isPublishing = true;
     });
 
+    var uploadedImageUrls = <String>[];
     try {
-      final imageUrls = await _cloudinaryService.uploadImages(_imageFiles);
+      uploadedImageUrls = await _cloudinaryService.uploadImages(_imageFiles);
+      final imageUrls = uploadedImageUrls;
 
       final product = Product(
         name: _nameController.text.trim(),
