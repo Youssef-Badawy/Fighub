@@ -79,7 +79,7 @@ service cloud.firestore {
                         resource.data.sellerId == request.auth.uid
                         && (
                           (
-                            resource.data.status == 'Available'
+                            resource.data.get('status', 'Available') == 'Available'
                             && request.resource.data.status == 'Sold'
                             && request.resource.data.soldTo == null
                             && request.resource.data.soldAt == request.time
