@@ -788,24 +788,16 @@ service cloud.firestore {
                         ).data.chatId
                            == 'printing_' + request.auth.uid + '_' + resource.data.sellerId
                         && getAfter(
-                          /databases/$(database)/documents/chats/$(getAfter(
-                            /databases/$(database)/documents/products/$(request.resource.data.lastOrderId)
-                          ).data.chatId)
+                          /databases/$(database)/documents/chats/printing_$(request.auth.uid)_$(resource.data.sellerId)
                         ).data.chatType == 'printing'
                         && getAfter(
-                          /databases/$(database)/documents/chats/$(getAfter(
-                            /databases/$(database)/documents/products/$(request.resource.data.lastOrderId)
-                          ).data.chatId)
+                          /databases/$(database)/documents/chats/printing_$(request.auth.uid)_$(resource.data.sellerId)
                         ).data.buyerId == request.auth.uid
                         && getAfter(
-                          /databases/$(database)/documents/chats/$(getAfter(
-                            /databases/$(database)/documents/products/$(request.resource.data.lastOrderId)
-                          ).data.chatId)
+                          /databases/$(database)/documents/chats/printing_$(request.auth.uid)_$(resource.data.sellerId)
                         ).data.sellerId == resource.data.sellerId
                         && getAfter(
-                          /databases/$(database)/documents/chats/$(getAfter(
-                            /databases/$(database)/documents/products/$(request.resource.data.lastOrderId)
-                          ).data.chatId)
+                          /databases/$(database)/documents/chats/printing_$(request.auth.uid)_$(resource.data.sellerId)
                         ).data.offerItems.hasAny([{
                           'source': 'product',
                           'productId': request.resource.data.lastOrderId,
