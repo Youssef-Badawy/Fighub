@@ -8,6 +8,7 @@ import 'fighub_image_picker.dart';
 import 'chat_service.dart';
 import 'chat_page.dart';
 import 'cloudinary_service.dart';
+import 'notification_service.dart';
 
 const _printSizePrices = <String, Map<String, int>>{
   'برواز': {'30×20 سم': 200, '40×30 سم': 300, '50×40 سم': 450, '60×50 سم': 500, '70×50 سم': 580},
@@ -1076,6 +1077,21 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
           'createdAt': FieldValue.serverTimestamp(),
         });
       });
+
+      // The order and chat are already committed. Notification delivery is
+      // best-effort and must never make a successful purchase look failed.
+      try {
+        await NotificationService().addNotification(
+          userId: widget.businessId,
+          title: 'طلب طباعة جديد',
+          message: 'تم حجز $productId من كتالوج الطباعة.',
+          productId: orderRef.id,
+          chatId: chatId,
+        );
+      } catch (notificationError, notificationStackTrace) {
+        debugPrint('FIGHUB PRINT ORDER NOTIFICATION ERROR: $notificationError');
+        debugPrintStack(stackTrace: notificationStackTrace);
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
