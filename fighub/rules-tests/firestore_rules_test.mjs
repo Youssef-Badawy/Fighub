@@ -6,7 +6,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { deleteDoc, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const projectId = 'demo-fighub-rules-test';
@@ -128,6 +128,46 @@ try {
       title: 'Registered offer',
     }),
   );
+
+  const printPurchaseBatch = writeBatch(registeredCustomer);
+  printPurchaseBatch.update(doc(registeredCustomer, 'print_products/print-1'), {
+    stockQuantity: 4,
+    updatedAt: new Date(),
+  });
+  printPurchaseBatch.set(doc(registeredCustomer, 'products/print-order-1'), {
+    productType: 'print_order',
+    sourcePrintProductId: 'print-1',
+    sellerId: 'not-admin',
+    buyerId: 'customer-1',
+    reservedBy: 'customer-1',
+    status: 'Reserved',
+    name: 'Test print order',
+  });
+  printPurchaseBatch.set(doc(
+    registeredCustomer,
+    'chats/printing_customer-1_not-admin',
+  ), {
+    productId: 'combined_printing_customer-1_not-admin',
+    productName: 'حساب مشتريات الطباعة',
+    chatType: 'printing',
+    buyerId: 'customer-1',
+    sellerId: 'not-admin',
+    participants: ['customer-1', 'not-admin'],
+    offerItems: [{
+      source: 'product',
+      productId: 'print-order-1',
+      itemId: 'print-order-1',
+      itemName: 'Test print order',
+      price: '200',
+      imagePaths: [],
+      reservedBy: 'customer-1',
+      status: 'Reserved',
+    }],
+    settlementBuyerConfirmed: false,
+    settlementSellerConfirmed: false,
+    settledOrders: [],
+  });
+  await assertSucceeds(printPurchaseBatch.commit());
 
   const anonymousCustomer = env.authenticatedContext('anonymous-1', {
     firebase: { sign_in_provider: 'anonymous' },
