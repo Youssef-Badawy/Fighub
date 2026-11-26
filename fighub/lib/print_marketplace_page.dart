@@ -976,6 +976,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
     final productRef = _db.collection('print_products').doc(productId);
     final chatId = 'printing_${user.uid}_${widget.businessId}';
     final chatRef = _db.collection('chats').doc(chatId);
+    late String reservedProductName;
 
     try {
       await _db.runTransaction((transaction) async {
@@ -997,6 +998,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
         }
 
         final productName = (data['name'] ?? 'طلب طباعة').toString();
+        reservedProductName = productName;
         final price = data['price']?.toString() ?? '0';
         final imagePaths = imageUrl.isNotEmpty ? <String>[imageUrl] : <String>[];
         final chatItem = <String, dynamic>{
@@ -1084,7 +1086,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
         await NotificationService().addNotification(
           userId: widget.businessId,
           title: 'طلب طباعة جديد',
-          message: 'تم حجز $productId من كتالوج الطباعة.',
+          message: 'تم حجز $reservedProductName من كتالوج الطباعة.',
           productId: orderRef.id,
           chatId: chatId,
         );
