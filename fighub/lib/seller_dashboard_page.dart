@@ -204,7 +204,7 @@ class _SellerDashboardPageState
     }
 
     try {
-      await _productService.deleteProduct(
+      final assetsCleaned = await _productService.deleteProduct(
         product.id!,
       );
 
@@ -215,9 +215,13 @@ class _SellerDashboardPageState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            localization.isArabic
-                ? 'تم حذف المنتج'
-                : 'Product deleted.',
+            assetsCleaned
+                ? (localization.isArabic
+                    ? 'تم حذف المنتج وصوره بنجاح'
+                    : 'Product and images deleted.')
+                : (localization.isArabic
+                    ? 'تم إخفاء المنتج، وسيتم تنظيف صوره تلقائيًا عند توفر الاتصال'
+                    : 'Product hidden. Image cleanup will retry automatically when online.'),
           ),
         ),
       );
