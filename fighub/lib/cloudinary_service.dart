@@ -59,6 +59,20 @@ class CloudinaryService {
         .toList();
   }
 
+  /// Deletes files uploaded by this account that never became attached to a record.
+  /// The Worker independently verifies the account-specific Cloudinary folder.
+  Future<void> deleteUnattachedAssets(List<String> assetUrls) async {
+    final urls = assetUrls
+        .where((url) => url.startsWith('https://res.cloudinary.com/'))
+        .toSet()
+        .toList();
+    if (urls.isEmpty) return;
+    await _deleteAssets({
+      'action': 'cleanupUnattachedCloudinaryAssets',
+      'assetUrls': urls,
+    });
+  }
+
   Future<void> _deleteAssets(Map<String, dynamic> body) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) throw StateError('User must be signed in.');
@@ -278,12 +292,34 @@ class CloudinaryService {
     if (imageFiles.isEmpty) return const <String>[];
     final safeConcurrency = concurrency.clamp(1, 4).toInt();
     final uploadedUrls = <String>[];
-    for (var offset = 0; offset < imageFiles.length; offset += safeConcurrency) {
-      final batch = imageFiles.skip(offset).take(safeConcurrency);
-      final batchUrls = await Future.wait(batch.map(uploadImage));
-      uploadedUrls.addAll(batchUrls);
+    try {
+      for (var offset = 0; offset < imageFiles.length; offset += safeConcurrency) {
+        final batch = imageFiles.skip(offset).take(safeConcurrency);
+        final results = await Future.wait(
+          batch.map((file) async {
+            try {
+              return _UploadResult(url: await uploadImage(file));
+            } catch (error) {
+              return _UploadResult(error: error);
+            }
+          }),
+        );
+        for (final result in results) {
+          if (result.url != null) uploadedUrls.add(result.url!);
+        }
+        final failed = results.where((result) => result.error != null);
+        if (failed.isNotEmpty) throw StateError(failed.first.error.toString());
+      }
+      return uploadedUrls;
+    } catch (_) {
+      try {
+        await deleteUnattachedAssets(uploadedUrls);
+      } catch (cleanupError, stackTrace) {
+        debugPrint('FIGHUB PARTIAL UPLOAD CLEANUP ERROR: $cleanupError');
+        debugPrintStack(stackTrace: stackTrace);
+      }
+      rethrow;
     }
-    return uploadedUrls;
   }
 
   Future<String> uploadAudio(String audioPath) {
@@ -306,4 +342,12 @@ class CloudinaryService {
     );
   }
 
+}
+
+
+class _UploadResult {
+  final String? url;
+  final Object? error;
+
+  const _UploadResult({this.url, this.error});
 }
