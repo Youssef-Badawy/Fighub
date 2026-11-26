@@ -963,63 +963,143 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
   Future<void> _buyProduct(String productId) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || user.isAnonymous) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('سجّل حسابك أولًا لإتمام الطلب')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('سجّل حسابك أولًا لإتمام الطلب')),
+      );
       return;
     }
     if (user.uid == widget.businessId || _busy) return;
+
     setState(() => _busy = true);
     final orderRef = _db.collection('products').doc();
     final productRef = _db.collection('print_products').doc(productId);
-    var orderSaved = false;
+    final chatId = 'printing_${user.uid}_${widget.businessId}';
+    final chatRef = _db.collection('chats').doc(chatId);
+
     try {
       await _db.runTransaction((transaction) async {
-        final snapshot = await transaction.get(productRef);
-        if (!snapshot.exists) throw StateError('المنتج غير موجود');
-        final data = snapshot.data()!;
+        // Read every document before writing so stock, order, and chat are
+        // committed atomically or not committed at all.
+        final productSnapshot = await transaction.get(productRef);
+        final chatSnapshot = await transaction.get(chatRef);
+
+        if (!productSnapshot.exists) throw StateError('المنتج غير موجود');
+        final data = productSnapshot.data()!;
+        final sellerId = data['sellerId'] as String? ?? '';
         final quantity = (data['stockQuantity'] as num?)?.toInt() ?? 0;
         final imageUrl = (data['imageUrl'] as String? ?? '').trim();
-        if (quantity < 1 || data['active'] != true) throw StateError('الكمية غير متاحة حاليًا');
-        transaction.update(productRef, {'stockQuantity': quantity - 1, 'updatedAt': FieldValue.serverTimestamp()});
+        if (sellerId != widget.businessId) {
+          throw StateError('بيانات البائع غير متطابقة.');
+        }
+        if (quantity < 1 || data['active'] != true) {
+          throw StateError('الكمية غير متاحة حاليًا');
+        }
+
+        final productName = (data['name'] ?? 'طلب طباعة').toString();
+        final price = data['price']?.toString() ?? '0';
+        final imagePaths = imageUrl.isNotEmpty ? <String>[imageUrl] : <String>[];
+        final chatItem = <String, dynamic>{
+          'source': 'product',
+          'productId': orderRef.id,
+          'itemId': orderRef.id,
+          'itemName': productName,
+          'price': price,
+          'imagePaths': imagePaths,
+          'reservedBy': user.uid,
+          'status': 'Reserved',
+        };
+
+        if (chatSnapshot.exists) {
+          final chat = chatSnapshot.data()!;
+          final participants = chat['participants'];
+          if (chat['chatType'] != 'printing' ||
+              chat['buyerId'] != user.uid ||
+              chat['sellerId'] != sellerId ||
+              participants is! List ||
+              !participants.contains(user.uid) ||
+              !participants.contains(sellerId)) {
+            throw StateError('بيانات محادثة الطباعة غير متطابقة.');
+          }
+          final rawItems = chat['offerItems'];
+          final items = rawItems is List
+              ? rawItems
+                  .whereType<Map>()
+                  .map((item) => Map<String, dynamic>.from(item))
+                  .toList()
+              : <Map<String, dynamic>>[];
+          items.add(chatItem);
+
+          transaction.update(chatRef, {
+            'offerItems': items,
+            'settlementBuyerConfirmed': false,
+            'settlementSellerConfirmed': false,
+            'updatedAt': FieldValue.serverTimestamp(),
+            'lastMessage': 'تم حجز $productName',
+          });
+        } else {
+          transaction.set(chatRef, {
+            'productId': 'combined_$chatId',
+            'productName': 'حساب مشتريات الطباعة',
+            'chatType': 'printing',
+            'buyerId': user.uid,
+            'sellerId': sellerId,
+            'participants': [user.uid, sellerId],
+            'offerItems': [chatItem],
+            'settlementBuyerConfirmed': false,
+            'settlementSellerConfirmed': false,
+            'settledOrders': <Map<String, dynamic>>[],
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+            'lastMessage': 'تم حجز $productName',
+          });
+        }
+
+        transaction.update(productRef, {
+          'stockQuantity': quantity - 1,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
         transaction.set(orderRef, {
           'productType': 'print_order',
           'sourcePrintProductId': productId,
-          'sellerId': widget.businessId,
+          'sellerId': sellerId,
           'buyerId': user.uid,
           'reservedBy': user.uid,
-          'name': data['name'] ?? 'طلب طباعة',
-          'price': data['price']?.toString() ?? '0',
+          'name': productName,
+          'price': price,
           'category': data['category'] ?? '',
           'condition': 'New',
           'description': data['description'] ?? '',
           'paymentMethod': 'Cash on Delivery',
           'imagePath': imageUrl,
-          'imagePaths': imageUrl.isNotEmpty ? [imageUrl] : <String>[],
+          'imagePaths': imagePaths,
           'status': 'Reserved',
           'createdAt': FieldValue.serverTimestamp(),
         });
       });
-      orderSaved = true;
-      final orderData = await orderRef.get();
-      final data = orderData.data()!;
-      final chatId = await ChatService().addReservedProductToChat(
-        productId: orderRef.id,
-        productName: data['name'] as String,
-        price: data['price'] as String,
-        imagePaths: (data['imagePaths'] as List? ?? []).whereType<String>().toList(),
-        sellerId: widget.businessId,
-        chatType: 'printing',
-      );
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تسجيل الطلب وإضافته للمحادثات. بيانات الشحن متاحة من المحادثة.')));
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => ChatPage(chatId: chatId, productName: 'حساب المشتريات')));
-      }
-    } catch (error) {
-      if (mounted) {
-        final message = orderSaved
-            ? 'تم تسجيل الطلب وتحديث المخزون، لكن تعذر فتح المحادثة: $error'
-            : 'تعذر إتمام الطلب: $error';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
+          const SnackBar(
+            content: Text(
+              'تم تسجيل الطلب وإضافته للمحادثات. بيانات الشحن متاحة من المحادثة.',
+            ),
+          ),
+        );
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ChatPage(
+              chatId: chatId,
+              productName: 'حساب المشتريات',
+            ),
+          ),
+        );
+      }
+    } catch (error, stackTrace) {
+      debugPrint('FIGHUB PRINT ORDER TRANSACTION ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر إتمام الطلب: $error')),
         );
       }
     } finally {
