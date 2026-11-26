@@ -33,6 +33,73 @@ class ProductService {
     return document.id;
   }
 
+  Future<void> updateProductStatus({
+    required String productId,
+    required String status,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null || user.isAnonymous) {
+      throw StateError('A registered account is required.');
+    }
+    if (productId.isEmpty) throw ArgumentError('Product ID is required.');
+    if (!['Available', 'Sold'].contains(status)) {
+      throw StateError('A product can only be reserved by a buyer.');
+    }
+
+    final reference = _productsCollection.doc(productId);
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(reference);
+      if (!snapshot.exists) throw StateError('Product not found.');
+
+      final data = snapshot.data()!;
+      if (data['sellerId'] != user.uid) {
+        throw StateError('You can only update your own products.');
+      }
+      if (data['isDeleted'] == true) {
+        throw StateError('Deleted products cannot change status.');
+      }
+
+      final currentStatus = data['status'] as String? ?? 'Available';
+      if (currentStatus == status) return;
+
+      if (status == 'Sold') {
+        final updates = <String, dynamic>{
+          'status': 'Sold',
+          'soldAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        };
+        if (currentStatus == 'Reserved') {
+          final buyerId = data['reservedBy'] as String? ?? '';
+          if (buyerId.isEmpty || buyerId == user.uid) {
+            throw StateError('The reservation has no valid buyer.');
+          }
+          updates['soldTo'] = buyerId;
+        } else if (currentStatus == 'Available') {
+          updates['soldTo'] = null;
+        } else {
+          throw StateError('This product cannot be marked as sold.');
+        }
+        transaction.update(reference, updates);
+        return;
+      }
+
+      if (status == 'Available' &&
+          (currentStatus == 'Reserved' || currentStatus == 'Sold')) {
+        transaction.update(reference, {
+          'status': 'Available',
+          'reservedBy': null,
+          'reservedAt': null,
+          'soldTo': null,
+          'soldAt': null,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        return;
+      }
+
+      throw StateError('Unsupported product status transition.');
+    });
+  }
+
   Future<void> updateProduct(Product product) async {
     final user = _auth.currentUser;
 
