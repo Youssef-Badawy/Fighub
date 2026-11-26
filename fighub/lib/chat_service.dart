@@ -761,9 +761,11 @@ class ChatService {
       }
 
       final itemSource = selected['source'];
+      DocumentReference<Map<String, dynamic>>? offerRef;
       DocumentReference<Map<String, dynamic>>? offerItemRef;
       DocumentReference<Map<String, dynamic>>? reservationRef;
       DocumentReference<Map<String, dynamic>>? productRef;
+      DocumentSnapshot<Map<String, dynamic>>? offerSnapshot;
       late DocumentSnapshot<Map<String, dynamic>> sourceSnapshot;
       DocumentSnapshot<Map<String, dynamic>>? reservationSnapshot;
 
@@ -772,12 +774,10 @@ class ChatService {
         if (offerId.isEmpty) {
           throw StateError('Offer item information is incomplete.');
         }
-        offerItemRef = _firestore
-            .collection('offers')
-            .doc(offerId)
-            .collection('items')
-            .doc(itemId);
+        offerRef = _firestore.collection('offers').doc(offerId);
+        offerItemRef = offerRef.collection('items').doc(itemId);
         reservationRef = offerItemRef.collection('reservations').doc(buyerId);
+        offerSnapshot = await transaction.get(offerRef);
         sourceSnapshot = await transaction.get(offerItemRef);
         reservationSnapshot = await transaction.get(reservationRef);
       } else if (itemSource == 'product') {
@@ -802,12 +802,19 @@ class ChatService {
       }
 
       if (itemSource == 'offer') {
+        if (offerSnapshot == null ||
+            !offerSnapshot.exists ||
+            offerSnapshot.data()?['sellerId'] != sellerId) {
+          throw StateError('This offer does not belong to the chat seller.');
+        }
         final reservation = reservationSnapshot?.data();
         if (reservation == null ||
             reservation['userId'] != buyerId ||
             reservation['status'] != 'Active') {
           throw StateError('The offer reservation is no longer active.');
         }
+      } else if (sourceData['sellerId'] != sellerId) {
+        throw StateError('This product does not belong to the chat seller.');
       }
 
       selected['status'] = 'Settled';
@@ -896,6 +903,7 @@ class ChatService {
       }
 
       final sourceRefs = <DocumentReference<Map<String, dynamic>>>[];
+      final offerRefs = <DocumentReference<Map<String, dynamic>>?>[];
       final reservationRefs = <DocumentReference<Map<String, dynamic>>?>[];
       for (final item in activeItems) {
         final itemId = item['itemId'] as String? ?? '';
@@ -905,20 +913,26 @@ class ChatService {
         if (expectedSource == 'offer') {
           final offerId = item['offerId'] as String? ?? '';
           if (offerId.isEmpty) throw StateError('Offer item information is incomplete.');
-          final offerItemRef = _firestore.collection('offers').doc(offerId)
-              .collection('items').doc(itemId);
+          final offerRef = _firestore.collection('offers').doc(offerId);
+          final offerItemRef = offerRef.collection('items').doc(itemId);
+          offerRefs.add(offerRef);
           sourceRefs.add(offerItemRef);
           reservationRefs.add(offerItemRef.collection('reservations').doc(buyerId));
         } else {
           final productId = item['productId'] as String? ?? itemId;
+          offerRefs.add(null);
           sourceRefs.add(_firestore.collection('products').doc(productId));
           reservationRefs.add(null);
         }
       }
 
       // Complete every read before writing, as required by Firestore transactions.
+      final offerSnapshots = <DocumentSnapshot<Map<String, dynamic>>?>[];
       final sourceSnapshots = <DocumentSnapshot<Map<String, dynamic>>>[];
       final reservationSnapshots = <DocumentSnapshot<Map<String, dynamic>>?>[];
+      for (final offerRef in offerRefs) {
+        offerSnapshots.add(offerRef == null ? null : await transaction.get(offerRef));
+      }
       for (final sourceRef in sourceRefs) {
         sourceSnapshots.add(await transaction.get(sourceRef));
       }
@@ -937,6 +951,16 @@ class ChatService {
         if (sourceData['status'] != 'Reserved' ||
             (sourceData['reservedBy'] ?? sourceData['buyerId']) != buyerId) {
           throw StateError('A reservation is no longer active.');
+        }
+        if (expectedSource == 'offer') {
+          final offerSnapshot = offerSnapshots[i];
+          if (offerSnapshot == null ||
+              !offerSnapshot.exists ||
+              offerSnapshot.data()?['sellerId'] != sellerId) {
+            throw StateError('An offer does not belong to the chat seller.');
+          }
+        } else if (sourceData['sellerId'] != sellerId) {
+          throw StateError('A product does not belong to the chat seller.');
         }
         final reservationSnapshot = reservationSnapshots[i];
         if (reservationSnapshot != null) {
