@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -59,6 +60,20 @@ class CloudinaryService {
         .toList();
   }
 
+  /// Deletes files uploaded by this account that never became attached to a record.
+  /// The Worker independently verifies the account-specific Cloudinary folder.
+  Future<void> deleteUnattachedAssets(List<String> assetUrls) async {
+    final urls = assetUrls
+        .where((url) => url.startsWith('https://res.cloudinary.com/'))
+        .toSet()
+        .toList();
+    if (urls.isEmpty) return;
+    await _deleteAssets({
+      'action': 'cleanupUnattachedCloudinaryAssets',
+      'assetUrls': urls,
+    });
+  }
+
   Future<void> _deleteAssets(Map<String, dynamic> body) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) throw StateError('User must be signed in.');
@@ -105,15 +120,17 @@ class CloudinaryService {
   }
 
   Future<Map<String, dynamic>> _requestUploadSignature(
-    String resourceType,
-  ) async {
+    String resourceType, {
+    String purpose = 'standard',
+  }) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || user.isAnonymous) {
       throw StateError('يجب تسجيل الدخول بحساب مسجل لرفع الملفات.');
     }
 
-    // Refresh Firebase credentials so an expired cached token cannot block signing.
-    final idToken = await user.getIdToken(true);
+    // FirebaseAuth refreshes expired tokens automatically. Avoid forcing a
+    // network refresh for every media file, especially in multi-image uploads.
+    final idToken = await user.getIdToken();
     if (idToken == null || idToken.isEmpty) {
       throw StateError('تعذر التحقق من الحساب قبل رفع الملف.');
     }
@@ -130,6 +147,7 @@ class CloudinaryService {
             body: jsonEncode({
               'action': 'signCloudinaryUpload',
               'resourceType': resourceType,
+              'purpose': purpose,
             }),
           )
           .timeout(const Duration(seconds: 20));
@@ -165,6 +183,7 @@ class CloudinaryService {
     required String resourceType,
     required String mediaLabel,
     required int maxBytes,
+    String purpose = 'standard',
   }) async {
     final file = File(path);
     if (!await file.exists()) {
@@ -180,7 +199,10 @@ class CloudinaryService {
       throw StateError('حجم $mediaLabel أكبر من الحد المسموح ($maxMb MB).');
     }
 
-    final signatureData = await _requestUploadSignature(resourceType);
+    final signatureData = await _requestUploadSignature(
+      resourceType,
+      purpose: purpose,
+    );
     final cloudName = signatureData['cloudName'] as String? ?? _cloudName;
     final apiKey = signatureData['apiKey'] as String? ?? '';
     final timestamp = signatureData['timestamp']?.toString() ?? '';
@@ -240,59 +262,17 @@ class CloudinaryService {
     }
   }
 
-  /// Uploads 3D Printing catalog artwork through the dedicated unsigned preset.
-  /// Other app media continues using the authenticated signed Worker flow.
-  Future<String> uploadCatalogImage(XFile imageFile) async {
-    final file = File(imageFile.path);
-    if (!await file.exists()) {
-      throw StateError('ملف صورة الكتالوج غير موجود على الجهاز.');
-    }
-
-    final fileLength = await file.length();
-    if (fileLength <= 0) {
-      throw StateError('ملف صورة الكتالوج فارغ.');
-    }
-    if (fileLength > _maxImageBytes) {
-      throw StateError('حجم صورة الكتالوج أكبر من الحد المسموح (25 MB).');
-    }
-
-    final uri = Uri.parse(
-      'https://api.cloudinary.com/v1_1/$_cloudName/image/upload',
+  /// Catalog artwork uses the authenticated Worker signature and is restricted
+  /// server-side to users whose Firestore role is admin.
+  Future<String> uploadCatalogImage(XFile imageFile) {
+    return _uploadFile(
+      path: imageFile.path,
+      filename: imageFile.name,
+      resourceType: 'image',
+      mediaLabel: 'صورة الكتالوج',
+      maxBytes: _maxImageBytes,
+      purpose: 'catalog',
     );
-    final request = http.MultipartRequest('POST', uri)
-      ..fields['upload_preset'] = 'fighub_catalog'
-      ..files.add(
-        await http.MultipartFile.fromPath(
-          'file',
-          imageFile.path,
-          filename: imageFile.name,
-        ),
-      );
-
-    try {
-      final streamed = await request.send().timeout(_uploadTimeout);
-      final body = await streamed.stream
-          .bytesToString()
-          .timeout(const Duration(seconds: 30));
-      if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
-        throw StateError(
-          'فشل رفع صورة الكتالوج (' + streamed.statusCode.toString() + '): ' + _errorMessage(body),
-        );
-      }
-      final decoded = jsonDecode(body);
-      if (decoded is! Map<String, dynamic>) {
-        throw StateError('استجابة Cloudinary لصورة الكتالوج غير صالحة.');
-      }
-      final secureUrl = decoded['secure_url'] as String?;
-      if (secureUrl == null || secureUrl.isEmpty) {
-        throw StateError('Cloudinary لم يُرجع رابط الصورة الآمن.');
-      }
-      return secureUrl;
-    } on TimeoutException {
-      throw StateError('انتهت مهلة رفع صورة الكتالوج. حاول مرة أخرى.');
-    } on SocketException {
-      throw StateError('تعذر الاتصال بخدمة رفع صور الكتالوج.');
-    }
   }
   Future<String> uploadImage(XFile imageFile) {
     return _uploadFile(
@@ -302,6 +282,45 @@ class CloudinaryService {
       mediaLabel: 'الصورة',
       maxBytes: _maxImageBytes,
     );
+  }
+
+  /// Upload multiple photos in small parallel batches without flooding the
+  /// device connection or Cloudinary.
+  Future<List<String>> uploadImages(
+    List<XFile> imageFiles, {
+    int concurrency = 3,
+  }) async {
+    if (imageFiles.isEmpty) return const <String>[];
+    final safeConcurrency = concurrency.clamp(1, 4).toInt();
+    final uploadedUrls = <String>[];
+    try {
+      for (var offset = 0; offset < imageFiles.length; offset += safeConcurrency) {
+        final batch = imageFiles.skip(offset).take(safeConcurrency);
+        final results = await Future.wait(
+          batch.map((file) async {
+            try {
+              return _UploadResult(url: await uploadImage(file));
+            } catch (error) {
+              return _UploadResult(error: error);
+            }
+          }),
+        );
+        for (final result in results) {
+          if (result.url != null) uploadedUrls.add(result.url!);
+        }
+        final failed = results.where((result) => result.error != null);
+        if (failed.isNotEmpty) throw StateError(failed.first.error.toString());
+      }
+      return uploadedUrls;
+    } catch (_) {
+      try {
+        await deleteUnattachedAssets(uploadedUrls);
+      } catch (cleanupError, stackTrace) {
+        debugPrint('FIGHUB PARTIAL UPLOAD CLEANUP ERROR: $cleanupError');
+        debugPrintStack(stackTrace: stackTrace);
+      }
+      rethrow;
+    }
   }
 
   Future<String> uploadAudio(String audioPath) {
@@ -323,4 +342,13 @@ class CloudinaryService {
       maxBytes: _maxVideoBytes,
     );
   }
+
+}
+
+
+class _UploadResult {
+  final String? url;
+  final Object? error;
+
+  const _UploadResult({this.url, this.error});
 }

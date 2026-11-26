@@ -50,7 +50,11 @@ class OfferItem {
 
     final rawImages = data['imagePaths'];
     final images = rawImages is List
-        ? rawImages.whereType<String>().toList()
+        ? rawImages
+            .whereType<String>()
+            .map((image) => image.trim())
+            .where((image) => image.isNotEmpty)
+            .toList()
         : <String>[];
 
     final timestamp = data['reservedAt'];

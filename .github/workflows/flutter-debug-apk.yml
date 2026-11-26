@@ -20,6 +20,9 @@ concurrency:
 
 jobs:
   build-debug-apk:
+    # Keep automatic PR/push builds disabled for the audit branch. Allow an
+    # explicit manual dispatch once code-level validation is complete.
+    if: github.event_name == 'workflow_dispatch' || (github.head_ref != 'fix/prebuild-stability-audit' && github.ref_name != 'fix/prebuild-stability-audit')
     runs-on: ubuntu-latest
     defaults:
       run:

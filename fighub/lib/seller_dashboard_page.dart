@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'app_localizations.dart';
 import 'product_model.dart';
 import 'product_service.dart';
+import 'chat_service.dart';
 
 class SellerDashboardPage extends StatefulWidget {
   final List<Product> products;
@@ -99,22 +100,23 @@ class _SellerDashboardPageState
     });
 
     try {
-      final updatedProduct = Product(
-        id: product.id,
-        sellerId: product.sellerId,
-        name: product.name,
-        price: product.price,
-        category: product.category,
-        condition: product.condition,
-        description: product.description,
-        paymentMethod: product.paymentMethod,
-        imagePath: product.imagePath,
-        status: status,
-      );
-
-      await _productService.updateProduct(
-        updatedProduct,
-      );
+      if (status == 'Sold' && previousStatus == 'Reserved') {
+        final buyerId = product.reservedBy;
+        if (buyerId == null || buyerId.isEmpty) {
+          throw StateError('الحجز لا يحتوي على مشتري صالح.');
+        }
+        await ChatService().markOfferItemSold(
+          chatId: 'products_${buyerId}_${product.sellerId}',
+          itemId: product.id!,
+          source: 'product',
+          productId: product.id!,
+        );
+      } else {
+        await _productService.updateProductStatus(
+          productId: product.id!,
+          status: status,
+        );
+      }
 
       if (!mounted) {
         return;
@@ -204,7 +206,7 @@ class _SellerDashboardPageState
     }
 
     try {
-      await _productService.deleteProduct(
+      final assetsCleaned = await _productService.deleteProduct(
         product.id!,
       );
 
@@ -215,9 +217,13 @@ class _SellerDashboardPageState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            localization.isArabic
-                ? 'تم حذف المنتج'
-                : 'Product deleted.',
+            assetsCleaned
+                ? (localization.isArabic
+                    ? 'تم حذف المنتج وصوره بنجاح'
+                    : 'Product and images deleted.')
+                : (localization.isArabic
+                    ? 'تم إخفاء المنتج، وسيُعاد تنظيف صوره عند فتح التطبيق مرة أخرى مع اتصال بالإنترنت'
+                    : 'Product hidden. Image cleanup will retry the next time you open the app while online.'),
           ),
         ),
       );
@@ -644,9 +650,14 @@ class _SellerDashboardPageState
                                   ),
                                 ),
                                 IconButton(
-                                  onPressed: () =>
-                                      _deleteProduct(product),
-                                  tooltip: deleteTooltip,
+                                  onPressed: product.status == 'Available'
+                                      ? () => _deleteProduct(product)
+                                      : null,
+                                  tooltip: product.status == 'Available'
+                                      ? deleteTooltip
+                                      : (localization.isArabic
+                                          ? 'لا يمكن حذف منتج محجوز أو مباع'
+                                          : 'Reserved or sold products cannot be deleted'),
                                   icon: const Icon(
                                     Icons.delete_outline,
                                   ),
@@ -668,11 +679,12 @@ class _SellerDashboardPageState
                                   selected:
                                       product.status ==
                                           'Available',
-                                  onSelected: (_) =>
-                                      _changeStatus(
-                                    product,
-                                    'Available',
-                                  ),
+                                  onSelected: product.status == 'Reserved'
+                                      ? null
+                                      : (_) => _changeStatus(
+                                          product,
+                                          'Available',
+                                        ),
                                 ),
                                 ChoiceChip(
                                   label: Text(
@@ -684,11 +696,7 @@ class _SellerDashboardPageState
                                   selected:
                                       product.status ==
                                           'Reserved',
-                                  onSelected: (_) =>
-                                      _changeStatus(
-                                    product,
-                                    'Reserved',
-                                  ),
+                                  onSelected: null,
                                 ),
                                 ChoiceChip(
                                   label: Text(

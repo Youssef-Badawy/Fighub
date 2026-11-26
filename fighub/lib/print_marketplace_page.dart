@@ -8,6 +8,7 @@ import 'fighub_image_picker.dart';
 import 'chat_service.dart';
 import 'chat_page.dart';
 import 'cloudinary_service.dart';
+import 'notification_service.dart';
 
 const _printSizePrices = <String, Map<String, int>>{
   'برواز': {'30×20 سم': 200, '40×30 سم': 300, '50×40 سم': 450, '60×50 سم': 500, '70×50 سم': 580},
@@ -25,26 +26,48 @@ int? _defaultPrintPrice(String category) {
 }
 
 const printCategories = <Map<String, String>>[
-  {'name': 'تيشيرتات', 'emoji': '👕'},
-  {'name': 'مجات', 'emoji': '☕'},
-  {'name': 'هدايا', 'emoji': '🎁'},
-  {'name': 'مجسمات', 'emoji': '🧸'},
-  {'name': 'ميداليات', 'emoji': '🏅'},
-  {'name': 'استيكرات', 'emoji': '🏷️'},
-  {'name': 'خشبيات', 'emoji': '🪵'},
-  {'name': 'سلاسل', 'emoji': '📿'},
-  {'name': 'حظاظات', 'emoji': '🪢'},
-  {'name': 'شنط', 'emoji': '👜'},
-  {'name': 'طابلوه', 'emoji': '🖼️'},
-  {'name': 'صور', 'emoji': '📸'},
-  {'name': 'كابات', 'emoji': '🧢'},
-  {'name': 'برواز', 'emoji': '🖼️'},
-  {'name': 'كوميكس', 'emoji': '📚'},
-  {'name': 'اعلام', 'emoji': '🚩'},
-  {'name': 'نوت بوك', 'emoji': '📓'},
-  {'name': 'اقلام', 'emoji': '🖊️'},
-  {'name': 'محفظة', 'emoji': '👛'},
+  {'name': 'تيشيرتات'},
+  {'name': 'مجات'},
+  {'name': 'هدايا'},
+  {'name': 'مجسمات'},
+  {'name': 'ميداليات'},
+  {'name': 'استيكرات'},
+  {'name': 'خشبيات'},
+  {'name': 'سلاسل'},
+  {'name': 'حظاظات'},
+  {'name': 'شنط'},
+  {'name': 'طابلوه'},
+  {'name': 'صور'},
+  {'name': 'كابات'},
+  {'name': 'برواز'},
+  {'name': 'كوميكس'},
+  {'name': 'اعلام'},
+  {'name': 'نوت بوك'},
+  {'name': 'اقلام'},
+  {'name': 'محفظة'},
 ];
+
+const _printCategoryIcons = <String, IconData>{
+  'تيشيرتات': Icons.checkroom,
+  'مجات': Icons.coffee,
+  'هدايا': Icons.card_giftcard,
+  'مجسمات': Icons.toys,
+  'ميداليات': Icons.military_tech,
+  'استيكرات': Icons.sticky_note_2,
+  'خشبيات': Icons.chair,
+  'سلاسل': Icons.link,
+  'حظاظات': Icons.favorite,
+  'شنط': Icons.shopping_bag,
+  'طابلوه': Icons.dashboard,
+  'صور': Icons.image,
+  'كابات': Icons.sports_baseball,
+  'برواز': Icons.crop_portrait,
+  'كوميكس': Icons.menu_book,
+  'اعلام': Icons.flag,
+  'نوت بوك': Icons.book,
+  'اقلام': Icons.edit,
+  'محفظة': Icons.account_balance_wallet,
+};
 
 class PrintMarketplacePage extends StatelessWidget {
   const PrintMarketplacePage({super.key});
@@ -193,8 +216,16 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
           'phone': '',
           'description': 'الكتالوج الرسمي لتصميمات FigHub',
           'active': true,
+          'officialCatalog': true,
           'ownerId': user.uid,
           'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } else if (businessSnapshot.data()?['officialCatalog'] != true) {
+        // Mark legacy official-catalog documents so customers can discover
+        // them without reading the owner's private users/{uid} document.
+        await businessRef.update({
+          'officialCatalog': true,
           'updatedAt': FieldValue.serverTimestamp(),
         });
       }
@@ -217,6 +248,51 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
     }
   }
 
+  Future<void> _openOfficialCatalog() async {
+    try {
+      final result = await _db
+          .collection('print_businesses')
+          .where('officialCatalog', isEqualTo: true)
+          .get();
+
+      // The officialCatalog marker is writable only by an admin according
+      // to Firestore rules. Do not read users/{uid}: those documents are private.
+      DocumentSnapshot<Map<String, dynamic>>? officialCatalog;
+      for (final candidate in result.docs) {
+        if (candidate.data()['officialCatalog'] == true &&
+            candidate.data()['active'] == true) {
+          officialCatalog = candidate;
+          break;
+        }
+      }
+
+      if (officialCatalog == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('الكتالوج الرسمي قيد التجهيز حاليًا')),
+          );
+        }
+        return;
+      }
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PrintBusinessPage(
+            businessId: officialCatalog!.id,
+            isAdminCatalog: true,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر فتح الكتالوج الرسمي: $error')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -228,6 +304,11 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
           onPressed: () => setState(() => _selectedCategory = null),
         ),
         actions: [
+          IconButton(
+            tooltip: 'كتالوج FigHub الرسمي',
+            icon: const Icon(Icons.auto_awesome),
+            onPressed: _openOfficialCatalog,
+          ),
           if (user != null && !user.isAnonymous)
             StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
               stream: _db.collection('print_businesses').doc(user.uid).snapshots(),
@@ -301,9 +382,10 @@ class _PrintMarketplaceHomeState extends State<_PrintMarketplaceHome> {
                     ),
                   ],
                 ),
-                child: Text(
-                  item['emoji']!,
-                  style: const TextStyle(fontSize: 43, height: 1.15),
+                child: Icon(
+                  _printCategoryIcons[item['name']] ?? Icons.category_outlined,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
               ),
               const SizedBox(height: 10),
@@ -456,12 +538,17 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
     );
     if (picked == null || !mounted) return;
     setState(() => _busy = true);
+    String? uploadedImageUrl;
+    final cloudinary = CloudinaryService();
     try {
       final selectedImage = picked['image'] as XFile?;
       if (selectedImage == null) {
         throw StateError('لا يمكن نشر منتج بدون صورة.');
       }
-      final imageUrl = await CloudinaryService().uploadCatalogImage(selectedImage);
+      final imageUrl = widget.isAdminCatalog
+          ? await cloudinary.uploadCatalogImage(selectedImage)
+          : await cloudinary.uploadImage(selectedImage);
+      uploadedImageUrl = imageUrl;
       await _db.collection('print_products').add({
         'sellerId': widget.businessId,
         if (widget.isAdminCatalog) 'catalogOwnerId': widget.businessId,
@@ -476,7 +563,16 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      uploadedImageUrl = null;
     } catch (error) {
+      if (uploadedImageUrl != null) {
+        try {
+          await cloudinary.deleteUnattachedAssets([uploadedImageUrl]);
+        } catch (cleanupError, stackTrace) {
+          debugPrint('FIGHUB PRINT PRODUCT UPLOAD ROLLBACK ERROR: $cleanupError');
+          debugPrintStack(stackTrace: stackTrace);
+        }
+      }
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر إضافة المنتج: $error')));
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -606,9 +702,11 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
     try {
       final ownerId = FirebaseAuth.instance.currentUser!.uid;
       for (var index = 0; index < images.length; index++) {
-        final imageUrl = await CloudinaryService().uploadCatalogImage(images[index]);
+        final cloudinary = CloudinaryService();
+        final imageUrl = await cloudinary.uploadCatalogImage(images[index]);
         final productRef = _db.collection('print_products').doc();
-        await productRef.set({
+        try {
+          await productRef.set({
           'sellerId': ownerId,
           'catalogOwnerId': ownerId,
           'catalogManaged': true,
@@ -623,8 +721,17 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
           'imageUrl': imageUrl,
           'active': true,
           'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        } catch (_) {
+          try {
+            await cloudinary.deleteUnattachedAssets([imageUrl]);
+          } catch (cleanupError, stackTrace) {
+            debugPrint('FIGHUB BULK CATALOG UPLOAD ROLLBACK ERROR: $cleanupError');
+            debugPrintStack(stackTrace: stackTrace);
+          }
+          rethrow;
+        }
         imported++;
         if (mounted) setState(() {});
       }
@@ -768,13 +875,10 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('سجّل حسابك أولًا لإرسال طلب تصميم')));
       return;
     }
-    final userDocument = await _db.collection('users').doc(user.uid).get();
-    if (!userDocument.exists || userDocument.data()?['role'] != 'admin') {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('طلب التصميم متاح لحساب الأدمن فقط')),
-        );
-      }
+    if (user.uid == widget.businessId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا يمكنك إرسال طلب تصميم من حساب الكتالوج نفسه')),
+      );
       return;
     }
     final notes = TextEditingController();
@@ -788,18 +892,12 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
           DropdownButtonFormField<String>(value: category, decoration: const InputDecoration(labelText: 'عايز التصميم على إيه؟'), items: printCategories.map((c) => DropdownMenuItem(value: c['name'] as String, child: Text(c['name'] as String))).toList(), onChanged: (v) => refresh(() => category = v ?? category)),
           TextField(controller: notes, maxLines: 3, decoration: const InputDecoration(labelText: 'تفاصيل أو ملاحظات عن التصميم')),
           const SizedBox(height: 10),
-          OutlinedButton.icon(onPressed: () async { final file = await FigHubImagePicker.pickAndCrop(context, imageQuality: 85, maxWidth: 2500, maxHeight: 2500); if (file != null) refresh(() => image = file); }, icon: const Icon(Icons.upload_file), label: Text(image == null ? 'ارفع صورة التصميم' : 'تم اختيار الصورة')),
+          OutlinedButton.icon(onPressed: () async { final file = await FigHubImagePicker.pickAndCrop(context, imageQuality: 85, maxWidth: 2500, maxHeight: 2500); if (file != null) refresh(() => image = file); }, icon: const Icon(Icons.upload_file), label: Text(image == null ? 'إضافة صورة مرجعية (اختياري)' : 'تم اختيار الصورة')),
         ])),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
           FilledButton(
             onPressed: () {
-              if (image == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('ارفع صورة مرجعية للتصميم أولًا')),
-                );
-                return;
-              }
               Navigator.pop(dialogContext, {
                 'category': category,
                 'notes': notes.text.trim(),
@@ -816,10 +914,14 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
       return;
     }
     setState(() => _busy = true);
+    String? uploadedImageUrl;
     try {
       String imageUrl = '';
       final selectedImage = result['image'] as XFile?;
-      if (selectedImage != null) imageUrl = await CloudinaryService().uploadImage(selectedImage);
+      if (selectedImage != null) {
+        imageUrl = await CloudinaryService().uploadImage(selectedImage);
+        uploadedImageUrl = imageUrl;
+      }
       final request = await _db.collection('print_design_requests').add({
         'companyId': widget.businessId,
         'companyName': business['name'] ?? '',
@@ -831,6 +933,8 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
         'status': 'new',
         'createdAt': FieldValue.serverTimestamp(),
       });
+      // The request now owns this image; don't remove it if chat delivery fails.
+      uploadedImageUrl = null;
       // Also deliver the request in the existing buyer/company conversation,
       // which triggers the app's normal chat notification.
       try {
@@ -861,10 +965,18 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم إرسال طلب التصميم للشركة')),
+          const SnackBar(content: Text('تم إرسال طلب التصميم لحساب FigHub')),
         );
       }
     } catch (error) {
+      if (uploadedImageUrl != null) {
+        try {
+          await CloudinaryService().deleteUnattachedAssets([uploadedImageUrl]);
+        } catch (cleanupError, stackTrace) {
+          debugPrint('FIGHUB DESIGN REQUEST UPLOAD ROLLBACK ERROR: $cleanupError');
+          debugPrintStack(stackTrace: stackTrace);
+        }
+      }
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر إرسال الطلب: $error')));
     } finally {
       notes.dispose();
@@ -875,62 +987,162 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
   Future<void> _buyProduct(String productId) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || user.isAnonymous) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('سجّل حسابك أولًا لإتمام الطلب')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('سجّل حسابك أولًا لإتمام الطلب')),
+      );
       return;
     }
     if (user.uid == widget.businessId || _busy) return;
+
     setState(() => _busy = true);
     final orderRef = _db.collection('products').doc();
     final productRef = _db.collection('print_products').doc(productId);
-    var orderSaved = false;
+    final chatId = 'printing_${user.uid}_${widget.businessId}';
+    final chatRef = _db.collection('chats').doc(chatId);
+    late String reservedProductName;
+
     try {
       await _db.runTransaction((transaction) async {
-        final snapshot = await transaction.get(productRef);
-        if (!snapshot.exists) throw StateError('المنتج غير موجود');
-        final data = snapshot.data()!;
+        // Read every document before writing so stock, order, and chat are
+        // committed atomically or not committed at all.
+        final productSnapshot = await transaction.get(productRef);
+        final chatSnapshot = await transaction.get(chatRef);
+
+        if (!productSnapshot.exists) throw StateError('المنتج غير موجود');
+        final data = productSnapshot.data()!;
+        final sellerId = data['sellerId'] as String? ?? '';
         final quantity = (data['stockQuantity'] as num?)?.toInt() ?? 0;
-        if (quantity < 1 || data['active'] != true) throw StateError('الكمية غير متاحة حاليًا');
-        transaction.update(productRef, {'stockQuantity': quantity - 1, 'updatedAt': FieldValue.serverTimestamp()});
+        final imageUrl = (data['imageUrl'] as String? ?? '').trim();
+        if (sellerId != widget.businessId) {
+          throw StateError('بيانات البائع غير متطابقة.');
+        }
+        if (quantity < 1 || data['active'] != true) {
+          throw StateError('الكمية غير متاحة حاليًا');
+        }
+
+        final productName = (data['name'] ?? 'طلب طباعة').toString();
+        reservedProductName = productName;
+        final price = data['price']?.toString() ?? '0';
+        final imagePaths = imageUrl.isNotEmpty ? <String>[imageUrl] : <String>[];
+        final chatItem = <String, dynamic>{
+          'source': 'product',
+          'productId': orderRef.id,
+          'itemId': orderRef.id,
+          'itemName': productName,
+          'price': price,
+          'imagePaths': imagePaths,
+          'reservedBy': user.uid,
+          'status': 'Reserved',
+        };
+
+        if (chatSnapshot.exists) {
+          final chat = chatSnapshot.data()!;
+          final participants = chat['participants'];
+          if (chat['chatType'] != 'printing' ||
+              chat['buyerId'] != user.uid ||
+              chat['sellerId'] != sellerId ||
+              participants is! List ||
+              !participants.contains(user.uid) ||
+              !participants.contains(sellerId)) {
+            throw StateError('بيانات محادثة الطباعة غير متطابقة.');
+          }
+          final rawItems = chat['offerItems'];
+          final items = rawItems is List
+              ? rawItems
+                  .whereType<Map>()
+                  .map((item) => Map<String, dynamic>.from(item))
+                  .toList()
+              : <Map<String, dynamic>>[];
+          items.add(chatItem);
+
+          transaction.update(chatRef, {
+            'offerItems': items,
+            'settlementBuyerConfirmed': false,
+            'settlementSellerConfirmed': false,
+            'updatedAt': FieldValue.serverTimestamp(),
+            'lastMessage': 'تم حجز $productName',
+          });
+        } else {
+          transaction.set(chatRef, {
+            'productId': 'combined_$chatId',
+            'productName': 'حساب مشتريات الطباعة',
+            'chatType': 'printing',
+            'buyerId': user.uid,
+            'sellerId': sellerId,
+            'participants': [user.uid, sellerId],
+            'offerItems': [chatItem],
+            'settlementBuyerConfirmed': false,
+            'settlementSellerConfirmed': false,
+            'settledOrders': <Map<String, dynamic>>[],
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+            'lastMessage': 'تم حجز $productName',
+          });
+        }
+
+        transaction.update(productRef, {
+          'stockQuantity': quantity - 1,
+          'lastOrderId': orderRef.id,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
         transaction.set(orderRef, {
           'productType': 'print_order',
           'sourcePrintProductId': productId,
-          'sellerId': widget.businessId,
+          'chatId': chatId,
+          'sellerId': sellerId,
           'buyerId': user.uid,
           'reservedBy': user.uid,
-          'name': data['name'] ?? 'طلب طباعة',
-          'price': data['price']?.toString() ?? '0',
+          'name': productName,
+          'price': price,
           'category': data['category'] ?? '',
           'condition': 'New',
           'description': data['description'] ?? '',
           'paymentMethod': 'Cash on Delivery',
-          'imagePath': data['imageUrl'] ?? '',
-          'imagePaths': (data['imageUrl'] as String?)?.isNotEmpty == true ? [data['imageUrl']] : <String>[],
+          'imagePath': imageUrl,
+          'imagePaths': imagePaths,
           'status': 'Reserved',
           'createdAt': FieldValue.serverTimestamp(),
         });
       });
-      orderSaved = true;
-      final orderData = await orderRef.get();
-      final data = orderData.data()!;
-      final chatId = await ChatService().addReservedProductToChat(
-        productId: orderRef.id,
-        productName: data['name'] as String,
-        price: data['price'] as String,
-        imagePaths: (data['imagePaths'] as List? ?? []).whereType<String>().toList(),
-        sellerId: widget.businessId,
-        chatType: 'printing',
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تسجيل الطلب وإضافته للمحادثات. بيانات الشحن متاحة من المحادثة.')));
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => ChatPage(chatId: chatId, productName: 'حساب المشتريات')));
+
+      // The order and chat are already committed. Notification delivery is
+      // best-effort and must never make a successful purchase look failed.
+      try {
+        await NotificationService().addNotification(
+          userId: widget.businessId,
+          title: 'طلب طباعة جديد',
+          message: 'تم حجز $reservedProductName من كتالوج الطباعة.',
+          productId: orderRef.id,
+          chatId: chatId,
+        );
+      } catch (notificationError, notificationStackTrace) {
+        debugPrint('FIGHUB PRINT ORDER NOTIFICATION ERROR: $notificationError');
+        debugPrintStack(stackTrace: notificationStackTrace);
       }
-    } catch (error) {
+
       if (mounted) {
-        final message = orderSaved
-            ? 'تم تسجيل الطلب وتحديث المخزون، لكن تعذر فتح المحادثة: $error'
-            : 'تعذر إتمام الطلب: $error';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
+          const SnackBar(
+            content: Text(
+              'تم تسجيل الطلب وإضافته للمحادثات. بيانات الشحن متاحة من المحادثة.',
+            ),
+          ),
+        );
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ChatPage(
+              chatId: chatId,
+              productName: 'حساب المشتريات',
+            ),
+          ),
+        );
+      }
+    } catch (error, stackTrace) {
+      debugPrint('FIGHUB PRINT ORDER TRANSACTION ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر إتمام الطلب: $error')),
         );
       }
     } finally {
@@ -998,34 +1210,30 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
                 ),
               ],
             ])),
-            StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                stream: FirebaseAuth.instance.currentUser == null
-                    ? const Stream<DocumentSnapshot<Map<String, dynamic>>>.empty()
-                    : _db.collection('users')
-                        .doc(FirebaseAuth.instance.currentUser!.uid)
-                        .snapshots(),
-                builder: (context, userSnapshot) {
-                  final currentUser = FirebaseAuth.instance.currentUser;
-                  final isAdmin = userSnapshot.data?.data()?['role'] == 'admin';
-                  if (widget.isAdminCatalog ||
-                      currentUser == null ||
-                      currentUser.isAnonymous ||
-                      !isAdmin) {
-                    return const SizedBox.shrink();
-                  }
-                  return Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: _busy ? null : () => _requestDesign(business),
-                        icon: const Icon(Icons.brush),
-                        label: const Text('اطلب تصميمك'),
-                      ),
+            Builder(
+              builder: (context) {
+                final currentUser = FirebaseAuth.instance.currentUser;
+                // The request button belongs on the official admin catalog,
+                // and is intended for registered customers, not the admin owner.
+                if (!widget.isAdminCatalog ||
+                    currentUser == null ||
+                    currentUser.isAnonymous ||
+                    currentUser.uid == widget.businessId) {
+                  return const SizedBox.shrink();
+                }
+                return Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _busy ? null : () => _requestDesign(business),
+                      icon: const Icon(Icons.brush),
+                      label: const Text('اطلب تصميمك من FigHub'),
                     ),
-                  );
-                },
-              ),
+                  ),
+                );
+              },
+            ),
             if (_busy) const LinearProgressIndicator(),
             Expanded(child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _db.collection('print_products').where('sellerId', isEqualTo: widget.businessId).where('active', isEqualTo: true).snapshots(),
@@ -1046,7 +1254,7 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
                     final doc = docs[index];
                     final data = doc.data();
                     final stock = (data['stockQuantity'] as num?)?.toInt() ?? 0;
-                    final imageUrl = data['imageUrl'] as String? ?? '';
+                    final imageUrl = (data['imageUrl'] as String? ?? '').trim();
                     final franchise = data['franchise']?.toString() ?? '';
                     final character = data['character']?.toString() ?? '';
                     final description = data['description']?.toString() ?? '';
@@ -1193,14 +1401,14 @@ class PrintRequestsPage extends StatelessWidget {
             itemBuilder: (context, index) {
               final doc = snapshot.data!.docs[index];
               final data = doc.data();
+              final imageUrl = (data['imageUrl'] as String? ?? '').trim();
               return Card(
                 margin: const EdgeInsets.all(10),
                 child: ListTile(
-                  leading: (data['imageUrl'] as String? ?? '').isEmpty
+                  leading: imageUrl.isEmpty
                       ? const Icon(Icons.design_services, size: 36)
                       : InkWell(
                           onTap: () {
-                            final imageUrl = data['imageUrl'] as String;
                             showDialog<void>(
                               context: context,
                               builder: (dialogContext) => Dialog(
@@ -1232,7 +1440,7 @@ class PrintRequestsPage extends StatelessWidget {
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(10),
                             child: Image.network(
-                              data['imageUrl'] as String,
+                              imageUrl,
                               width: 88,
                               height: 88,
                               cacheWidth: 264,

@@ -20,6 +20,9 @@ class ProductService {
     if (user == null) {
       throw StateError('User must be signed in.');
     }
+    if (user.isAnonymous) {
+      throw StateError('يجب تسجيل حساب مسجل قبل نشر المنتجات.');
+    }
 
     if (product.sellerId != user.uid) {
       throw StateError('You can only add products for your own account.');
@@ -28,6 +31,61 @@ class ProductService {
     final document = await _productsCollection.add(product.toFirestore());
 
     return document.id;
+  }
+
+  Future<void> updateProductStatus({
+    required String productId,
+    required String status,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null || user.isAnonymous) {
+      throw StateError('A registered account is required.');
+    }
+    if (productId.isEmpty) throw ArgumentError('Product ID is required.');
+    if (!['Available', 'Sold'].contains(status)) {
+      throw StateError('A product can only be reserved by a buyer.');
+    }
+
+    final reference = _productsCollection.doc(productId);
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(reference);
+      if (!snapshot.exists) throw StateError('Product not found.');
+
+      final data = snapshot.data()!;
+      if (data['sellerId'] != user.uid) {
+        throw StateError('You can only update your own products.');
+      }
+      if (data['isDeleted'] == true) {
+        throw StateError('Deleted products cannot change status.');
+      }
+
+      final currentStatus = data['status'] as String? ?? 'Available';
+      if (currentStatus == status) return;
+
+      if (status == 'Sold' && currentStatus == 'Available') {
+        transaction.update(reference, {
+          'status': 'Sold',
+          'soldTo': null,
+          'soldAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        return;
+      }
+
+      if (status == 'Available' && currentStatus == 'Sold') {
+        transaction.update(reference, {
+          'status': 'Available',
+          'reservedBy': null,
+          'reservedAt': null,
+          'soldTo': null,
+          'soldAt': null,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        return;
+      }
+
+      throw StateError('Unsupported product status transition.');
+    });
   }
 
   Future<void> updateProduct(Product product) async {
@@ -59,6 +117,10 @@ class ProductService {
 
     if (ownerId != user.uid) {
       throw StateError('You can only update your own products.');
+    }
+    final currentStatus = data?['status'] as String? ?? 'Available';
+    if (currentStatus != 'Available' || data?['isDeleted'] == true) {
+      throw StateError('Reserved or sold products cannot be edited.');
     }
 
     final updates = product.toFirestore()..remove('createdAt');
@@ -135,59 +197,93 @@ class ProductService {
     });
   }
 
-  Future<void> deleteProduct(String productId) async {
+  Future<bool> deleteProduct(String productId) async {
     final user = _auth.currentUser;
 
-    if (user == null) {
-      throw StateError('User must be signed in.');
+    if (user == null || user.isAnonymous) {
+      throw StateError('A registered account is required to delete a product.');
     }
 
     if (productId.isEmpty) {
       throw ArgumentError('Product ID is required to delete a product.');
     }
 
-    final document = await _productsCollection.doc(productId).get();
+    final reference = _productsCollection.doc(productId);
+    final document = await reference.get();
 
     if (!document.exists) {
-      throw StateError('Product not found.');
+      return true;
     }
 
-    final data = document.data();
-
-    final ownerId = data?['sellerId'] as String?;
-
-    if (ownerId != user.uid) {
+    final data = document.data() ?? <String, dynamic>{};
+    if (data['sellerId'] != user.uid) {
       throw StateError('You can only delete your own products.');
     }
 
-    final status = data?['status'] as String? ?? 'Available';
+    if (data['isDeleted'] == true) {
+      return _cleanupDeletedProductDocument(reference, data);
+    }
+
+    final status = data['status'] as String? ?? 'Available';
     if (status != 'Available') {
       throw StateError('Reserved or sold products cannot be deleted.');
     }
 
-    final rawImages = data?['imagePaths'];
+    // Soft-delete first. This hides the listing immediately while preserving
+    // the ownership record and image URLs if Cloudinary is temporarily down.
+    await reference.update({
+      'isDeleted': true,
+      'cleanupPending': true,
+      'deletedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    return _cleanupDeletedProductDocument(reference, data);
+  }
+
+  Future<bool> _cleanupDeletedProductDocument(
+    DocumentReference<Map<String, dynamic>> reference,
+    Map<String, dynamic> data,
+  ) async {
+    final rawImages = data['imagePaths'];
     final imageUrls = rawImages is List
         ? rawImages.whereType<String>().toList()
         : <String>[];
-    final legacyImage = data?['imagePath'] as String?;
+    final legacyImage = data['imagePath'] as String?;
     if (legacyImage != null && legacyImage.isNotEmpty) {
       imageUrls.add(legacyImage);
     }
 
-    // Try cleanup while the Firestore listing still exists because the Worker
-    // verifies ownership against that document. A stale Worker must not block
-    // the seller from removing the listing itself.
     try {
       await CloudinaryService().deleteProductAssets(
-        productId: productId,
+        productId: reference.id,
         assetUrls: imageUrls,
       );
+      await reference.delete();
+      return true;
     } catch (error, stackTrace) {
-      debugPrint('FIGHUB PRODUCT IMAGE CLEANUP PENDING ($productId): $error');
+      debugPrint(
+        'FIGHUB PRODUCT IMAGE CLEANUP PENDING (${reference.id}): $error',
+      );
       debugPrintStack(stackTrace: stackTrace);
+      return false;
     }
+  }
 
-    await _productsCollection.doc(productId).delete();
+  /// Retries Cloudinary cleanup for products hidden after a previous failed
+  /// deletion. The source document is retained until remote cleanup succeeds.
+  Future<void> cleanupPreviouslyDeletedProducts() async {
+    final user = _auth.currentUser;
+    if (user == null || user.isAnonymous) return;
+
+    final snapshot = await _productsCollection
+        .where('sellerId', isEqualTo: user.uid)
+        .where('isDeleted', isEqualTo: true)
+        .get();
+
+    for (final document in snapshot.docs) {
+      await _cleanupDeletedProductDocument(document.reference, document.data());
+    }
   }
 
   Future<Product?> getProduct(String productId) async {
@@ -197,7 +293,7 @@ class ProductService {
 
     final document = await _productsCollection.doc(productId).get();
 
-    if (!document.exists) {
+    if (!document.exists || document.data()?['isDeleted'] == true) {
       return null;
     }
 
@@ -211,7 +307,8 @@ class ProductService {
         .map((snapshot) {
           return snapshot.docs
               .where((document) =>
-                  document.data()['productType'] != 'print_order')
+                  document.data()['productType'] != 'print_order' &&
+                  document.data()['isDeleted'] != true)
               .map(Product.fromFirestore)
               .toList();
         });
@@ -252,7 +349,8 @@ class ProductService {
         .map((snapshot) {
           final products = snapshot.docs
               .where((document) =>
-                  document.data()['productType'] != 'print_order')
+                  document.data()['productType'] != 'print_order' &&
+                  document.data()['isDeleted'] != true)
               .map(Product.fromFirestore)
               .toList();
 

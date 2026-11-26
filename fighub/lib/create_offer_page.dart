@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'auth_guard.dart';
+
 import 'offer_model.dart';
 import 'offer_service.dart';
 import 'offer_manager_page.dart';
@@ -69,6 +71,7 @@ class _CreateOfferPageState extends State<CreateOfferPage> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+    if (!await requireRegisteredAccount(context)) return;
 
     setState(() {
       _isSaving = true;

@@ -70,8 +70,12 @@ class Product {
   factory Product.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> document,
   ) {
-    final data = document.data() ?? {};
+    return Product.fromMap(document.id, document.data() ?? {});
+  }
 
+  /// Parses product fields without requiring a live Firestore snapshot.
+  /// Kept separate so legacy image-field fallbacks can be tested directly.
+  factory Product.fromMap(String id, Map<String, dynamic> data) {
     final rawImagePaths = data['imagePaths'];
 
     List<String> parsedImagePaths = [];
@@ -79,6 +83,7 @@ class Product {
     if (rawImagePaths is List) {
       parsedImagePaths = rawImagePaths
           .whereType<String>()
+          .map((path) => path.trim())
           .where((path) => path.isNotEmpty)
           .toList();
     }
@@ -96,12 +101,12 @@ class Product {
     // Support old products that only have imagePath.
     if (parsedImagePaths.isEmpty &&
         oldImagePath != null &&
-        oldImagePath.isNotEmpty) {
-      parsedImagePaths = [oldImagePath];
+        oldImagePath.trim().isNotEmpty) {
+      parsedImagePaths = [oldImagePath.trim()];
     }
 
     return Product(
-      id: document.id,
+      id: id,
       sellerId: readString('sellerId', ''),
       name: readString('name', ''),
       price: readString('price', ''),
@@ -109,9 +114,10 @@ class Product {
       condition: readString('condition', 'Used'),
       description: readString('description', ''),
       paymentMethod: readString('paymentMethod', 'Cash on Delivery'),
-      imagePath:
-          oldImagePath ??
-          (parsedImagePaths.isNotEmpty ? parsedImagePaths.first : null),
+      // A legacy empty imagePath must not mask valid imagePaths data.
+      imagePath: oldImagePath != null && oldImagePath.trim().isNotEmpty
+          ? oldImagePath.trim()
+          : (parsedImagePaths.isNotEmpty ? parsedImagePaths.first : null),
       imagePaths: parsedImagePaths,
       status: readString('status', 'Available'),
       reservedBy: data['reservedBy'] is String ? data['reservedBy'] as String : null,

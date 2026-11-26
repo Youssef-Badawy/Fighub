@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'fighub_image_picker.dart';
 
 import 'app_localizations.dart';
+import 'auth_guard.dart';
 import 'cloudinary_service.dart';
 import 'product_model.dart';
 import 'product_service.dart';
@@ -105,6 +106,20 @@ class _AddProductPageState extends State<AddProductPage> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+    if (_imageFiles.isEmpty) {
+      final isArabic = AppLocalizations.of(context).isArabic;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isArabic
+                ? 'اختر صورة واحدة على الأقل للمنتج.'
+                : 'Choose at least one product image.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (!await requireRegisteredAccount(context) || !mounted) return;
 
     final user = FirebaseAuth.instance.currentUser;
 
@@ -125,15 +140,10 @@ class _AddProductPageState extends State<AddProductPage> {
       _isPublishing = true;
     });
 
+    var uploadedImageUrls = <String>[];
     try {
-      final List<String> imageUrls = [];
-
-      for (final imageFile in _imageFiles) {
-        final imageUrl =
-            await _cloudinaryService.uploadImage(imageFile);
-
-        imageUrls.add(imageUrl);
-      }
+      uploadedImageUrls = await _cloudinaryService.uploadImages(_imageFiles);
+      final imageUrls = uploadedImageUrls;
 
       final product = Product(
         name: _nameController.text.trim(),
@@ -156,6 +166,14 @@ class _AddProductPageState extends State<AddProductPage> {
 
       Navigator.pop(context, product);
     } catch (error) {
+      if (uploadedImageUrls.isNotEmpty) {
+        try {
+          await _cloudinaryService.deleteUnattachedAssets(uploadedImageUrls);
+        } catch (cleanupError, stackTrace) {
+          debugPrint('FIGHUB PRODUCT UPLOAD ROLLBACK ERROR: $cleanupError');
+          debugPrintStack(stackTrace: stackTrace);
+        }
+      }
       if (!mounted) {
         return;
       }

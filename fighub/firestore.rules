@@ -8,6 +8,7 @@ service cloud.firestore {
       allow read: if request.auth != null;
 
       allow create: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && (
                       request.resource.data.sellerId == request.auth.uid
                       || (
@@ -28,38 +29,106 @@ service cloud.firestore {
                            == get(
                              /databases/$(database)/documents/print_products/$(request.resource.data.sourcePrintProductId)
                            ).data.stockQuantity - 1
+                        && getAfter(
+                          /databases/$(database)/documents/print_products/$(request.resource.data.sourcePrintProductId)
+                        ).data.lastOrderId == productId
+                        && request.resource.data.chatId
+                           == 'printing_' + request.auth.uid + '_' + request.resource.data.sellerId
                       )
                     );
 
       allow update: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && (
                       (
                         resource.data.sellerId == request.auth.uid
-                        && request.resource.data.sellerId
-                           == resource.data.sellerId
-                        && !request.resource.data.diff(resource.data)
-                           .affectedKeys().hasAny(['createdAt'])
+                        && request.resource.data.sellerId == resource.data.sellerId
+                        && resource.data.get('status', 'Available') == 'Available'
+                        && request.resource.data.get('status', 'Available') == 'Available'
+                        && request.resource.data.get('reservedBy', null)
+                           == resource.data.get('reservedBy', null)
+                        && resource.data.get('isDeleted', false) != true
+                        && request.resource.data.diff(resource.data)
+                           .affectedKeys()
+                           .hasOnly([
+                             'name', 'price', 'category', 'condition',
+                             'description', 'paymentMethod', 'imagePath',
+                             'imagePaths', 'status', 'reservedBy', 'updatedAt',
+                             'isDeleted', 'cleanupPending', 'deletedAt'
+                           ])
+                        && (
+                          !request.resource.data.diff(resource.data)
+                             .affectedKeys().hasAny(['isDeleted'])
+                          || (
+                            request.resource.data.isDeleted == true
+                            && request.resource.data.cleanupPending == true
+                          )
+                        )
                       )
-                      ||
-                      (
+                      || (
+                        resource.data.sellerId == request.auth.uid
+                        && resource.data.status == 'Reserved'
+                        && request.resource.data.status == 'Sold'
+                        && request.resource.data.soldTo == resource.data.reservedBy
+                        && request.resource.data.soldAt == request.time
+                        && request.resource.data.diff(resource.data)
+                           .affectedKeys()
+                           .hasOnly(['status', 'soldTo', 'soldAt'])
+                      )
+                      || (
+                        resource.data.sellerId == request.auth.uid
+                        && (
+                          (
+                            resource.data.get('status', 'Available') == 'Available'
+                            && request.resource.data.status == 'Sold'
+                            && request.resource.data.soldTo == null
+                            && request.resource.data.soldAt == request.time
+                            && request.resource.data.diff(resource.data)
+                               .affectedKeys()
+                               .hasOnly(['status', 'soldTo', 'soldAt', 'updatedAt'])
+                          )
+                          || (
+                            resource.data.status == 'Reserved'
+                            && request.resource.data.status == 'Sold'
+                            && request.resource.data.soldTo == resource.data.reservedBy
+                            && request.resource.data.soldAt == request.time
+                            && request.resource.data.diff(resource.data)
+                               .affectedKeys()
+                               .hasOnly(['status', 'soldTo', 'soldAt', 'updatedAt'])
+                          )
+                          || (
+                            resource.data.status == 'Sold'
+                            && request.resource.data.status == 'Available'
+                            && request.resource.data.reservedBy == null
+                            && request.resource.data.reservedAt == null
+                            && request.resource.data.soldTo == null
+                            && request.resource.data.soldAt == null
+                            && request.resource.data.diff(resource.data)
+                               .affectedKeys()
+                               .hasOnly([
+                                 'status', 'reservedBy', 'reservedAt',
+                                 'soldTo', 'soldAt', 'updatedAt'
+                               ])
+                          )
+                        )
+                      )
+                      || (
                         request.auth.uid != resource.data.sellerId
                         && resource.data.status == 'Available'
+                        && resource.data.get('isDeleted', false) != true
                         && (
                           !resource.data.keys().hasAny(['reservedBy'])
                           || resource.data.reservedBy == null
                           || resource.data.reservedBy == ''
                         )
                         && request.resource.data.status == 'Reserved'
-                        && request.resource.data.reservedBy
-                           == request.auth.uid
-                        && request.resource.data.sellerId
-                           == resource.data.sellerId
+                        && request.resource.data.reservedBy == request.auth.uid
+                        && request.resource.data.sellerId == resource.data.sellerId
                         && request.resource.data.diff(resource.data)
                            .affectedKeys()
                            .hasOnly(['status', 'reservedBy', 'reservedAt'])
                       )
-                      ||
-                      (
+                      || (
                         request.auth.uid != resource.data.sellerId
                         && resource.data.status == 'Reserved'
                         && resource.data.reservedBy == request.auth.uid
@@ -72,6 +141,7 @@ service cloud.firestore {
                     );
 
       allow delete: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && resource.data.sellerId == request.auth.uid
                     && resource.data.get('status', 'Available') == 'Available';
     }
@@ -263,16 +333,19 @@ service cloud.firestore {
       allow read: if request.auth != null;
 
       allow create: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && request.resource.data.sellerId
                        == request.auth.uid;
 
       allow update: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && resource.data.sellerId
                        == request.auth.uid
                     && request.resource.data.sellerId
                        == resource.data.sellerId;
 
       allow delete: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && resource.data.sellerId
                        == request.auth.uid;
 
@@ -281,12 +354,14 @@ service cloud.firestore {
         allow read: if request.auth != null;
 
         allow create: if request.auth != null
+                      && request.auth.token.firebase.sign_in_provider != 'anonymous'
                       && get(
                         /databases/$(database)/documents/offers/$(offerId)
                       ).data.sellerId
                          == request.auth.uid;
 
         allow update: if request.auth != null
+                      && request.auth.token.firebase.sign_in_provider != 'anonymous'
                       && (
                         (
                           get(
@@ -408,6 +483,7 @@ service cloud.firestore {
                       );
 
         allow delete: if request.auth != null
+                      && request.auth.token.firebase.sign_in_provider != 'anonymous'
                       && get(
                         /databases/$(database)/documents/offers/$(offerId)
                       ).data.sellerId == request.auth.uid
@@ -435,6 +511,7 @@ service cloud.firestore {
                       );
 
           allow create: if request.auth != null
+                        && request.auth.token.firebase.sign_in_provider != 'anonymous'
                         && request.auth.uid == reservationId
                         && request.resource.data.userId
                            == request.auth.uid
@@ -450,6 +527,7 @@ service cloud.firestore {
                         );
 
           allow update: if request.auth != null
+                        && request.auth.token.firebase.sign_in_provider != 'anonymous'
                         && (
                           (
                             request.auth.uid == reservationId
@@ -546,6 +624,7 @@ service cloud.firestore {
                         );
 
           allow delete: if request.auth != null
+                        && request.auth.token.firebase.sign_in_provider != 'anonymous'
                         && get(
                           /databases/$(database)/documents/offers/$(offerId)
                         ).data.sellerId == request.auth.uid
@@ -646,23 +725,42 @@ service cloud.firestore {
     match /print_businesses/{businessId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && request.auth.uid == businessId
-                    && request.resource.data.ownerId == request.auth.uid;
+                    && request.resource.data.ownerId == request.auth.uid
+                    && (
+                      request.resource.data.get('officialCatalog', false) != true
+                      || get(
+                        /databases/$(database)/documents/users/$(request.auth.uid)
+                      ).data.role == 'admin'
+                    );
       allow update: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && request.auth.uid == businessId
                     && request.resource.data.ownerId == request.auth.uid
                     && request.resource.data.diff(resource.data)
                        .affectedKeys()
                        .hasOnly([
                          'ownerId', 'name', 'phone', 'description', 'active',
-                         'updatedAt'
-                       ]);
+                         'updatedAt', 'officialCatalog'
+                       ])
+                    && (
+                      !request.resource.data.diff(resource.data)
+                         .affectedKeys().hasAny(['officialCatalog'])
+                      || (
+                        request.resource.data.officialCatalog == true
+                        && get(
+                          /databases/$(database)/documents/users/$(request.auth.uid)
+                        ).data.role == 'admin'
+                      )
+                    );
       allow delete: if false;
     }
 
     match /print_products/{printProductId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && request.resource.data.sellerId == request.auth.uid
                     && exists(
                       /databases/$(database)/documents/print_businesses/$(request.auth.uid)
@@ -679,7 +777,36 @@ service cloud.firestore {
                         ).data.role == 'admin'
                       )
                     );
+      function validPrintPurchase(orderId) {
+        let order = getAfter(
+          /databases/$(database)/documents/products/$(orderId)
+        ).data;
+        let chatId = 'printing_' + request.auth.uid + '_' + resource.data.sellerId;
+        let chat = getAfter(
+          /databases/$(database)/documents/chats/$(chatId)
+        ).data;
+        return order.productType == 'print_order'
+               && order.sourcePrintProductId == printProductId
+               && order.buyerId == request.auth.uid
+               && order.sellerId == resource.data.sellerId
+               && order.chatId == chatId
+               && chat.chatType == 'printing'
+               && chat.buyerId == request.auth.uid
+               && chat.sellerId == resource.data.sellerId
+               && chat.offerItems.hasAny([{
+                 'source': 'product',
+                 'productId': orderId,
+                 'itemId': orderId,
+                 'itemName': order.name,
+                 'price': order.price,
+                 'imagePaths': order.imagePaths,
+                 'reservedBy': request.auth.uid,
+                 'status': 'Reserved'
+               }]);
+      }
+
       allow update: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && (
                       (
                         resource.data.sellerId == request.auth.uid
@@ -714,31 +841,37 @@ service cloud.firestore {
                         && resource.data.stockQuantity > 0
                         && request.resource.data.stockQuantity
                            == resource.data.stockQuantity - 1
+                        && request.resource.data.lastOrderId is string
                         && request.resource.data.diff(resource.data)
-                           .affectedKeys().hasOnly(['stockQuantity', 'updatedAt'])
+                           .affectedKeys().hasOnly([
+                             'stockQuantity', 'updatedAt', 'lastOrderId'
+                           ])
+                        && validPrintPurchase(request.resource.data.lastOrderId)
                       )
                     );
       allow delete: if false;
     }
 
     match /print_design_requests/{requestId} {
+      // Any registered customer may request a design from the official
+      // FigHub admin catalog. The destination must belong to an admin account.
       allow create: if request.auth != null
                     && request.auth.token.firebase.sign_in_provider != 'anonymous'
-                    && exists(
-                      /databases/$(database)/documents/users/$(request.auth.uid)
-                    )
-                    && get(
-                      /databases/$(database)/documents/users/$(request.auth.uid)
-                    ).data.role == 'admin'
                     && request.resource.data.customerId == request.auth.uid
                     && request.resource.data.companyId is string
                     && exists(
                       /databases/$(database)/documents/print_businesses/$(request.resource.data.companyId)
                     )
+                    && exists(
+                      /databases/$(database)/documents/users/$(request.resource.data.companyId)
+                    )
+                    && get(
+                      /databases/$(database)/documents/users/$(request.resource.data.companyId)
+                    ).data.role == 'admin'
                     && request.resource.data.status == 'new'
                     && request.resource.data.category is string
-                    && request.resource.data.imageUrl is string
-                    && request.resource.data.imageUrl.size() > 0;
+                    // A reference image is optional; text-only design requests are valid.
+                    && request.resource.data.imageUrl is string;
       allow read: if request.auth != null
                   && (
                     resource.data.customerId == request.auth.uid
@@ -756,6 +889,7 @@ service cloud.firestore {
     match /chats/{chatId} {
 
       allow get: if request.auth != null
+                 && request.auth.token.firebase.sign_in_provider != 'anonymous'
                  && (
                    !exists(
                      /databases/$(database)/documents/chats/$(chatId)
@@ -764,9 +898,11 @@ service cloud.firestore {
                  );
 
       allow list: if request.auth != null
+                  && request.auth.token.firebase.sign_in_provider != 'anonymous'
                   && request.auth.uid in resource.data.participants;
 
       allow create: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && request.resource.data.buyerId is string
                     && request.resource.data.sellerId is string
                     && request.resource.data.buyerId
@@ -781,6 +917,7 @@ service cloud.firestore {
                     ]);
 
       allow update: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && request.auth.uid in resource.data.participants
                     && request.resource.data.diff(resource.data)
                          .affectedKeys().hasOnly([
@@ -869,12 +1006,14 @@ service cloud.firestore {
       match /messages/{messageId} {
 
         allow read: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && request.auth.uid in
                        get(
                          /databases/$(database)/documents/chats/$(chatId)
                        ).data.participants;
 
         allow create: if request.auth != null
+                      && request.auth.token.firebase.sign_in_provider != 'anonymous'
                       && request.auth.uid in
                          get(
                            /databases/$(database)/documents/chats/$(chatId)
@@ -883,6 +1022,7 @@ service cloud.firestore {
                          == request.auth.uid;
 
         allow update: if request.auth != null
+                      && request.auth.token.firebase.sign_in_provider != 'anonymous'
                       && request.auth.uid in
                          get(
                            /databases/$(database)/documents/chats/$(chatId)
@@ -909,6 +1049,7 @@ service cloud.firestore {
                       );
 
         allow delete: if request.auth != null
+                      && request.auth.token.firebase.sign_in_provider != 'anonymous'
                       && request.auth.uid in
                          get(
                            /databases/$(database)/documents/chats/$(chatId)

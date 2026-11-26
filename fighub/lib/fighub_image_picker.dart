@@ -44,6 +44,7 @@ class FigHubImagePicker {
       ),
     );
 
+    if (!context.mounted) return null;
     if (choice == 'original') return selected;
     if (choice != 'edit') return null;
 
@@ -125,6 +126,7 @@ class FigHubImagePicker {
           ),
         ),
       );
+      if (!context.mounted) break;
       if (choice == 'original') {
         result.add(image);
         continue;

@@ -34,6 +34,7 @@ class _ChatPageState extends State<ChatPage> {
   late final Stream<Map<String, dynamic>?> _partnerStream;
   late final Stream<List<Map<String, dynamic>>> _messagesStream;
   late final ValueNotifier<String> _recordingElapsedNotifier;
+  late final ValueNotifier<bool> _hasMessagesNotifier;
 
   bool _isSending = false;
   bool _isRecording = false;
@@ -62,6 +63,7 @@ class _ChatPageState extends State<ChatPage> {
     _partnerStream = _chatService.watchChatPartner(widget.chatId);
     _messagesStream = _chatService.watchMessages(widget.chatId);
     _recordingElapsedNotifier = ValueNotifier<String>(_recordingElapsed);
+    _hasMessagesNotifier = ValueNotifier<bool>(false);
     unawaited(_chatService.reconcileChatItems(widget.chatId));
   }
 
@@ -70,6 +72,7 @@ class _ChatPageState extends State<ChatPage> {
     _messageController.dispose();
     _stopRecordingClock();
     _recordingElapsedNotifier.dispose();
+    _hasMessagesNotifier.dispose();
     unawaited(_audioRecorder.dispose());
     super.dispose();
   }
@@ -147,6 +150,8 @@ class _ChatPageState extends State<ChatPage> {
     if (!await requireRegisteredAccount(context)) return;
     if (!_isRecording || _isSending) return;
     String? path;
+    String? uploadedUrl;
+    final cloudinary = CloudinaryService();
 
     _stopRecordingClock();
     setState(() {
@@ -160,15 +165,25 @@ class _ChatPageState extends State<ChatPage> {
         throw StateError('Recording did not produce a file.');
       }
 
-      final url = await CloudinaryService().uploadAudio(path);
+      final audioUrl = await cloudinary.uploadAudio(path);
+      uploadedUrl = audioUrl;
       await _chatService.sendMediaMessage(
         chatId: widget.chatId,
-        mediaUrl: url,
+        mediaUrl: audioUrl,
         mediaType: 'audio',
       );
+      uploadedUrl = null;
 
       // Successful voice messages are confirmed by the message checkmarks.
     } catch (error, stackTrace) {
+      if (uploadedUrl != null) {
+        try {
+          await cloudinary.deleteUnattachedAssets([uploadedUrl]);
+        } catch (cleanupError, cleanupStackTrace) {
+          debugPrint('FIGHUB CHAT AUDIO ROLLBACK ERROR: $cleanupError');
+          debugPrintStack(stackTrace: cleanupStackTrace);
+        }
+      }
       debugPrint('FIGHUB CHAT AUDIO SEND ERROR: $error');
       debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
@@ -266,6 +281,8 @@ class _ChatPageState extends State<ChatPage> {
 
     if (!mounted || selectedType == null) return;
 
+    String? uploadedUrl;
+    final cloudinary = CloudinaryService();
     try {
       final picker = ImagePicker();
       final file = selectedType == 'image'
@@ -275,19 +292,28 @@ class _ChatPageState extends State<ChatPage> {
       if (!mounted || file == null) return;
       setState(() => _isSending = true);
 
-      final cloudinary = CloudinaryService();
-      final url = selectedType == 'image'
+      final mediaUrl = selectedType == 'image'
           ? await cloudinary.uploadImage(file)
           : await cloudinary.uploadVideo(file);
+      uploadedUrl = mediaUrl;
 
       await _chatService.sendMediaMessage(
         chatId: widget.chatId,
-        mediaUrl: url,
+        mediaUrl: mediaUrl,
         mediaType: selectedType,
       );
+      uploadedUrl = null;
 
       // Successful media messages are confirmed by the message checkmarks.
     } catch (error, stackTrace) {
+      if (uploadedUrl != null) {
+        try {
+          await cloudinary.deleteUnattachedAssets([uploadedUrl]);
+        } catch (cleanupError, cleanupStackTrace) {
+          debugPrint('FIGHUB CHAT MEDIA ROLLBACK ERROR: $cleanupError');
+          debugPrintStack(stackTrace: cleanupStackTrace);
+        }
+      }
       debugPrint('FIGHUB CHAT MEDIA SEND ERROR: $error');
       debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
@@ -771,7 +797,7 @@ class _ChatPageState extends State<ChatPage> {
 
     final rawText = message['text'] as String? ?? '';
     final rawType = message['type'] as String? ?? 'text';
-    final rawMediaUrl = message['mediaUrl'] as String? ?? '';
+    final rawMediaUrl = (message['mediaUrl'] as String? ?? '').trim();
     final looksLikeImageUrl = rawType == 'text' &&
         rawText.startsWith('http') &&
         (rawText.contains('res.cloudinary.com') ||
@@ -1389,6 +1415,9 @@ class _ChatPageState extends State<ChatPage> {
                 }
 
                 final messages = snapshot.data ?? const [];
+                if (_hasMessagesNotifier.value != messages.isNotEmpty) {
+                  _hasMessagesNotifier.value = messages.isNotEmpty;
+                }
                 if (messages.isNotEmpty) {
                   // Messages visible in the open conversation are read.
                   unawaited(_chatService.markMessagesRead(
@@ -1423,11 +1452,19 @@ class _ChatPageState extends State<ChatPage> {
                   );
                 }
 
+                // Firestore supplies messages oldest-first. Reverse the
+                // displayed list and the scroll direction so a chat opens at
+                // the newest message, with older messages above it.
+                final displayMessages = messages.reversed.toList(
+                  growable: false,
+                );
+
                 return ListView.builder(
+                  reverse: true,
                   padding: const EdgeInsets.all(16),
-                  itemCount: messages.length,
+                  itemCount: displayMessages.length,
                   itemBuilder: (context, index) {
-                    return _buildMessageBubble(context, messages[index]);
+                    return _buildMessageBubble(context, displayMessages[index]);
                   },
                 );
               },
@@ -1438,12 +1475,10 @@ class _ChatPageState extends State<ChatPage> {
               padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
               child: Column(
                 children: [
-                  StreamBuilder<List<Map<String, dynamic>>>(
-                    stream: _messagesStream,
-                    builder: (context, snapshot) {
-                      final messages = snapshot.data ?? const [];
-
-                      if (messages.isNotEmpty) {
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _hasMessagesNotifier,
+                    builder: (context, hasMessages, _) {
+                      if (hasMessages) {
                         return const SizedBox.shrink();
                       }
 

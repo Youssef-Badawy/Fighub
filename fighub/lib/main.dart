@@ -30,7 +30,7 @@ import 'push_notification_service.dart';
 import 'one_signal_service.dart';
 import 'profile_page.dart';
 import 'print_marketplace_page.dart';
-import 'search_service.dart';
+import 'product_search_page.dart';
 import 'seller_dashboard_page.dart';
 import 'seller_profile_page.dart';
 import 'seller_profile_service.dart';
@@ -457,6 +457,7 @@ class _FigHubHomeState extends State<FigHubHome> {
   String? _pushInitializedUserId;
   String? _subscribedUserId;
   String? _deletedOffersCleanupUserId;
+  String? _deletedProductsCleanupUserId;
 
   final List<String> _categories = [
     'All',
@@ -464,7 +465,6 @@ class _FigHubHomeState extends State<FigHubHome> {
   ].toSet().toList();
 
   String _selectedCategory = 'All';
-  String _searchQuery = '';
 
   @override
   void initState() {
@@ -475,6 +475,7 @@ class _FigHubHomeState extends State<FigHubHome> {
 
     _subscribeToUserData();
     unawaited(_cleanupDeletedOffers());
+    unawaited(_cleanupDeletedProducts());
 
     _subscribeToProducts();
   }
@@ -541,6 +542,7 @@ class _FigHubHomeState extends State<FigHubHome> {
   void _onAuthManagerChanged() {
     _subscribeToUserData();
     unawaited(_cleanupDeletedOffers());
+    unawaited(_cleanupDeletedProducts());
     if (FirebaseAuth.instance.currentUser?.isAnonymous == false) {
       _initializePushNotifications();
     }
@@ -560,6 +562,24 @@ class _FigHubHomeState extends State<FigHubHome> {
     } catch (error, stackTrace) {
       _deletedOffersCleanupUserId = null;
       debugPrint('FIGHUB OLD OFFER CLEANUP ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
+  Future<void> _cleanupDeletedProducts() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null ||
+        user.isAnonymous ||
+        _deletedProductsCleanupUserId == user.uid) {
+      return;
+    }
+
+    _deletedProductsCleanupUserId = user.uid;
+    try {
+      await _productService.cleanupPreviouslyDeletedProducts();
+    } catch (error, stackTrace) {
+      _deletedProductsCleanupUserId = null;
+      debugPrint('FIGHUB OLD PRODUCT CLEANUP ERROR: $error');
       debugPrintStack(stackTrace: stackTrace);
     }
   }
@@ -716,40 +736,10 @@ class _FigHubHomeState extends State<FigHubHome> {
     }
   }
 
-  bool _matchesSearchText(String value) {
-    try {
-      return SearchService.matches(value, _searchQuery);
-    } catch (error, stackTrace) {
-      debugPrint('FIGHUB SEARCH MATCH ERROR: $error');
-      debugPrintStack(stackTrace: stackTrace);
-      return value.toLowerCase().contains(_searchQuery.toLowerCase());
-    }
-  }
-
   List<Product> get _filteredProducts {
     return _products.where((product) {
-      final matchesCategory =
-          _selectedCategory == 'All' ||
-              product.category == _selectedCategory;
-
-      if (!matchesCategory) {
-        return false;
-      }
-
-      if (_searchQuery.trim().isEmpty) {
-        return true;
-      }
-
-      final sellerProfile =
-          _sellerProfiles[product.sellerId];
-
-      final sellerName =
-          sellerProfile?.name ?? '';
-
-      final matchesProduct = _matchesSearchText(product.name);
-      final matchesSeller = _matchesSearchText(sellerName);
-
-      return matchesProduct || matchesSeller;
+      return _selectedCategory == 'All' ||
+          product.category == _selectedCategory;
     }).toList();
   }
 
@@ -894,38 +884,14 @@ class _FigHubHomeState extends State<FigHubHome> {
   }
 
   Future<void> _openSearch() async {
-    final localization = AppLocalizations.of(context);
-    final controller = TextEditingController(text: _searchQuery);
-    final query = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(localization.isArabic ? 'بحث' : 'Search'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          textInputAction: TextInputAction.search,
-          decoration: InputDecoration(
-            hintText: localization.search,
-            prefixIcon: const Icon(Icons.search),
-          ),
-          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProductSearchPage(
+          products: List<Product>.unmodifiable(_products),
+          onOpenProduct: _openProductDetails,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(localization.isArabic ? 'إلغاء' : 'Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            child: Text(localization.isArabic ? 'بحث' : 'Search'),
-          ),
-        ],
       ),
     );
-    controller.dispose();
-    if (query != null && mounted) {
-      setState(() => _searchQuery = query.trim());
-    }
   }
 
   Future<void> _openUsers() async {
@@ -1162,7 +1128,7 @@ class _FigHubHomeState extends State<FigHubHome> {
     }
 
     return ListView.builder(
-      key: ValueKey('home-\${_selectedCategory}-\${_searchQuery}'),
+      key: ValueKey('home-\${_selectedCategory}'),
       itemCount: products.isEmpty ? 2 : products.length + 1,
       itemBuilder: (context, index) {
         if (index == 0) {
@@ -1171,19 +1137,6 @@ class _FigHubHomeState extends State<FigHubHome> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (_searchQuery.isNotEmpty)
-                  Align(
-                    alignment: AlignmentDirectional.centerStart,
-                    child: TextButton.icon(
-                      onPressed: () => setState(() => _searchQuery = ''),
-                      icon: const Icon(Icons.close),
-                      label: Text(
-                        localization.isArabic
-                            ? 'مسح البحث: \$_searchQuery'
-                            : 'Clear search: \$_searchQuery',
-                      ),
-                    ),
-                  ),
                 SizedBox(
                   height: 42,
                   child: ListView.separated(
@@ -1223,7 +1176,6 @@ class _FigHubHomeState extends State<FigHubHome> {
         }
 
         if (products.isEmpty) {
-          final hasSearch = _searchQuery.trim().isNotEmpty;
           return SizedBox(
             height: 280,
             child: Center(
@@ -1231,28 +1183,16 @@ class _FigHubHomeState extends State<FigHubHome> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    hasSearch ? Icons.search_off_rounded : Icons.inventory_2_outlined,
+                    Icons.inventory_2_outlined,
                     size: 48,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    hasSearch
-                        ? (localization.isArabic
-                            ? 'مفيش منتجات مطابقة لبحثك'
-                            : 'No products match your search')
-                        : localization.noProducts,
+                    localization.noProducts,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
-                  if (hasSearch) ...[
-                    const SizedBox(height: 8),
-                    TextButton.icon(
-                      onPressed: () => setState(() => _searchQuery = ''),
-                      icon: const Icon(Icons.clear),
-                      label: Text(localization.isArabic ? 'مسح البحث' : 'Clear search'),
-                    ),
-                  ],
                 ],
               ),
             ),

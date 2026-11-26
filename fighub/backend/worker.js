@@ -31,7 +31,7 @@ function cloudinaryPublicId(assetUrl) {
     throw new Error('Invalid Cloudinary asset URL');
   }
 
-  if (url.hostname !== 'res.cloudinary.com') {
+  if (url.protocol !== 'https:' || url.hostname !== 'res.cloudinary.com') {
     throw new Error('Asset is not hosted by Cloudinary');
   }
 
@@ -131,7 +131,7 @@ async function readFirestoreDocument(path, idToken) {
 }
 
 
-async function handleCloudinaryUploadSignature(body, payload, env) {
+async function handleCloudinaryUploadSignature(body, payload, idToken, env) {
   const resourceType = body.resourceType;
   if (!['image', 'video'].includes(resourceType)) {
     return new Response(JSON.stringify({ error: 'Unsupported upload resource type' }), {
@@ -154,9 +154,30 @@ async function handleCloudinaryUploadSignature(body, payload, env) {
     });
   }
 
-  // Keep the upload folder server-controlled. The client receives only a
-  // short-lived signature and never receives the Cloudinary API secret.
-  const folder = 'fighub';
+  const purpose = body.purpose ?? 'standard';
+  if (!['standard', 'catalog'].includes(purpose)) {
+    return new Response(JSON.stringify({ error: 'Unsupported upload purpose' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Catalog uploads are restricted server-side; hiding the admin button in
+  // Flutter alone is not an authorization boundary.
+  let folder = `fighub/${payload.sub}`;
+  if (purpose === 'catalog') {
+    const userDocument = await readFirestoreDocument(
+      `users/${encodeURIComponent(payload.sub)}`,
+      idToken,
+    );
+    if (readStringField(userDocument?.fields, 'role') !== 'admin') {
+      return new Response(JSON.stringify({ error: 'Admin account required for catalog uploads' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    folder = `fighub/catalog/${payload.sub}`;
+  }
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const signatureText = `folder=${folder}&timestamp=${timestamp}${env.CLOUDINARY_API_SECRET}`;
   const digest = await crypto.subtle.digest(
@@ -195,6 +216,15 @@ async function handleCloudinaryDeletion(body, payload, idToken, env) {
   if (!parent || readStringField(parent.fields, 'sellerId') !== payload.sub) {
     return new Response(JSON.stringify({ error: 'Owner verification failed' }), {
       status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  // Remote assets may only be destroyed after the source listing has been
+  // hidden in Firestore. This prevents an accidental direct cleanup request
+  // from leaving a live product or offer with broken images.
+  if (parent.fields?.isDeleted?.booleanValue !== true) {
+    return new Response(JSON.stringify({ error: 'Listing must be soft-deleted before asset cleanup' }), {
+      status: 409,
       headers: { 'Content-Type': 'application/json' },
     });
   }
@@ -281,8 +311,85 @@ async function handleCloudinaryDeletion(body, payload, idToken, env) {
   });
 }
 
+async function handleUnattachedCloudinaryDeletion(body, payload, env) {
+  if (payload.firebase?.sign_in_provider === 'anonymous') {
+    return new Response(JSON.stringify({ error: 'A registered account is required' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const urls = Array.isArray(body.assetUrls) ? body.assetUrls : [];
+  if (urls.length > 100) {
+    return new Response(JSON.stringify({ error: 'Too many assets in one cleanup request' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const allowedPrefixes = [
+    `fighub/${payload.sub}/`,
+    `fighub/catalog/${payload.sub}/`,
+  ];
+  const requested = new Set();
+  for (const assetUrl of urls) {
+    if (typeof assetUrl !== 'string') {
+      return new Response(JSON.stringify({ error: 'Invalid asset URL' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    const { resourceType, publicId } = cloudinaryPublicId(assetUrl);
+    const pathParts = publicId.split('/');
+    const hasSafePath = pathParts.every((part) => part && part !== '.' && part !== '..');
+    if (!['image', 'video'].includes(resourceType) ||
+        !hasSafePath ||
+        !allowedPrefixes.some((prefix) => publicId.startsWith(prefix))) {
+      return new Response(JSON.stringify({ error: 'Unattached asset ownership mismatch' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    requested.add(assetUrl);
+  }
+
+  for (const assetUrl of requested) {
+    await deleteCloudinaryAsset(assetUrl, env);
+  }
+
+  return new Response(JSON.stringify({
+    success: true,
+    deletedAssets: requested.size,
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+
 export default {
   async fetch(request, env) {
+    const requestUrl = new URL(request.url);
+    // Safe, read-only health endpoint for diagnosing signed-upload setup.
+    // It exposes configuration presence only, never API keys or secrets.
+    if (request.method === 'GET' && requestUrl.pathname === '/health') {
+      return new Response(JSON.stringify({
+        service: 'fighub-worker',
+        status: 'ok',
+        cloudName: CLOUDINARY_CLOUD_NAME,
+        cloudinarySigningConfigured: Boolean(
+          env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET,
+        ),
+        pushConfigured: Boolean(env.ONESIGNAL_REST_API_KEY),
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        },
+      });
+    }
+
     if (request.method !== 'POST') {
       return new Response('Method Not Allowed', {
         status: 405,
@@ -309,14 +416,26 @@ export default {
 
       const idToken = authHeader.substring(7);
 
-      const { payload } = await jwtVerify(
-        idToken,
-        FIREBASE_KEYS,
-        {
-          issuer: FIREBASE_ISSUER,
-          audience: FIREBASE_PROJECT_ID,
-        },
-      );
+      let payload;
+      try {
+        ({ payload } = await jwtVerify(
+          idToken,
+          FIREBASE_KEYS,
+          {
+            issuer: FIREBASE_ISSUER,
+            audience: FIREBASE_PROJECT_ID,
+          },
+        ));
+      } catch (authError) {
+        console.warn('FIGHUB WORKER AUTHENTICATION REJECTED:', authError?.code || 'invalid-token');
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      }
 
       if (!payload.sub) {
         return new Response(
@@ -335,7 +454,19 @@ export default {
       const body = await request.json();
 
       if (body.action === 'signCloudinaryUpload') {
-        return await handleCloudinaryUploadSignature(body, payload, env);
+        return await handleCloudinaryUploadSignature(body, payload, idToken, env);
+      }
+
+        if (body.action === 'cleanupUnattachedCloudinaryAssets') {
+        try {
+          return await handleUnattachedCloudinaryDeletion(body, payload, env);
+        } catch (error) {
+          console.error('Unattached Cloudinary cleanup failed:', error);
+          return new Response(
+            JSON.stringify({ error: error.message || 'Unattached Cloudinary cleanup failed' }),
+            { status: 502, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
       }
 
       if (body.action === 'deleteCloudinaryAssets') {
@@ -494,10 +625,10 @@ export default {
       console.error('FIGHUB WORKER REQUEST ERROR:', error);
       return new Response(
         JSON.stringify({
-          error: 'Unauthorized',
+          error: 'Internal server error',
         }),
         {
-          status: 401,
+          status: 500,
           headers: {
             'Content-Type': 'application/json',
           },

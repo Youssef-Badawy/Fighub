@@ -26,8 +26,19 @@ class OfferService {
     return user.uid;
   }
 
+  String get _registeredUid {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw StateError('User must be signed in.');
+    }
+    if (user.isAnonymous) {
+      throw StateError('يجب تسجيل حساب مسجل قبل إنشاء العروض أو إضافة قطع إليها.');
+    }
+    return user.uid;
+  }
+
   Future<String> createOffer(Offer offer) async {
-    final uid = _uid;
+    final uid = _registeredUid;
 
     final offerData = offer.toFirestore();
     offerData['sellerId'] = uid;
@@ -41,7 +52,7 @@ class OfferService {
     required String offerId,
     required OfferItem item,
   }) async {
-    final uid = _uid;
+    final uid = _registeredUid;
 
     if (offerId.isEmpty) {
       throw ArgumentError('Offer ID is required.');
