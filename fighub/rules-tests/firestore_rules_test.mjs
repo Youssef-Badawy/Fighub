@@ -6,7 +6,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { deleteDoc, doc, setDoc, updateDoc } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const projectId = 'demo-fighub-rules-test';
@@ -70,6 +70,13 @@ try {
       stockQuantity: 5,
       active: true,
     });
+    await setDoc(doc(db, 'chats/anonymous-chat'), {
+      buyerId: 'registered-buyer',
+      sellerId: 'registered-seller',
+      participants: ['registered-buyer', 'registered-seller'],
+      chatType: 'ordinary',
+      offerItems: [],
+    });
   });
 
   const request = {
@@ -106,6 +113,24 @@ try {
   const anonymousCustomer = env.authenticatedContext('anonymous-1', {
     firebase: { sign_in_provider: 'anonymous' },
   }).firestore();
+
+  await assertFails(
+    setDoc(doc(anonymousCustomer, 'chats/anonymous-created'), {
+      buyerId: 'anonymous-1',
+      sellerId: 'registered-seller',
+      participants: ['anonymous-1', 'registered-seller'],
+      chatType: 'ordinary',
+      offerItems: [],
+    }),
+  );
+  await assertFails(getDoc(doc(anonymousCustomer, 'chats/anonymous-chat')));
+  await assertFails(
+    setDoc(doc(anonymousCustomer, 'chats/anonymous-chat/messages/message-1'), {
+      senderId: 'anonymous-1',
+      text: 'Anonymous message',
+      createdAt: new Date(),
+    }),
+  );
 
   await assertFails(
     setDoc(doc(anonymousCustomer, 'print_design_requests/anonymous'), {
