@@ -16,11 +16,17 @@ npx wrangler secret put CLOUDINARY_API_KEY
 npx wrangler secret put CLOUDINARY_API_SECRET
 ```
 
-Then deploy from the `fighub` directory:
+Then deploy the tracked Worker entry point from the `fighub` directory (do not deploy a separate or stale `worker.js` file):
 
 ```bash
-npx wrangler deploy
+npx wrangler deploy backend/worker.js --name fighub --compatibility-date 2026-11-12
 ```
+
+The Flutter app requests signed Cloudinary uploads from this same Worker using
+the `signCloudinaryUpload` action. Both `image` and `video` resource types
+are supported; Cloudinary audio uploads use the `video` resource type.
+The Worker requires both `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET`
+to be configured as Worker secrets before signed uploads can succeed.
 
 The Cloudinary deletion endpoint requires a valid Firebase ID token and checks
 the authenticated seller against the Firestore product or offer before deleting
