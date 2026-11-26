@@ -1059,11 +1059,13 @@ class _PrintBusinessPageState extends State<PrintBusinessPage> {
 
         transaction.update(productRef, {
           'stockQuantity': quantity - 1,
+          'lastOrderId': orderRef.id,
           'updatedAt': FieldValue.serverTimestamp(),
         });
         transaction.set(orderRef, {
           'productType': 'print_order',
           'sourcePrintProductId': productId,
+          'chatId': chatId,
           'sellerId': sellerId,
           'buyerId': user.uid,
           'reservedBy': user.uid,
