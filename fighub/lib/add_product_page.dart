@@ -73,14 +73,6 @@ class _AddProductPageState extends State<AddProductPage> {
           ..addAll(images);
       });
     } catch (error) {
-      if (uploadedImageUrls.isNotEmpty) {
-        try {
-          await _cloudinaryService.deleteUnattachedAssets(uploadedImageUrls);
-        } catch (cleanupError, stackTrace) {
-          debugPrint('FIGHUB PRODUCT UPLOAD ROLLBACK ERROR: $cleanupError');
-          debugPrintStack(stackTrace: stackTrace);
-        }
-      }
       if (!mounted) {
         return;
       }
@@ -174,6 +166,14 @@ class _AddProductPageState extends State<AddProductPage> {
 
       Navigator.pop(context, product);
     } catch (error) {
+      if (uploadedImageUrls.isNotEmpty) {
+        try {
+          await _cloudinaryService.deleteUnattachedAssets(uploadedImageUrls);
+        } catch (cleanupError, stackTrace) {
+          debugPrint('FIGHUB PRODUCT UPLOAD ROLLBACK ERROR: $cleanupError');
+          debugPrintStack(stackTrace: stackTrace);
+        }
+      }
       if (!mounted) {
         return;
       }
