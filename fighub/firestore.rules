@@ -97,7 +97,7 @@ service cloud.firestore {
                                .hasOnly(['status', 'soldTo', 'soldAt', 'updatedAt'])
                           )
                           || (
-                            resource.data.status in ['Reserved', 'Sold']
+                            resource.data.status == 'Sold'
                             && request.resource.data.status == 'Available'
                             && request.resource.data.reservedBy == null
                             && request.resource.data.reservedAt == null
