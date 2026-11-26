@@ -93,8 +93,10 @@ class _AddOfferItemPageState extends State<AddOfferItemPage> {
       _isSaving = true;
     });
 
+    var uploadedImageUrls = <String>[];
     try {
-      final imageUrls = await _cloudinaryService.uploadImages(_selectedImages);
+      uploadedImageUrls = await _cloudinaryService.uploadImages(_selectedImages);
+      final imageUrls = uploadedImageUrls;
 
       final item = OfferItem(
         name: _nameController.text.trim(),
@@ -116,6 +118,14 @@ class _AddOfferItemPageState extends State<AddOfferItemPage> {
 
       Navigator.of(context).pop();
     } catch (error) {
+      if (uploadedImageUrls.isNotEmpty) {
+        try {
+          await _cloudinaryService.deleteUnattachedAssets(uploadedImageUrls);
+        } catch (cleanupError, stackTrace) {
+          debugPrint('FIGHUB OFFER ITEM UPLOAD ROLLBACK ERROR: $cleanupError');
+          debugPrintStack(stackTrace: stackTrace);
+        }
+      }
       if (!mounted) {
         return;
       }
