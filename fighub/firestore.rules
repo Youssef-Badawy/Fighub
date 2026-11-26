@@ -29,6 +29,11 @@ service cloud.firestore {
                            == get(
                              /databases/$(database)/documents/print_products/$(request.resource.data.sourcePrintProductId)
                            ).data.stockQuantity - 1
+                        && getAfter(
+                          /databases/$(database)/documents/print_products/$(request.resource.data.sourcePrintProductId)
+                        ).data.lastOrderId == productId
+                        && request.resource.data.chatId
+                           == 'printing_' + request.auth.uid + '_' + request.resource.data.sellerId
                       )
                     );
 
@@ -761,8 +766,62 @@ service cloud.firestore {
                         && resource.data.stockQuantity > 0
                         && request.resource.data.stockQuantity
                            == resource.data.stockQuantity - 1
+                        && request.resource.data.lastOrderId is string
                         && request.resource.data.diff(resource.data)
-                           .affectedKeys().hasOnly(['stockQuantity', 'updatedAt'])
+                           .affectedKeys().hasOnly([
+                             'stockQuantity', 'updatedAt', 'lastOrderId'
+                           ])
+                        && getAfter(
+                          /databases/$(database)/documents/products/$(request.resource.data.lastOrderId)
+                        ).data.productType == 'print_order'
+                        && getAfter(
+                          /databases/$(database)/documents/products/$(request.resource.data.lastOrderId)
+                        ).data.sourcePrintProductId == printProductId
+                        && getAfter(
+                          /databases/$(database)/documents/products/$(request.resource.data.lastOrderId)
+                        ).data.buyerId == request.auth.uid
+                        && getAfter(
+                          /databases/$(database)/documents/products/$(request.resource.data.lastOrderId)
+                        ).data.sellerId == resource.data.sellerId
+                        && getAfter(
+                          /databases/$(database)/documents/products/$(request.resource.data.lastOrderId)
+                        ).data.chatId
+                           == 'printing_' + request.auth.uid + '_' + resource.data.sellerId
+                        && getAfter(
+                          /databases/$(database)/documents/chats/$(getAfter(
+                            /databases/$(database)/documents/products/$(request.resource.data.lastOrderId)
+                          ).data.chatId)
+                        ).data.chatType == 'printing'
+                        && getAfter(
+                          /databases/$(database)/documents/chats/$(getAfter(
+                            /databases/$(database)/documents/products/$(request.resource.data.lastOrderId)
+                          ).data.chatId)
+                        ).data.buyerId == request.auth.uid
+                        && getAfter(
+                          /databases/$(database)/documents/chats/$(getAfter(
+                            /databases/$(database)/documents/products/$(request.resource.data.lastOrderId)
+                          ).data.chatId)
+                        ).data.sellerId == resource.data.sellerId
+                        && getAfter(
+                          /databases/$(database)/documents/chats/$(getAfter(
+                            /databases/$(database)/documents/products/$(request.resource.data.lastOrderId)
+                          ).data.chatId)
+                        ).data.offerItems.hasAny([{
+                          'source': 'product',
+                          'productId': request.resource.data.lastOrderId,
+                          'itemId': request.resource.data.lastOrderId,
+                          'itemName': getAfter(
+                            /databases/$(database)/documents/products/$(request.resource.data.lastOrderId)
+                          ).data.name,
+                          'price': getAfter(
+                            /databases/$(database)/documents/products/$(request.resource.data.lastOrderId)
+                          ).data.price,
+                          'imagePaths': getAfter(
+                            /databases/$(database)/documents/products/$(request.resource.data.lastOrderId)
+                          ).data.imagePaths,
+                          'reservedBy': request.auth.uid,
+                          'status': 'Reserved'
+                        }])
                       )
                     );
       allow delete: if false;
