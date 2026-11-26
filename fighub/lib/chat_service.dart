@@ -7,20 +7,6 @@ import 'package:flutter/foundation.dart';
 import 'notification_service.dart';
 import 'worker_push_service.dart';
 
-class ChatMessageBatch {
-  final List<Map<String, dynamic>> messages;
-  final QueryDocumentSnapshot<Map<String, dynamic>>? oldestDocument;
-  final bool hasMore;
-  final Timestamp? clearedAt;
-
-  const ChatMessageBatch({
-    required this.messages,
-    required this.oldestDocument,
-    required this.hasMore,
-    required this.clearedAt,
-  });
-}
-
 // Keep chat reservation updates and settlement history in one shared thread.
 class ChatService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -1596,25 +1582,18 @@ class ChatService {
             .toList());
   }
 
-  static const int messagePageSize = 50;
-
-  Stream<ChatMessageBatch> watchMessages(String chatId) {
+  Stream<List<Map<String, dynamic>>> watchMessages(String chatId) {
     final user = _auth.currentUser;
     if (chatId.isEmpty || user == null) {
-      return Stream.value(const ChatMessageBatch(
-        messages: [],
-        oldestDocument: null,
-        hasMore: false,
-        clearedAt: null,
-      ));
+      return Stream.value(const <Map<String, dynamic>>[]);
     }
 
     final chatReference = _firestore.collection('chats').doc(chatId);
 
-    // Keep one bounded live listener for the newest messages. Older history
-    // is fetched separately only when the user scrolls upward.
-    return Stream<ChatMessageBatch>.multi((controller) {
-      QuerySnapshot<Map<String, dynamic>>? latestMessages;
+    // Re-evaluate visible messages whenever either the chat cutoff or
+    // the underlying message collection changes, without extra packages.
+    return Stream<List<Map<String, dynamic>>>.multi((controller) {
+      List<QueryDocumentSnapshot<Map<String, dynamic>>>? latestMessages;
       Map<String, dynamic>? latestChat;
       var closed = false;
 
@@ -1622,23 +1601,18 @@ class ChatService {
         if (closed || latestMessages == null || latestChat == null) return;
 
         final clearedAtMap = latestChat!['clearedAt'];
-        final rawCutoff = clearedAtMap is Map ? clearedAtMap[user.uid] : null;
-        final cutoff = rawCutoff is Timestamp ? rawCutoff : null;
-        final docs = latestMessages!.docs.take(messagePageSize).toList();
-        final visible = docs.where((document) {
-          if (cutoff == null) return true;
-          final createdAt = document.data()['createdAt'];
-          return createdAt is Timestamp && createdAt.compareTo(cutoff) > 0;
-        }).toList();
+        final cutoff = clearedAtMap is Map ? clearedAtMap[user.uid] : null;
 
-        controller.add(ChatMessageBatch(
-          messages: visible.reversed
-              .map((document) => {'id': document.id, ...document.data()})
-              .toList(growable: false),
-          oldestDocument: docs.isEmpty ? null : docs.last,
-          hasMore: latestMessages!.docs.length > messagePageSize,
-          clearedAt: cutoff,
-        ));
+        final visible = latestMessages!
+            .where((document) {
+              if (cutoff is! Timestamp) return true;
+              final createdAt = document.data()['createdAt'];
+              return createdAt is Timestamp && createdAt.compareTo(cutoff) > 0;
+            })
+            .map((document) => {'id': document.id, ...document.data()})
+            .toList();
+
+        controller.add(visible);
       }
 
       final chatSubscription = chatReference.snapshots().listen((snapshot) {
@@ -1647,11 +1621,10 @@ class ChatService {
       }, onError: controller.addError);
 
       final messagesSubscription = _messagesCollection(chatId)
-          .orderBy('createdAt', descending: true)
-          .limit(messagePageSize + 1)
+          .orderBy('createdAt')
           .snapshots()
           .listen((snapshot) {
-            latestMessages = snapshot;
+            latestMessages = snapshot.docs;
             emitVisibleMessages();
           }, onError: controller.addError);
 
@@ -1661,48 +1634,6 @@ class ChatService {
         messagesSubscription.cancel();
       };
     });
-  }
-
-  Future<ChatMessageBatch> fetchOlderMessages({
-    required String chatId,
-    required QueryDocumentSnapshot<Map<String, dynamic>> cursor,
-  }) async {
-    final user = _auth.currentUser;
-    if (user == null || chatId.isEmpty) {
-      return const ChatMessageBatch(
-        messages: [],
-        oldestDocument: null,
-        hasMore: false,
-        clearedAt: null,
-      );
-    }
-
-    final chatSnapshot = await _firestore.collection('chats').doc(chatId).get();
-    final clearedAtMap = chatSnapshot.data()?['clearedAt'];
-    final rawCutoff = clearedAtMap is Map ? clearedAtMap[user.uid] : null;
-    final cutoff = rawCutoff is Timestamp ? rawCutoff : null;
-
-    final page = await _messagesCollection(chatId)
-        .orderBy('createdAt', descending: true)
-        .startAfterDocument(cursor)
-        .limit(messagePageSize + 1)
-        .get();
-
-    final pageDocs = page.docs.take(messagePageSize).toList();
-    final visible = pageDocs.where((document) {
-      if (cutoff == null) return true;
-      final createdAt = document.data()['createdAt'];
-      return createdAt is Timestamp && createdAt.compareTo(cutoff) > 0;
-    }).toList();
-
-    return ChatMessageBatch(
-      messages: visible.reversed
-          .map((document) => {'id': document.id, ...document.data()})
-          .toList(growable: false),
-      oldestDocument: pageDocs.isEmpty ? cursor : pageDocs.last,
-      hasMore: page.docs.length > messagePageSize,
-      clearedAt: cutoff,
-    );
   }
 
   Stream<List<Map<String, dynamic>>> watchMyChats() {
