@@ -805,6 +805,7 @@ service cloud.firestore {
     match /chats/{chatId} {
 
       allow get: if request.auth != null
+                 && request.auth.token.firebase.sign_in_provider != 'anonymous'
                  && (
                    !exists(
                      /databases/$(database)/documents/chats/$(chatId)
@@ -813,9 +814,11 @@ service cloud.firestore {
                  );
 
       allow list: if request.auth != null
+                  && request.auth.token.firebase.sign_in_provider != 'anonymous'
                   && request.auth.uid in resource.data.participants;
 
       allow create: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && request.resource.data.buyerId is string
                     && request.resource.data.sellerId is string
                     && request.resource.data.buyerId
@@ -830,6 +833,7 @@ service cloud.firestore {
                     ]);
 
       allow update: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && request.auth.uid in resource.data.participants
                     && request.resource.data.diff(resource.data)
                          .affectedKeys().hasOnly([
@@ -918,12 +922,14 @@ service cloud.firestore {
       match /messages/{messageId} {
 
         allow read: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
                     && request.auth.uid in
                        get(
                          /databases/$(database)/documents/chats/$(chatId)
                        ).data.participants;
 
         allow create: if request.auth != null
+                      && request.auth.token.firebase.sign_in_provider != 'anonymous'
                       && request.auth.uid in
                          get(
                            /databases/$(database)/documents/chats/$(chatId)
@@ -932,6 +938,7 @@ service cloud.firestore {
                          == request.auth.uid;
 
         allow update: if request.auth != null
+                      && request.auth.token.firebase.sign_in_provider != 'anonymous'
                       && request.auth.uid in
                          get(
                            /databases/$(database)/documents/chats/$(chatId)
@@ -958,6 +965,7 @@ service cloud.firestore {
                       );
 
         allow delete: if request.auth != null
+                      && request.auth.token.firebase.sign_in_provider != 'anonymous'
                       && request.auth.uid in
                          get(
                            /databases/$(database)/documents/chats/$(chatId)
