@@ -219,6 +219,15 @@ async function handleCloudinaryDeletion(body, payload, idToken, env) {
       headers: { 'Content-Type': 'application/json' },
     });
   }
+  // Remote assets may only be destroyed after the source listing has been
+  // hidden in Firestore. This prevents an accidental direct cleanup request
+  // from leaving a live product or offer with broken images.
+  if (parent.fields?.isDeleted?.booleanValue !== true) {
+    return new Response(JSON.stringify({ error: 'Listing must be soft-deleted before asset cleanup' }), {
+      status: 409,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
   const requestedUrls = new Set();
   if (ownerType === 'product') {
