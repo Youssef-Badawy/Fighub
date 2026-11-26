@@ -147,6 +147,8 @@ class _ChatPageState extends State<ChatPage> {
     if (!await requireRegisteredAccount(context)) return;
     if (!_isRecording || _isSending) return;
     String? path;
+    String? uploadedUrl;
+    final cloudinary = CloudinaryService();
 
     _stopRecordingClock();
     setState(() {
@@ -160,15 +162,24 @@ class _ChatPageState extends State<ChatPage> {
         throw StateError('Recording did not produce a file.');
       }
 
-      final url = await CloudinaryService().uploadAudio(path);
+      uploadedUrl = await cloudinary.uploadAudio(path);
       await _chatService.sendMediaMessage(
         chatId: widget.chatId,
-        mediaUrl: url,
+        mediaUrl: uploadedUrl!,
         mediaType: 'audio',
       );
+      uploadedUrl = null;
 
       // Successful voice messages are confirmed by the message checkmarks.
     } catch (error, stackTrace) {
+      if (uploadedUrl != null) {
+        try {
+          await cloudinary.deleteUnattachedAssets([uploadedUrl]);
+        } catch (cleanupError, cleanupStackTrace) {
+          debugPrint('FIGHUB CHAT AUDIO ROLLBACK ERROR: $cleanupError');
+          debugPrintStack(stackTrace: cleanupStackTrace);
+        }
+      }
       debugPrint('FIGHUB CHAT AUDIO SEND ERROR: $error');
       debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
@@ -266,6 +277,8 @@ class _ChatPageState extends State<ChatPage> {
 
     if (!mounted || selectedType == null) return;
 
+    String? uploadedUrl;
+    final cloudinary = CloudinaryService();
     try {
       final picker = ImagePicker();
       final file = selectedType == 'image'
@@ -275,19 +288,27 @@ class _ChatPageState extends State<ChatPage> {
       if (!mounted || file == null) return;
       setState(() => _isSending = true);
 
-      final cloudinary = CloudinaryService();
-      final url = selectedType == 'image'
+      uploadedUrl = selectedType == 'image'
           ? await cloudinary.uploadImage(file)
           : await cloudinary.uploadVideo(file);
 
       await _chatService.sendMediaMessage(
         chatId: widget.chatId,
-        mediaUrl: url,
+        mediaUrl: uploadedUrl!,
         mediaType: selectedType,
       );
+      uploadedUrl = null;
 
       // Successful media messages are confirmed by the message checkmarks.
     } catch (error, stackTrace) {
+      if (uploadedUrl != null) {
+        try {
+          await cloudinary.deleteUnattachedAssets([uploadedUrl]);
+        } catch (cleanupError, cleanupStackTrace) {
+          debugPrint('FIGHUB CHAT MEDIA ROLLBACK ERROR: $cleanupError');
+          debugPrintStack(stackTrace: cleanupStackTrace);
+        }
+      }
       debugPrint('FIGHUB CHAT MEDIA SEND ERROR: $error');
       debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
