@@ -1478,9 +1478,17 @@ class ChatService {
     final latestMessage = latestMessages.docs.isEmpty
         ? null
         : latestMessages.docs.first.data();
+    final latestText = latestMessage?['text'] as String? ?? '';
+    final latestType = latestMessage?['type'] as String?;
+    final latestPreview = switch (latestType) {
+      'image' => latestText.isEmpty ? '📷 صورة' : '📷 صورة: $latestText',
+      'video' => latestText.isEmpty ? '🎥 فيديو' : '🎥 فيديو: $latestText',
+      'audio' => latestText.isEmpty ? '🎙️ رسالة صوتية' : '🎙️ رسالة صوتية: $latestText',
+      _ => latestText,
+    };
 
     await _firestore.collection('chats').doc(chatId).update({
-      'lastMessage': latestMessage?['text'] as String? ?? '',
+      'lastMessage': latestPreview,
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
