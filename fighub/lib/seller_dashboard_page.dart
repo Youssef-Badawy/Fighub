@@ -648,9 +648,14 @@ class _SellerDashboardPageState
                                   ),
                                 ),
                                 IconButton(
-                                  onPressed: () =>
-                                      _deleteProduct(product),
-                                  tooltip: deleteTooltip,
+                                  onPressed: product.status == 'Available'
+                                      ? () => _deleteProduct(product)
+                                      : null,
+                                  tooltip: product.status == 'Available'
+                                      ? deleteTooltip
+                                      : (localization.isArabic
+                                          ? 'لا يمكن حذف منتج محجوز أو مباع'
+                                          : 'Reserved or sold products cannot be deleted'),
                                   icon: const Icon(
                                     Icons.delete_outline,
                                   ),
