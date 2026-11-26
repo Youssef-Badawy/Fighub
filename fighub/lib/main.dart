@@ -457,6 +457,7 @@ class _FigHubHomeState extends State<FigHubHome> {
   String? _pushInitializedUserId;
   String? _subscribedUserId;
   String? _deletedOffersCleanupUserId;
+  String? _deletedProductsCleanupUserId;
 
   final List<String> _categories = [
     'All',
@@ -474,6 +475,7 @@ class _FigHubHomeState extends State<FigHubHome> {
 
     _subscribeToUserData();
     unawaited(_cleanupDeletedOffers());
+    unawaited(_cleanupDeletedProducts());
 
     _subscribeToProducts();
   }
@@ -540,6 +542,7 @@ class _FigHubHomeState extends State<FigHubHome> {
   void _onAuthManagerChanged() {
     _subscribeToUserData();
     unawaited(_cleanupDeletedOffers());
+    unawaited(_cleanupDeletedProducts());
     if (FirebaseAuth.instance.currentUser?.isAnonymous == false) {
       _initializePushNotifications();
     }
@@ -559,6 +562,24 @@ class _FigHubHomeState extends State<FigHubHome> {
     } catch (error, stackTrace) {
       _deletedOffersCleanupUserId = null;
       debugPrint('FIGHUB OLD OFFER CLEANUP ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
+  Future<void> _cleanupDeletedProducts() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null ||
+        user.isAnonymous ||
+        _deletedProductsCleanupUserId == user.uid) {
+      return;
+    }
+
+    _deletedProductsCleanupUserId = user.uid;
+    try {
+      await _productService.cleanupPreviouslyDeletedProducts();
+    } catch (error, stackTrace) {
+      _deletedProductsCleanupUserId = null;
+      debugPrint('FIGHUB OLD PRODUCT CLEANUP ERROR: $error');
       debugPrintStack(stackTrace: stackTrace);
     }
   }
