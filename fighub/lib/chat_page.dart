@@ -32,14 +32,9 @@ class _ChatPageState extends State<ChatPage> {
   final ChatService _chatService = ChatService();
   late final Stream<Map<String, dynamic>?> _chatStream;
   late final Stream<Map<String, dynamic>?> _partnerStream;
-  late final Stream<ChatMessageBatch> _messagesStream;
+  late final Stream<List<Map<String, dynamic>>> _messagesStream;
   late final ValueNotifier<String> _recordingElapsedNotifier;
   late final ValueNotifier<bool> _hasMessagesNotifier;
-  final ScrollController _messagesScrollController = ScrollController();
-  final List<Map<String, dynamic>> _olderMessages = [];
-  QueryDocumentSnapshot<Map<String, dynamic>>? _olderMessagesCursor;
-  bool _isLoadingOlderMessages = false;
-  bool _hasMoreOlderMessages = true;
 
   bool _isSending = false;
   bool _isRecording = false;
@@ -69,7 +64,6 @@ class _ChatPageState extends State<ChatPage> {
     _messagesStream = _chatService.watchMessages(widget.chatId);
     _recordingElapsedNotifier = ValueNotifier<String>(_recordingElapsed);
     _hasMessagesNotifier = ValueNotifier<bool>(false);
-    _messagesScrollController.addListener(_handleMessagesScroll);
     unawaited(_chatService.reconcileChatItems(widget.chatId));
   }
 
@@ -79,58 +73,8 @@ class _ChatPageState extends State<ChatPage> {
     _stopRecordingClock();
     _recordingElapsedNotifier.dispose();
     _hasMessagesNotifier.dispose();
-    _messagesScrollController
-      ..removeListener(_handleMessagesScroll)
-      ..dispose();
     unawaited(_audioRecorder.dispose());
     super.dispose();
-  }
-
-  void _handleMessagesScroll() {
-    if (!_messagesScrollController.hasClients ||
-        _isLoadingOlderMessages ||
-        !_hasMoreOlderMessages) {
-      return;
-    }
-    final position = _messagesScrollController.position;
-    if (position.pixels >= position.maxScrollExtent - 180) {
-      unawaited(_loadOlderMessages());
-    }
-  }
-
-  Future<void> _loadOlderMessages() async {
-    final cursor = _olderMessagesCursor;
-    if (cursor == null || _isLoadingOlderMessages || !_hasMoreOlderMessages) {
-      return;
-    }
-
-    setState(() => _isLoadingOlderMessages = true);
-    try {
-      final page = await _chatService.fetchOlderMessages(
-        chatId: widget.chatId,
-        cursor: cursor,
-      );
-      if (!mounted) return;
-
-      final existingIds = _olderMessages
-          .map((message) => message['id'] as String? ?? '')
-          .toSet();
-      setState(() {
-        _olderMessages.insertAll(
-          0,
-          page.messages.where(
-            (message) => !existingIds.contains(message['id']),
-          ),
-        );
-        _olderMessagesCursor = page.oldestDocument ?? cursor;
-        _hasMoreOlderMessages = page.hasMore;
-      });
-    } catch (error, stackTrace) {
-      debugPrint('FIGHUB OLDER CHAT HISTORY ERROR: $error');
-      debugPrintStack(stackTrace: stackTrace);
-    } finally {
-      if (mounted) setState(() => _isLoadingOlderMessages = false);
-    }
   }
 
   Future<void> _startVoiceRecording() async {
@@ -1452,7 +1396,7 @@ class _ChatPageState extends State<ChatPage> {
             },
           ),
           Expanded(
-            child: StreamBuilder<ChatMessageBatch>(
+            child: StreamBuilder<List<Map<String, dynamic>>>(
               stream: _messagesStream,
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
@@ -1470,43 +1414,19 @@ class _ChatPageState extends State<ChatPage> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final batch = snapshot.data!;
-                _olderMessagesCursor ??= batch.oldestDocument;
-                _hasMoreOlderMessages = batch.hasMore;
-                final mergedById = <String, Map<String, dynamic>>{
-                  for (final message in _olderMessages)
-                    if (message['id'] != null) message['id'] as String: message,
-                  for (final message in batch.messages)
-                    if (message['id'] != null) message['id'] as String: message,
-                };
-                final messages = mergedById.values.where((message) {
-                  final cutoff = batch.clearedAt;
-                  final createdAt = message['createdAt'];
-                  return cutoff == null ||
-                      (createdAt is Timestamp && createdAt.compareTo(cutoff) > 0);
-                }).toList()
-                  ..sort((a, b) {
-                    final aTime = a['createdAt'];
-                    final bTime = b['createdAt'];
-                    if (aTime is Timestamp && bTime is Timestamp) {
-                      return aTime.compareTo(bTime);
-                    }
-                    return (a['id'] as String? ?? '')
-                        .compareTo(b['id'] as String? ?? '');
-                  });
-
+                final messages = snapshot.data ?? const [];
                 if (_hasMessagesNotifier.value != messages.isNotEmpty) {
                   _hasMessagesNotifier.value = messages.isNotEmpty;
                 }
                 if (messages.isNotEmpty) {
-                  // Only mark currently loaded messages as read.
+                  // Messages visible in the open conversation are read.
                   unawaited(_chatService.markMessagesRead(
                     chatId: widget.chatId,
                     messages: messages,
                   ));
                 }
 
-                if (messages.isEmpty && !_hasMoreOlderMessages) {
+                if (messages.isEmpty) {
                   return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1532,40 +1452,18 @@ class _ChatPageState extends State<ChatPage> {
                   );
                 }
 
-                // Newest messages stay at the bottom; older pages are
-                // appended above as the user scrolls toward the history.
+                // Firestore supplies messages oldest-first. Reverse the
+                // displayed list and the scroll direction so a chat opens at
+                // the newest message, with older messages above it.
                 final displayMessages = messages.reversed.toList(
                   growable: false,
                 );
 
                 return ListView.builder(
-                  controller: _messagesScrollController,
                   reverse: true,
                   padding: const EdgeInsets.all(16),
-                  itemCount: displayMessages.length +
-                      (_hasMoreOlderMessages ? 1 : 0),
+                  itemCount: displayMessages.length,
                   itemBuilder: (context, index) {
-                    if (index == displayMessages.length) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        child: Center(
-                          child: _isLoadingOlderMessages
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : TextButton(
-                                  onPressed: _loadOlderMessages,
-                                  child: Text(
-                                    AppLocalizations.of(context).isArabic
-                                        ? 'تحميل الرسائل الأقدم'
-                                        : 'Load older messages',
-                                  ),
-                                ),
-                        ),
-                      );
-                    }
                     return _buildMessageBubble(context, displayMessages[index]);
                   },
                 );
