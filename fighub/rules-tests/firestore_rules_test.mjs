@@ -129,19 +129,33 @@ try {
     }),
   );
 
+  // A customer cannot decrement company stock without creating the
+  // corresponding order and updating the buyer/seller printing chat.
+  await assertFails(
+    updateDoc(doc(registeredCustomer, 'print_products/print-1'), {
+      stockQuantity: 4,
+      lastOrderId: 'missing-order',
+      updatedAt: new Date(),
+    }),
+  );
+
   const printPurchaseBatch = writeBatch(registeredCustomer);
   printPurchaseBatch.update(doc(registeredCustomer, 'print_products/print-1'), {
     stockQuantity: 4,
+    lastOrderId: 'print-order-1',
     updatedAt: new Date(),
   });
   printPurchaseBatch.set(doc(registeredCustomer, 'products/print-order-1'), {
     productType: 'print_order',
     sourcePrintProductId: 'print-1',
+    chatId: 'printing_customer-1_not-admin',
     sellerId: 'not-admin',
     buyerId: 'customer-1',
     reservedBy: 'customer-1',
     status: 'Reserved',
     name: 'Test print order',
+    price: '200',
+    imagePaths: [],
   });
   printPurchaseBatch.set(doc(
     registeredCustomer,
