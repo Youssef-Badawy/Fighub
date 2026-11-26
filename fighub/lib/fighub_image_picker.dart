@@ -126,6 +126,7 @@ class FigHubImagePicker {
           ),
         ),
       );
+      if (!context.mounted) break;
       if (choice == 'original') {
         result.add(image);
         continue;
