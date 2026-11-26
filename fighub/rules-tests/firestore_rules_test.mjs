@@ -6,7 +6,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { deleteDoc, doc, getDoc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const projectId = 'demo-fighub-rules-test';
@@ -52,6 +52,13 @@ try {
     await setDoc(doc(db, 'products/reserved-product'), {
       sellerId: 'not-admin',
       name: 'Reserved product',
+      status: 'Reserved',
+      reservedBy: 'customer-1',
+    });
+    await setDoc(doc(db, 'products/reserved-owner-edit'), {
+      sellerId: 'not-admin',
+      name: 'Reserved owner edit test',
+      price: '250',
       status: 'Reserved',
       reservedBy: 'customer-1',
     });
@@ -269,6 +276,18 @@ try {
   const forgedChatSeller = env.authenticatedContext('not-admin', {
     firebase: { sign_in_provider: 'password' },
   }).firestore();
+  await assertFails(
+    updateDoc(doc(forgedChatSeller, 'products/reserved-owner-edit'), {
+      price: '1',
+    }),
+  );
+  await assertSucceeds(
+    updateDoc(doc(forgedChatSeller, 'products/reserved-owner-edit'), {
+      status: 'Sold',
+      soldTo: 'customer-1',
+      soldAt: serverTimestamp(),
+    }),
+  );
   await assertFails(
     updateDoc(doc(forgedChatSeller, 'products/other-seller-reserved'), {
       status: 'Sold',
