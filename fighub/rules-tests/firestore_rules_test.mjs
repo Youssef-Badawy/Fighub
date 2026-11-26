@@ -55,6 +55,25 @@ try {
       status: 'Reserved',
       reservedBy: 'customer-1',
     });
+    await setDoc(doc(db, 'products/other-seller-reserved'), {
+      sellerId: 'other-seller',
+      name: 'Another seller reserved product',
+      status: 'Reserved',
+      reservedBy: 'customer-1',
+    });
+    await setDoc(doc(db, 'offers/other-seller-offer'), {
+      sellerId: 'other-seller',
+      title: 'Another seller offer',
+    });
+    await setDoc(doc(db, 'offers/other-seller-offer/items/item-1'), {
+      name: 'Reserved offer item',
+      status: 'Reserved',
+      reservedBy: 'customer-1',
+    });
+    await setDoc(doc(db, 'offers/other-seller-offer/items/item-1/reservations/customer-1'), {
+      userId: 'customer-1',
+      status: 'Active',
+    });
     await setDoc(doc(db, 'offers/offer-1'), {
       sellerId: 'not-admin',
       title: 'Test offer',
@@ -190,6 +209,24 @@ try {
     setDoc(doc(registeredCustomer, 'print_design_requests/forged-customer'), {
       ...request,
       customerId: 'someone-else',
+    }),
+  );
+
+  const forgedChatSeller = env.authenticatedContext('not-admin', {
+    firebase: { sign_in_provider: 'password' },
+  }).firestore();
+  await assertFails(
+    updateDoc(doc(forgedChatSeller, 'products/other-seller-reserved'), {
+      status: 'Sold',
+      soldTo: 'customer-1',
+      soldAt: new Date(),
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(forgedChatSeller, 'offers/other-seller-offer/items/item-1'), {
+      status: 'Sold',
+      soldTo: 'customer-1',
+      soldAt: new Date(),
     }),
   );
 
